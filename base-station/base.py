@@ -1,6 +1,9 @@
 import socket
 import json
 import cantools
+import subprocess
+import time
+import threading
 
 # Configuration
 PORT = 12345
@@ -24,6 +27,37 @@ sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
 print("Base station: Listening for CAN messages from car...")
 
+url = "http://127.0.0.1:8085/can"
+
+def send_can_message(arbitration_id, data):
+    payload = {
+        "messages": [
+            {
+                "id": str(arbitration_id),
+                "data": list(data),
+                "timestamp": time.time()
+            }
+        ]
+    }
+    command = [
+        'curl', '-X', 'POST', url,
+        '-H', 'Content-Type: application/json',
+        '-d', json.dumps(payload)
+    ]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode == 0:
+            pass  # Removed print for performance
+        else:
+            pass  # Removed print for performance
+    except Exception as e:
+        pass  # Removed print for performance
+
+# Function to send in a separate thread
+def send_async(arbitration_id, data):
+    thread = threading.Thread(target=send_can_message, args=(arbitration_id, data))
+    thread.start()
+
 while True:
     try:
         data, addr = sock.recvfrom(4096)
@@ -40,21 +74,24 @@ while True:
                     msg_data = bytes(can_message['data'])
                     timestamp = can_message.get('timestamp', 'unknown')
                     
-                    print(f"Received CAN message from {addr}:")
-                    print(f"  ID: 0x{arbitration_id:X} ({arbitration_id})")
-                    print(f"  Data: {list(msg_data)} (hex: {msg_data.hex()})")
-                    print(f"  Timestamp: {timestamp}")
+                    # print(f"Received CAN message from {addr}:")
+                    # print(f"  ID: 0x{arbitration_id:X} ({arbitration_id})")
+                    # print(f"  Data: {list(msg_data)} (hex: {msg_data.hex()})")
+                    # print(f"  Timestamp: {timestamp}")
                     
                     # Try to decode with DBC if available
                     if db:
                         try:
                             decoded = db.decode_message(arbitration_id, msg_data)
-                            print(f"  Decoded: {decoded}")
+                            # print(f"  Decoded: {decoded}")
                         except Exception as decode_error:
-                            print(f"  Could not decode with DBC: {decode_error}")
+                            # print(f"  Could not decode with DBC: {decode_error}")
+                            pass
                     else:
-                        print("  (No DBC file available for decoding)")
-                    print()  # Empty line for readability
+                        # print("  (No DBC file available for decoding)")
+                        pass
+                    # print()  # Empty line for readability
+                    send_async(arbitration_id, msg_data)
                 else:
                     # If valid JSON but not CAN message format
                     print(f"Received JSON data from {addr}: {can_message}")
