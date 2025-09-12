@@ -1,0 +1,6 @@
+services:
+  car:
+    build: .
+    network_mode: host
+    privileged: true
+    restart: unless-stopped
