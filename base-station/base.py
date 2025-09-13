@@ -1,164 +1,184 @@
+#!/usr/bin/env python3
+"""
+Base station for receiving CAN-over-UDP JSON from ESP32, forwarding batches
+to an HTTP endpoint, and exposing a CANserver-compatible TCP service for SavvyCAN.
+
+Usage:
+    python3 base.py [--test]
+"""
+
 import socket
 import json
-import cantools
-import subprocess
 import time
 import threading
+import requests
+import argparse
+
+# Optional cantools import (for DBC decoding)
+try:
+    import cantools
+    try:
+        db = cantools.database.load_file('WFR25-6389976.dbc')
+        print("DBC file loaded successfully - ready to decode CAN messages.")
+    except FileNotFoundError:
+        db = None
+        print("No DBC file found. Will display raw CAN data only.")
+    except Exception as e:
+        db = None
+        print(f"Error loading DBC: {e}. Will display raw CAN data only.")
+except ImportError:
+    cantools = None
+    db = None
+    print("cantools not installed. Install with: pip install cantools")
 
 # Configuration
-PORT = 12345
-TIME_SYNC_PORT = 12346  # Dedicated port for time synchronization
+UDP_PORT = 12345               # incoming from ESP32
+TIME_SYNC_PORT = 12346         # for time sync broadcast
+CANSERVER_PORT = 54701         # SavvyCAN default CANserver TCP port
+HTTP_FORWARD_URL = "http://127.0.0.1:8085/can"
 
-# Load DBC file for CAN message interpretation
-try:
-    db = cantools.database.load_file('WFR25-6389976.dbc')
-    print("DBC file loaded successfully - ready to decode CAN messages.")
-except FileNotFoundError:
-    db = None
-    print("No DBC file found. Will display raw CAN data only.")
-except Exception as e:
-    db = None
-    print(f"Error loading DBC: {e}. Will display raw CAN data only.")
+# Command-line arguments
+parser = argparse.ArgumentParser(description='Base station with CANserver interface')
+parser.add_argument('--test', action='store_true', help='Enable testing mode with fake CAN messages')
+args = parser.parse_args()
 
-# UDP socket setup
-sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-sock.bind(('', PORT))
-# Enable broadcast receiving (though bind to '' already allows it)
-sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+# UDP listener socket for incoming CAN-over-UDP JSON
+udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+udp_sock.bind(('', UDP_PORT))
 
-print("Base station: Listening for CAN messages from car...")
+# TCP server socket for SavvyCAN (CANserver)
+tcp_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+tcp_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+tcp_server.bind(('0.0.0.0', CANSERVER_PORT))
+tcp_server.listen(1)
 
-url = "http://127.0.0.1:8085/can"
+print(f"Base station listening for ESP32 CAN JSON on UDP {UDP_PORT}")
+print(f"CANserver emulation ready on TCP port {CANSERVER_PORT} (connect SavvyCAN with CANserver option)")
+
+# List of connected SavvyCAN clients
+savvycan_clients = []
+client_lock = threading.Lock()
 
 def send_can_messages_batch(messages_batch):
-    """Send a batch of CAN messages in the correct format"""
+    """Send a batch of CAN messages (JSON) to HTTP endpoint."""
     try:
-        # Forward the messages batch as-is to the remote server
-        command = [
-            'curl', '-X', 'POST', url,
-            '-H', 'Content-Type: application/json',
-            '-d', json.dumps(messages_batch)
-        ]
-        result = subprocess.run(command, capture_output=True, text=True)
-        if result.returncode == 0:
-            # print(f"Successfully forwarded {len(messages_batch.get('messages', []))} CAN messages")
-            pass
-        else:
-            print(f"Failed to forward messages: {result.stderr}")
+        r = requests.post(HTTP_FORWARD_URL, json=messages_batch, timeout=5)
+        if r.status_code != 200:
+            print(f"HTTP forward error {r.status_code}")
     except Exception as e:
-        print(f"Error forwarding messages: {e}")
-
-def send_can_message(arbitration_id, data):
-    """Legacy function - now creates proper timestamp format"""
-    payload = {
-        "messages": [
-            {
-                "id": str(arbitration_id),
-                "data": list(data),
-                "timestamp": time.time()  # This will be a decimal number
-            }
-        ]
-    }
-    command = [
-        'curl', '-X', 'POST', url,
-        '-H', 'Content-Type: application/json',
-        '-d', json.dumps(payload)
-    ]
-    try:
-        result = subprocess.run(command, capture_output=True, text=True)
-        if result.returncode == 0:
-            pass  # Removed print for performance
-        else:
-            pass  # Removed print for performance
-    except Exception as e:
-        pass  # Removed print for performance
-
-# Function to send in a separate thread
-def send_async(arbitration_id, data):
-    thread = threading.Thread(target=send_can_message, args=(arbitration_id, data))
-    thread.start()
+        print(f"Error forwarding batch: {e}")
 
 def broadcast_time():
-    """Broadcast Unix timestamp every second using simple binary protocol"""
-    broadcast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    broadcast_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-    
+    """Broadcast 8-byte big-endian timestamp for ESP32 sync."""
+    b_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    b_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     while True:
         try:
-            # Get current Unix timestamp in milliseconds for better accuracy
-            current_time_ms = int(time.time() * 1000)
-            
-            # Pack timestamp into 8 bytes (big-endian) - simple binary format
-            time_bytes = current_time_ms.to_bytes(8, byteorder='big')
-            
-            # Broadcast simple 8-byte timestamp to ESP32's subnet on dedicated time sync port
-            try:
-                broadcast_sock.sendto(time_bytes, ('192.168.4.255', TIME_SYNC_PORT))
-                print(f"Broadcasted time to ESP32 subnet: {current_time_ms}ms (simple binary)")
-            except Exception as broadcast_error:
-                print(f"Failed to broadcast to ESP32 subnet: {broadcast_error}")
-            
+            now_ms = int(time.time() * 1000)
+            ts = now_ms.to_bytes(8, 'big')
+            b_sock.sendto(ts, ('192.168.4.255', TIME_SYNC_PORT))
         except Exception as e:
-            print(f"Error broadcasting time: {e}")
-        
-        time.sleep(1)  # Broadcast every second
+            print(f"Time broadcast error: {e}")
+        time.sleep(1)
 
-# Start time broadcasting thread
-time_thread = threading.Thread(target=broadcast_time, daemon=True)
-time_thread.start()
-print("Time broadcasting thread started")
-
-while True:
-    try:
-        data, addr = sock.recvfrom(4096)
-        try:
-            # Try to decode as UTF-8 first (for JSON messages)
-            decoded_str = data.decode('utf-8')
+def canserver_broadcast(arbitration_id, data):
+    """
+    Forward a CAN frame to all connected SavvyCAN clients in CANserver JSON format.
+    Example per-frame line: {"time":123456.789,"bus":0,"id":123,"data":[1,2,3]}
+    """
+    # --- DIAGNOSTIC PRINT ---
+    print(f"Broadcasting to {len(savvycan_clients)} SavvyCAN client(s)...")
+    # ------------------------
+    frame = {
+        "time": time.time(),
+        "bus": 0,
+        "id": int(arbitration_id),
+        "data": list(data)
+    }
+    line = json.dumps(frame) + "\n"
+    dead_clients = []
+    with client_lock:
+        for c in savvycan_clients:
             try:
-                # Parse as JSON (should be CAN message metadata)
-                can_message = json.loads(decoded_str)
-                
-                # Check if it's a batch of messages (ESP32 format)
-                if isinstance(can_message, dict) and 'messages' in can_message:
-                    # This is a batch of CAN messages from ESP32
-                    messages = can_message['messages']
-                    # print(f"Received batch of {len(messages)} CAN messages from {addr}")
-                    
-                    # Forward the entire batch to the remote server as-is
-                    # ESP32 should already have proper epoch millisecond timestamps
-                    send_can_messages_batch(can_message)
-                    
-                # Check if it's a single structured CAN message (legacy format)
-                elif isinstance(can_message, dict) and 'arbitration_id' in can_message and 'data' in can_message:
-                    arbitration_id = can_message['arbitration_id']
-                    msg_data = bytes(can_message['data'])
-                    timestamp = can_message.get('timestamp', 'unknown')
-                    
-                    # print(f"Received single CAN message from {addr}: ID=0x{arbitration_id:X}")
-                    
-                    # Try to decode with DBC if available
-                    if db:
-                        try:
-                            decoded = db.decode_message(arbitration_id, msg_data)
-                            # print(f"  Decoded: {decoded}")
-                        except Exception as decode_error:
-                            # print(f"  Could not decode with DBC: {decode_error}")
-                            pass
-                    
-                    # Forward as single message
-                    send_async(arbitration_id, msg_data)
-                else:
-                    # If valid JSON but not recognized format
-                    print(f"Received unrecognized JSON from {addr}: {can_message}")
-            except json.JSONDecodeError:
-                # If valid UTF-8 but not JSON, print as string
-                print(f"Received text data from {addr}: {decoded_str}")
-        except UnicodeDecodeError:
-            # If not valid UTF-8, treat as raw binary data (legacy support)
-            print(f"Received raw binary data from {addr}: {data.hex()} (hex) = {list(data)} (bytes)")
-    except KeyboardInterrupt:
-        break
-    except Exception as e:
-        print(f"Error: {e}")
+                c.sendall(line.encode('utf-8'))
+            except Exception:
+                dead_clients.append(c)
+        for d in dead_clients:
+            savvycan_clients.remove(d)
+            try:
+                d.close()
+            except Exception:
+                pass
 
-sock.close()
+def tcp_accept_loop():
+    """Accept incoming SavvyCAN connections."""
+    while True:
+        conn, addr = tcp_server.accept()
+        print(f"SavvyCAN connected from {addr}")
+        with client_lock:
+            savvycan_clients.append(conn)
+
+def send_test_messages():
+    """Send fake messages into UDP listener for testing."""
+    test_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    msg = {
+        "messages": [
+            {"id": "6789", "data": [1,2,3,4,5,6,7,8], "timestamp": time.time()}
+        ]
+    }
+    while True:
+        test_sock.sendto(json.dumps(msg).encode(), ('127.0.0.1', UDP_PORT))
+        time.sleep(1)
+
+# Start background threads
+threading.Thread(target=broadcast_time, daemon=True).start()
+threading.Thread(target=tcp_accept_loop, daemon=True).start()
+if args.test:
+    threading.Thread(target=send_test_messages, daemon=True).start()
+    print("--- TEST MODE ENABLED: Sending fake CAN messages every second. ---")
+
+# Main loop
+try:
+    while True:
+        data, addr = udp_sock.recvfrom(4096)
+        # --- DIAGNOSTIC PRINT ---
+        print(f"\nReceived {len(data)} bytes from {addr}")
+        # ------------------------
+        try:
+            decoded = data.decode('utf-8')
+            msg = json.loads(decoded)
+        except Exception as e:
+            # --- DIAGNOSTIC PRINT ---
+            print(f"!!! ERROR: Could not decode or parse JSON from {addr}. Error: {e}")
+            print(f"    Raw data was: {data}")
+            # ------------------------
+            continue
+
+        if isinstance(msg, dict) and "messages" in msg:
+            send_can_messages_batch(msg)
+            for m in msg["messages"]:
+                try:
+                    mid = int(m["id"], 0) if isinstance(m["id"], str) else int(m["id"])
+                    mdata = m["data"]
+                    if not isinstance(mdata, list):
+                        continue
+                    canserver_broadcast(mid, mdata)
+                except Exception as e:
+                    # --- DIAGNOSTIC PRINT ---
+                    print(f"!!! ERROR processing individual message: {e}")
+                    print(f"    Problematic message data was: {m}")
+                    # ------------------------
+                    continue
+        else:
+            print(f"!!! WARNING: Received valid JSON but it was missing the 'messages' key. Data: {msg}")
+
+except KeyboardInterrupt:
+    print("Exiting...")
+finally:
+    udp_sock.close()
+    tcp_server.close()
+    with client_lock:
+        for c in savvycan_clients:
+            c.close()

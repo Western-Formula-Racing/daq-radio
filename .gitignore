@@ -209,3 +209,12 @@ base-station/.DS_Store
 .DS_Store
 /.vscode
 daq-radio.code-workspace
+
+# Conda environments
+conda-env/
+env/
+ENV/
+
+# Conda artifacts
+*.conda
+*.tar.bz2
