@@ -14,7 +14,7 @@ PORT = 12345
 # Load real data from CSV
 messages = []
 try:
-    csv_path = '2025-09-08-23-47-13.csv'
+    csv_path = 'longer june data.csv'
 
     with open(csv_path, 'r') as f:
         reader = csv.reader(f)
@@ -66,10 +66,11 @@ while True:
                     time_diff = (ts - prev_ts) / 1000.0
                     sleep_time = max(0, time_diff)  # Ensure non-negative sleep time
                 
-                if sleep_time > 0 and sleep_time < 0.5:
+                if sleep_time > 0 and sleep_time < 0.002:
+                    # Sending 500 messages per second max
                     # Avoid too short sleeps (artificially speed down)
-                    time.sleep(0.5)
-                elif sleep_time >= 0.5:
+                    time.sleep(0.002)
+                elif sleep_time >= 0.1:
                     time.sleep(sleep_time)
                 
                 msg = can.Message(arbitration_id=id_, data=bytes(data), timestamp=time.time())
@@ -91,7 +92,7 @@ while True:
             # Send as JSON
             payload = json.dumps(can_message).encode('utf-8')
             sock.sendto(payload, (BASE_IP, PORT))
-            print(f"Sent CAN message: ID=0x{msg.arbitration_id:X}, Data={list(msg.data)}")
+            # print(f"Sent CAN message: ID=0x{msg.arbitration_id:X}, Data={list(msg.data)}")
     except KeyboardInterrupt:
         break
     except Exception as e:
