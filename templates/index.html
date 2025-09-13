@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Peacan CAN Viewer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Peacan CAN Viewer</h1>
+            <p>View and filter raw CAN messages.</p>
+        </header>
+        <section class="filter-section">
+            <h2>Filters</h2>
+            <label for="time-range">Time Range (seconds):</label>
+            <input type="number" id="time-range" placeholder="Enter seconds" min="1">
+            <label for="can-id">CAN ID:</label>
+            <input type="text" id="can-id" placeholder="Enter CAN ID">
+            <label for="message-name">Message Name:</label>
+            <input type="text" id="message-name" placeholder="Enter Message Name">
+            <button id="apply-filters">Apply Filters</button>
+        </section>
+        <section class="messages-section">
+            <h2>Raw CAN Messages</h2>
+            <table id="messages-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>CAN ID</th>
+                        <th>Message Name</th>
+                        <th>Data</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- CAN messages will be dynamically inserted here -->
+                </tbody>
+            </table>
+        </section>
+    </div>
+</body>
+</html>
