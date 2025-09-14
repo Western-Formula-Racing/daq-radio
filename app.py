@@ -17,6 +17,7 @@ dash_app = dash.Dash(__name__, server=app, routes_pathname_prefix='/dash/')
 DBC_FILE = os.getenv("DBC_FILE", "dbc_files/WFR25-6389976.dbc")
 CAN_MESSAGES = []  # Store decoded CAN messages
 MESSAGE_HISTORY_LIMIT = 1000
+lock = threading.Lock()  # For thread-safe access to CAN_MESSAGES
 
 # ─── LOAD DBC ──────────────────────────────────────────────────────────────
 try:
@@ -46,40 +47,35 @@ def decode_can_message(can_id, data):
             'error': str(e)
         }
 
-def tcp_listener():
-    """Connect to CANserver TCP and listen for messages."""
+def named_pipe_listener():
+    """Read CAN messages from named pipe."""
+    pipe_path = "/tmp/can_data_pipe"
     while True:
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.connect(('127.0.0.1', 54701))
-            print("Connected to CANserver on port 54701")
-            buffer = ""
-            while True:
-                data = sock.recv(1024)
-                if not data:
-                    break
-                buffer += data.decode('utf-8')
-                while '\n' in buffer:
-                    line, buffer = buffer.split('\n', 1)
-                    if line.strip():
+            # Open pipe for reading
+            with open(pipe_path, 'r') as pipe:
+                print(f"Connected to named pipe: {pipe_path}")
+                for line in pipe:
+                    line = line.strip()
+                    if line:
                         print(f"Received line: {line}")  # Debug print
                         try:
                             msg = json.loads(line)
                             can_id = msg['id']
                             raw_data = bytes(msg['data'])
                             # Use the timestamp from the message, convert UTC to local time
-                            timestamp = datetime.fromtimestamp(msg['time'], tz=timezone.utc).astimezone()
+                            timestamp = datetime.fromtimestamp(msg['time'] / 1000, tz=timezone.utc).astimezone()
                             decoded = decode_can_message(can_id, raw_data)
                             decoded['timestamp'] = timestamp.isoformat()
-                            CAN_MESSAGES.append(decoded)
+                            with lock:
+                                CAN_MESSAGES.append(decoded)
+                                if len(CAN_MESSAGES) > MESSAGE_HISTORY_LIMIT:
+                                    CAN_MESSAGES.pop(0)
                             print(f"Added message: CAN ID {can_id}, Raw Data {raw_data}")  # Debug print
-                            if len(CAN_MESSAGES) > MESSAGE_HISTORY_LIMIT:
-                                CAN_MESSAGES.pop(0)
                         except Exception as e:
                             print(f"Error parsing CAN message: {e}")
-            sock.close()
         except Exception as e:
-            print(f"TCP listener error: {e}")
+            print(f"Named pipe listener error: {e}")
             time.sleep(5)  # Retry after 5 seconds
 
 @dash_app.callback(
@@ -90,15 +86,32 @@ def tcp_listener():
     State('message-name-filter', 'value')
 )
 def update_table(n, time_range, can_id, message_name):
-    # Make cutoff_time timezone-aware in local time
+    with lock:
+        messages = CAN_MESSAGES[:]
+    # Debug: print current messages count
+    print(f"Update table called. Total messages: {len(messages)}, Time range: {time_range}")
+    
+    # Use a more lenient time filter - default to 600 seconds (10 minutes) if time_range is small
+    time_range = max(time_range or 60, 600)
     local_tz = datetime.now().astimezone().tzinfo
-    cutoff_time = datetime.now(local_tz) - timedelta(seconds=time_range or 60)
-    filtered = [
-        msg for msg in CAN_MESSAGES
-        if datetime.fromisoformat(msg['timestamp']) >= cutoff_time and
-           (not can_id or str(msg['can_id']) == can_id) and
-           (not message_name or msg['message_name'] == message_name)
-    ]
+    cutoff_time = datetime.now(local_tz) - timedelta(seconds=time_range)
+    
+    filtered = []
+    for msg in messages:
+        msg_time = datetime.fromisoformat(msg['timestamp'])
+        time_ok = msg_time >= cutoff_time
+        id_ok = not can_id or str(msg['can_id']) == can_id
+        name_ok = not message_name or msg['message_name'] == message_name
+        
+        if time_ok and id_ok and name_ok:
+            filtered.append(msg)
+    
+    print(f"Filtered messages: {len(filtered)}")
+    print(f"Filtered messages: {len(filtered)}")
+    
+    # Reverse the order to show newest messages first
+    filtered = filtered[::-1]
+    
     # Limit to last 100 messages to prevent overload
     # filtered = filtered[-10:] if len(filtered) > 20 else filtered
     # Create display data without modifying originals
@@ -106,9 +119,11 @@ def update_table(n, time_range, can_id, message_name):
     for msg in filtered:
         display_msg = msg.copy()
         display_msg['timestamp'] = datetime.fromisoformat(msg['timestamp']).strftime('%H:%M:%S')
-        display_msg['signals'] = json.dumps([{'name': k, 'value': v} for k, v in msg['signals'].items()])
+        display_msg['signals'] = json.dumps([{'name': k, 'value': v.value if hasattr(v, 'value') else str(v)} for k, v in msg['signals'].items()])
         display_msg['raw_data'] = ' '.join(f'{b:02X}' for b in msg['raw_data'])
         display_data.append(display_msg)
+    
+    print(f"Returning {len(display_data)} display messages")
     return display_data
 
 dash_app.layout = html.Div(style={'backgroundColor': '#DEB887', 'padding': '20px'}, children=[
@@ -116,7 +131,7 @@ dash_app.layout = html.Div(style={'backgroundColor': '#DEB887', 'padding': '20px
     dcc.Interval(id='interval-component', interval=2000, n_intervals=0),
     html.Div([
         html.Label("Time Range (seconds):", style={'color': '#8B4513'}),
-        dcc.Input(id='time-range', type='number', value=10, min=1, max=3600, style={'marginLeft': '10px'}),
+        dcc.Input(id='time-range', type='number', value=600, min=1, max=3600, style={'marginLeft': '10px'}),
     ], style={'marginBottom': '10px'}),
     html.Div([
         html.Label("CAN ID Filter:", style={'color': '#8B4513'}),
@@ -171,6 +186,6 @@ def index():
     return dash_app.index()
 
 if __name__ == "__main__":
-    # Start TCP listener thread
-    threading.Thread(target=tcp_listener, daemon=True).start()
+    # Start named pipe listener thread
+    threading.Thread(target=named_pipe_listener, daemon=True).start()
     app.run(debug=True, host='0.0.0.0', port=9998)
