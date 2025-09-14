@@ -58,7 +58,7 @@ def named_pipe_listener():
                 for line in pipe:
                     line = line.strip()
                     if line:
-                        print(f"Received line: {line}")  # Debug print
+                        # print(f"Received line: {line}")  # Debug print
                         try:
                             msg = json.loads(line)
                             can_id = msg['id']
@@ -71,7 +71,7 @@ def named_pipe_listener():
                                 CAN_MESSAGES.append(decoded)
                                 if len(CAN_MESSAGES) > MESSAGE_HISTORY_LIMIT:
                                     CAN_MESSAGES.pop(0)
-                            print(f"Added message: CAN ID {can_id}, Raw Data {raw_data}")  # Debug print
+                            # message: CAN ID {can_id}, Raw Data {raw_data}")  # Debug print
                         except Exception as e:
                             print(f"Error parsing CAN message: {e}")
         except Exception as e:
@@ -118,7 +118,7 @@ def update_table(n, time_range, can_id, message_name):
     display_data = []
     for msg in filtered:
         display_msg = msg.copy()
-        display_msg['timestamp'] = datetime.fromisoformat(msg['timestamp']).strftime('%H:%M:%S')
+        display_msg['timestamp'] = datetime.fromisoformat(msg['timestamp']).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
         display_msg['signals'] = json.dumps([{'name': k, 'value': v.value if hasattr(v, 'value') else str(v)} for k, v in msg['signals'].items()])
         display_msg['raw_data'] = ' '.join(f'{b:02X}' for b in msg['raw_data'])
         display_data.append(display_msg)
@@ -162,7 +162,11 @@ def import_can_message():
     data = request.get_json()
     can_id_str = data.get("id")
     raw_data = data.get("data")
-    timestamp = datetime.now()
+    # Use timestamp from request if provided, otherwise use current time
+    if "time" in data:
+        timestamp = datetime.fromtimestamp(data["time"] / 1000, tz=timezone.utc).astimezone()
+    else:
+        timestamp = datetime.now()
 
     if can_id_str and raw_data:
         try:
