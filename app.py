@@ -8,7 +8,7 @@ import time
 import socket
 import threading
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 app = Flask(__name__)
 dash_app = dash.Dash(__name__, server=app, routes_pathname_prefix='/dash/')
@@ -67,8 +67,10 @@ def tcp_listener():
                             msg = json.loads(line)
                             can_id = msg['id']
                             raw_data = bytes(msg['data'])
+                            # Use the timestamp from the message, convert UTC to local time
+                            timestamp = datetime.fromtimestamp(msg['time'], tz=timezone.utc).astimezone()
                             decoded = decode_can_message(can_id, raw_data)
-                            decoded['timestamp'] = datetime.now().isoformat()
+                            decoded['timestamp'] = timestamp.isoformat()
                             CAN_MESSAGES.append(decoded)
                             print(f"Added message: CAN ID {can_id}, Raw Data {raw_data}")  # Debug print
                             if len(CAN_MESSAGES) > MESSAGE_HISTORY_LIMIT:
@@ -88,29 +90,33 @@ def tcp_listener():
     State('message-name-filter', 'value')
 )
 def update_table(n, time_range, can_id, message_name):
-    cutoff_time = datetime.now() - timedelta(seconds=time_range or 60)
+    # Make cutoff_time timezone-aware in local time
+    local_tz = datetime.now().astimezone().tzinfo
+    cutoff_time = datetime.now(local_tz) - timedelta(seconds=time_range or 60)
     filtered = [
         msg for msg in CAN_MESSAGES
         if datetime.fromisoformat(msg['timestamp']) >= cutoff_time and
            (not can_id or str(msg['can_id']) == can_id) and
            (not message_name or msg['message_name'] == message_name)
     ]
+    # Limit to last 100 messages to prevent overload
+    # filtered = filtered[-10:] if len(filtered) > 20 else filtered
     # Create display data without modifying originals
     display_data = []
     for msg in filtered:
         display_msg = msg.copy()
         display_msg['timestamp'] = datetime.fromisoformat(msg['timestamp']).strftime('%H:%M:%S')
-        display_msg['signals'] = json.dumps(msg['signals'])
+        display_msg['signals'] = json.dumps([{'name': k, 'value': v} for k, v in msg['signals'].items()])
         display_msg['raw_data'] = ' '.join(f'{b:02X}' for b in msg['raw_data'])
         display_data.append(display_msg)
     return display_data
 
 dash_app.layout = html.Div(style={'backgroundColor': '#DEB887', 'padding': '20px'}, children=[
     html.H1("Peacan CAN Viewer", style={'color': '#8B4513', 'textAlign': 'center'}),
-    dcc.Interval(id='interval-component', interval=1000, n_intervals=0),
+    dcc.Interval(id='interval-component', interval=2000, n_intervals=0),
     html.Div([
         html.Label("Time Range (seconds):", style={'color': '#8B4513'}),
-        dcc.Input(id='time-range', type='number', value=60, min=1, max=3600, style={'marginLeft': '10px'}),
+        dcc.Input(id='time-range', type='number', value=10, min=1, max=3600, style={'marginLeft': '10px'}),
     ], style={'marginBottom': '10px'}),
     html.Div([
         html.Label("CAN ID Filter:", style={'color': '#8B4513'}),
