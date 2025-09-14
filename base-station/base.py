@@ -130,7 +130,8 @@ def send_can_messages_batch(messages_batch):
     try:
         r = requests.post(HTTP_FORWARD_URL, json=messages_batch, timeout=5)
         if r.status_code != 200:
-            print(f"HTTP forward error {r.status_code}")
+            # print(f"HTTP forward error {r.status_code}")
+            pass
     except Exception as e:
         print(f"Error forwarding batch: {e}")
 
@@ -181,7 +182,7 @@ if args.test:
 try:
     while True:
         data, addr = udp_sock.recvfrom(4096)
-        print(f"\nReceived {len(data)} bytes from {addr}")
+        #  {len(data)} bytes from {addr}")
         try:
             decoded = data.decode('utf-8')
             msg = json.loads(decoded)
@@ -202,7 +203,7 @@ try:
                         continue
                     # Accumulate frame for batch broadcast
                     frame = {
-                        "time": m.get("timestamp", time.time()),
+                        "time": m.get("timestamp"),
                         "bus": 0,
                         "id": mid,
                         "data": list(mdata)
@@ -215,7 +216,7 @@ try:
                     print(f"    Problematic message data was: {m}")
                     # ------------------------
                     continue
-            print(f"Successfully processed batch with {len(msg['messages'])} messages")
+            # print(f"Successfully processed batch with {len(msg['messages'])} messages")
         else:
             print(f"!!! WARNING: Received valid JSON but it was missing the 'messages' key. Data: {msg}")
 

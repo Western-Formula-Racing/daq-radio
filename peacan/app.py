@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify
 import dash
-from dash import html, dcc, Input, Output, State
-import dash_table
+from dash import html, dcc, Input, Output, State, dash_table
 import cantools
 import os
 import time
@@ -14,21 +13,46 @@ app = Flask(__name__)
 dash_app = dash.Dash(__name__, server=app, routes_pathname_prefix='/dash/')
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────
-DBC_FILE = os.getenv("DBC_FILE", "dbc_files/WFR25-6389976.dbc")
 CAN_MESSAGES = []  # Store decoded CAN messages
 MESSAGE_HISTORY_LIMIT = 1000
 lock = threading.Lock()  # For thread-safe access to CAN_MESSAGES
 
 # ─── LOAD DBC ──────────────────────────────────────────────────────────────
-try:
-    db = cantools.database.load_file(DBC_FILE)
-    print(f"DBC file loaded successfully: {DBC_FILE}")
-except Exception as e:
-    print(f"Failed to load DBC file: {DBC_FILE} - {e}")
-    raise SystemExit(f"Failed to load DBC file: {e}")
+def load_dbc_file():
+    """Load DBC file with multiple path fallbacks"""
+    dbc_paths = [
+        'WFR25-6389976.dbc',
+        'dbc_files/WFR25-6389976.dbc',
+        os.path.join(os.path.dirname(__file__), 'WFR25-6389976.dbc'),
+        os.path.join(os.path.dirname(__file__), 'dbc_files', 'WFR25-6389976.dbc'),
+        os.getenv("DBC_FILE", "dbc_files/WFR25-6389976.dbc")
+    ]
+    
+    for dbc_path in dbc_paths:
+        try:
+            if os.path.exists(dbc_path):
+                db = cantools.database.load_file(dbc_path)
+                print(f"DBC file loaded successfully: {dbc_path}")
+                return db
+        except Exception as e:
+            continue
+    
+    print("Warning: No DBC file found - raw CAN data only")
+    return None
+
+db = load_dbc_file()
 
 def decode_can_message(can_id, data):
     """Decode CAN message using DBC."""
+    if db is None:
+        return {
+            'can_id': can_id,
+            'message_name': 'Raw',
+            'signals': {},
+            'raw_data': list(data),
+            'error': 'No DBC file loaded'
+        }
+    
     try:
         msg = db.get_message_by_frame_id(can_id)
         decoded = msg.decode(data, allow_truncated=True)
@@ -128,7 +152,8 @@ def update_table(n, time_range, can_id, message_name):
 
 dash_app.layout = html.Div(style={'backgroundColor': '#DEB887', 'padding': '20px'}, children=[
     html.H1("Peacan CAN Viewer", style={'color': '#8B4513', 'textAlign': 'center'}),
-    dcc.Interval(id='interval-component', interval=2000, n_intervals=0),
+    # changes how often the table refreshes
+    dcc.Interval(id='interval-component', interval=1000, n_intervals=0),
     html.Div([
         html.Label("Time Range (seconds):", style={'color': '#8B4513'}),
         dcc.Input(id='time-range', type='number', value=600, min=1, max=3600, style={'marginLeft': '10px'}),
@@ -189,7 +214,14 @@ def import_can_message():
 def index():
     return dash_app.index()
 
-if __name__ == "__main__":
+def start_server():
+    """Start the Flask server and named pipe listener"""
+    print("Starting PEACAN web application...")
+    print("Starting named pipe listener...")
     # Start named pipe listener thread
     threading.Thread(target=named_pipe_listener, daemon=True).start()
-    app.run(debug=True, host='0.0.0.0', port=9998)
+    print(f"Starting Flask server on http://0.0.0.0:9998")
+    app.run(debug=False, host='0.0.0.0', port=9998, use_reloader=False)
+
+if __name__ == "__main__":
+    start_server()
