@@ -31,10 +31,12 @@ except ImportError:
     db = None
     print("cantools not installed. Install with: pip install cantools")
 
+import os
+
 # Configuration
 UDP_PORT = 12345               # incoming from ESP32
 TIME_SYNC_PORT = 12346         # for time sync broadcast
-CANSERVER_PORT = 54701         # SavvyCAN default CANserver TCP port
+NAMED_PIPE_PATH = "/tmp/can_data_pipe"  # Named pipe for local communication
 HTTP_FORWARD_URL = "http://127.0.0.1:8085/can"
 
 # Command-line arguments
@@ -48,18 +50,80 @@ udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 udp_sock.bind(('', UDP_PORT))
 
-# TCP server socket for SavvyCAN (CANserver)
-tcp_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-tcp_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-tcp_server.bind(('0.0.0.0', CANSERVER_PORT))
-tcp_server.listen(1)
+# Setup named pipe for local communication
+def setup_named_pipe():
+    """Create a named pipe for local communication."""
+    try:
+        os.mkfifo(NAMED_PIPE_PATH)
+        print(f"Created named pipe: {NAMED_PIPE_PATH}")
+    except FileExistsError:
+        print(f"Named pipe already exists: {NAMED_PIPE_PATH}")
+    except Exception as e:
+        print(f"Error creating named pipe: {e}")
+
+setup_named_pipe()
 
 print(f"Base station listening for ESP32 CAN JSON on UDP {UDP_PORT}")
-print(f"CANserver emulation ready on TCP port {CANSERVER_PORT} (connect SavvyCAN with CANserver option)")
+print(f"CAN data available via named pipe: {NAMED_PIPE_PATH}")
 
-# List of connected SavvyCAN clients
-savvycan_clients = []
-client_lock = threading.Lock()
+# Batch for named pipe broadcasts
+batched_frames = []
+batch_lock = threading.Lock()
+pipe_fd = None
+pipe_file = None
+
+def open_pipe():
+    """Open the named pipe for writing."""
+    global pipe_fd, pipe_file
+    try:
+        if pipe_fd is not None:
+            return True
+        pipe_fd = os.open(NAMED_PIPE_PATH, os.O_WRONLY | os.O_NONBLOCK)
+        pipe_file = os.fdopen(pipe_fd, 'w')
+        print("Opened named pipe for writing")
+        return True
+    except Exception as e:
+        print(f"Error opening pipe: {e}")
+        pipe_fd = None
+        pipe_file = None
+        return False
+
+def close_pipe():
+    """Close the named pipe."""
+    global pipe_fd, pipe_file
+    try:
+        if pipe_file:
+            pipe_file.close()
+        pipe_fd = None
+        pipe_file = None
+    except Exception as e:
+        print(f"Error closing pipe: {e}")
+
+def canserver_broadcast(frames):
+    """
+    Write CAN frames to named pipe for local communication.
+    Each frame: {"time":123456.789,"bus":0,"id":123,"data":[1,2,3]}
+    """
+    global pipe_file
+    if not frames:
+        return
+    print(f"Writing {len(frames)} frame(s) to named pipe...")
+    
+    try:
+        if not open_pipe():
+            return
+            
+        for frame in frames:
+            line = json.dumps(frame) + "\n"
+            pipe_file.write(line)
+        pipe_file.flush()
+    except (OSError, IOError) as e:
+        if e.errno != 32:  # Ignore "Broken pipe" when no reader
+            print(f"Pipe write error: {e}")
+        close_pipe()  # Close and will reopen on next write
+    except Exception as e:
+        print(f"Unexpected pipe error: {e}")
+        close_pipe()
 
 def send_can_messages_batch(messages_batch):
     """Send a batch of CAN messages (JSON) to HTTP endpoint."""
@@ -83,58 +147,32 @@ def broadcast_time():
             print(f"Time broadcast error: {e}")
         time.sleep(1)
 
-def canserver_broadcast(arbitration_id, data):
-    """
-    Forward a CAN frame to all connected SavvyCAN clients in CANserver JSON format.
-    Example per-frame line: {"time":123456.789,"bus":0,"id":123,"data":[1,2,3]}
-    """
-    # --- DIAGNOSTIC PRINT ---
-    print(f"Broadcasting to {len(savvycan_clients)} SavvyCAN client(s)...")
-    # ------------------------
-    frame = {
-        "time": time.time(),
-        "bus": 0,
-        "id": int(arbitration_id),
-        "data": list(data)
-    }
-    line = json.dumps(frame) + "\n"
-    dead_clients = []
-    with client_lock:
-        for c in savvycan_clients:
-            try:
-                c.sendall(line.encode('utf-8'))
-            except Exception:
-                dead_clients.append(c)
-        for d in dead_clients:
-            savvycan_clients.remove(d)
-            try:
-                d.close()
-            except Exception:
-                pass
-
-def tcp_accept_loop():
-    """Accept incoming SavvyCAN connections."""
+def broadcast_batch_timer():
+    """Broadcast accumulated CAN frames every second."""
     while True:
-        conn, addr = tcp_server.accept()
-        print(f"SavvyCAN connected from {addr}")
-        with client_lock:
-            savvycan_clients.append(conn)
+        time.sleep(1)
+        with batch_lock:
+            if batched_frames:
+                frames_to_send = batched_frames[:]
+                batched_frames.clear()
+                canserver_broadcast(frames_to_send)
 
 def send_test_messages():
     """Send fake messages into UDP listener for testing."""
     test_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    msg = {
-        "messages": [
-            {"id": "6789", "data": [1,2,3,4,5,6,7,8], "timestamp": time.time()}
-        ]
-    }
     while True:
+        msg = {
+            "messages": [
+                # time in ms
+                {"id": "6789", "data": [1,2,3,4,5,6,7,8], "timestamp": int(time.time() * 1000)}
+            ]
+        }
         test_sock.sendto(json.dumps(msg).encode(), ('127.0.0.1', UDP_PORT))
         time.sleep(1)
 
 # Start background threads
 threading.Thread(target=broadcast_time, daemon=True).start()
-threading.Thread(target=tcp_accept_loop, daemon=True).start()
+threading.Thread(target=broadcast_batch_timer, daemon=True).start()
 if args.test:
     threading.Thread(target=send_test_messages, daemon=True).start()
     print("--- TEST MODE ENABLED: Sending fake CAN messages every second. ---")
@@ -143,9 +181,7 @@ if args.test:
 try:
     while True:
         data, addr = udp_sock.recvfrom(4096)
-        # --- DIAGNOSTIC PRINT ---
         print(f"\nReceived {len(data)} bytes from {addr}")
-        # ------------------------
         try:
             decoded = data.decode('utf-8')
             msg = json.loads(decoded)
@@ -164,13 +200,22 @@ try:
                     mdata = m["data"]
                     if not isinstance(mdata, list):
                         continue
-                    canserver_broadcast(mid, mdata)
+                    # Accumulate frame for batch broadcast
+                    frame = {
+                        "time": m.get("timestamp", time.time()),
+                        "bus": 0,
+                        "id": mid,
+                        "data": list(mdata)
+                    }
+                    with batch_lock:
+                        batched_frames.append(frame)
                 except Exception as e:
                     # --- DIAGNOSTIC PRINT ---
                     print(f"!!! ERROR processing individual message: {e}")
                     print(f"    Problematic message data was: {m}")
                     # ------------------------
                     continue
+            print(f"Successfully processed batch with {len(msg['messages'])} messages")
         else:
             print(f"!!! WARNING: Received valid JSON but it was missing the 'messages' key. Data: {msg}")
 
@@ -178,7 +223,10 @@ except KeyboardInterrupt:
     print("Exiting...")
 finally:
     udp_sock.close()
-    tcp_server.close()
-    with client_lock:
-        for c in savvycan_clients:
-            c.close()
+    close_pipe()  # Close pipe file descriptor
+    # Clean up named pipe
+    try:
+        os.unlink(NAMED_PIPE_PATH)
+        print(f"Cleaned up named pipe: {NAMED_PIPE_PATH}")
+    except FileNotFoundError:
+        pass
