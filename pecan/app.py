@@ -157,7 +157,7 @@ def update_table(n, time_range, can_id, message_name):
     return display_data
 
 dash_app.layout = html.Div(style={'backgroundColor': '#DEB887', 'padding': '20px'}, children=[
-    html.H1("Peacan CAN Viewer", style={'color': '#8B4513', 'textAlign': 'center'}),
+    html.H1("Pecan CAN Viewer", style={'color': '#8B4513', 'textAlign': 'center'}),
     # changes how often the table refreshes
     dcc.Interval(id='interval-component', interval=1000, n_intervals=0),
     html.Div([
@@ -222,7 +222,7 @@ def index():
 
 def start_server():
     """Start the Flask server and named pipe listener"""
-    print("Starting PEACAN web application...")
+    print("Starting PECAN web application...")
     print("Starting named pipe listener...")
     # Start named pipe listener thread
     threading.Thread(target=named_pipe_listener, daemon=True).start()

@@ -105,7 +105,7 @@ daq-radio/
 3. Test with both real hardware and simulation modes
 4. Update documentation as needed
 =======
-peacan
+pecan
 ├── app.py                # Main entry point of the Flask application
 ├── requirements.txt      # List of dependencies for the project
 ├── static
@@ -149,7 +149,7 @@ This CAN viewer is part of a distributed timestamping system that ensures accura
   ```
 - The original ESP32 timestamp is preserved in the `time` field
 
-### 4. Message Processing (Peacan App)
+### 4. Message Processing (Pecan App)
 - **Named Pipe Reading**: `named_pipe_listener()` thread reads JSON lines from the named pipe
 - **Timestamp Conversion**: Timestamps are converted from Unix milliseconds to local timezone:
   ```python
@@ -180,7 +180,7 @@ This pipeline ensures that CAN messages from distributed ESP32 devices maintain 
 1. **Clone the Repository**:
    ```bash
    git clone <repository-url>
-   cd peacan
+   cd pecan
    ```
 
 2. **Install Dependencies**:
@@ -207,4 +207,4 @@ This pipeline ensures that CAN messages from distributed ESP32 devices maintain 
 ## License
 
 This project is licensed under the MIT License. See the LICENSE file for more details.
->>>>>>> peacan-branch
+>>>>>>> pecan-branch

@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 """
-PEACAN Dashboard - Unified CAN Viewer & Broadcasting System (Version 2)
+PECAN Dashbo    """
+    Provides color constants for different service types to create 
+    Docker-style logging with visual service identification.
+    """
+    PECAN = '\033[36m'  # Cyan - for web service logs
+    BASE = '\033[33m'    # Yellow - for base station logs  
+    SYSTEM = '\033[35m'  # Magenta - for system lifecycle logs
+    RESET = '\033[0m'    # Reset to default terminal color
+    BOLD = '\033[1m'     # Bold text formattingfied CAN Viewer & Broadcasting System (Version 2)
 
-This is the main entry point for the PEACAN Dashboard application, which combines 
+This is the main entry point for the PECAN Dashboard application, which combines 
 both a CAN base station and web visualization interface in a single process using 
 threading architecture.
 
 Architecture:
 - Main Thread: System monitoring, logging, and graceful shutdown handling
-- PEACAN Thread: Flask/Dash web server on port 9998 with real-time dashboard
+- PECAN Thread: Flask/Dash web server on port 9998 with real-time dashboard
 - BASE Thread: CAN broadcasting, UDP transmission, and test data generation
 
 The application provides:
@@ -41,7 +49,7 @@ class Colors:
     Provides color constants for different service types to create 
     Docker-style logging with visual service identification.
     """
-    PEACAN = '\033[36m'  # Cyan - for web service logs
+    PECAN = '\033[36m'  # Cyan - for web service logs
     BASE = '\033[33m'    # Yellow - for base station logs  
     SYSTEM = '\033[35m'  # Magenta - for system lifecycle logs
     RESET = '\033[0m'    # Reset to default terminal color
@@ -61,12 +69,12 @@ def print_service_log(service_name, message, color=Colors.RESET):
     Print message with Docker-style service prefix and timestamp.
     
     Args:
-        service_name (str): Name of the service (SYSTEM, PEACAN, BASE)
+        service_name (str): Name of the service (SYSTEM, PECAN, BASE)
         message (str): Log message to display
         color (str): ANSI color code for the service prefix
         
     Example:
-        2025-09-14 01:48:03 [PEACAN] Starting web server...
+        2025-09-14 01:48:03 [PECAN] Starting web server...
     """
     timestamp = get_timestamp()
     service_prefix = f"{color}{Colors.BOLD}[{service_name}]{Colors.RESET}"
@@ -75,9 +83,9 @@ def print_service_log(service_name, message, color=Colors.RESET):
 # Global shutdown event
 shutdown_event = threading.Event()
 
-def run_peacan_service():
+def run_pecan_service():
     """
-    Run the PEACAN web application service in a separate thread.
+    Run the PECAN web application service in a separate thread.
     
     This function:
     1. Imports the Flask/Dash web application components
@@ -89,17 +97,17 @@ def run_peacan_service():
     All errors are caught and logged with appropriate service prefixes.
     """
     try:
-        print_service_log("PEACAN", "Importing PEACAN modules...", Colors.PEACAN)
+        print_service_log("PECAN", "Importing PECAN modules...", Colors.PECAN)
         
         # Import app components
         from app import start_server
         
-        print_service_log("PEACAN", "Starting PEACAN web server...", Colors.PEACAN)
+        print_service_log("PECAN", "Starting PECAN web server...", Colors.PECAN)
         # Start the Flask server
         start_server()
         
     except Exception as e:
-        print_service_log("PEACAN", f"Error in PEACAN service: {e}", Colors.PEACAN)
+        print_service_log("PECAN", f"Error in PECAN service: {e}", Colors.PECAN)
 
 def run_base_service():
     """
@@ -200,7 +208,7 @@ def run_base_service():
                         "time": int(time.time() * 1000)
                     }
                     
-                    # Write to named pipe for PEACAN service consumption
+                    # Write to named pipe for PECAN service consumption
                     try:
                         with open(NAMED_PIPE_PATH, 'w') as pipe:
                             json.dump(fake_frame, pipe)
@@ -251,7 +259,7 @@ def main():
     This function:
     1. Sets up signal handlers for graceful shutdown
     2. Displays startup information and configuration
-    3. Starts PEACAN web service in a separate thread
+    3. Starts PECAN web service in a separate thread
     4. Starts BASE station service in a separate thread  
     5. Monitors service health and displays status
     6. Handles shutdown coordination
@@ -264,19 +272,19 @@ def main():
     if platform.system() != 'Windows':
         signal.signal(signal.SIGTERM, signal_handler)
     
-    print_service_log("SYSTEM", "Starting PEACAN Combined CAN Dashboard Application", Colors.SYSTEM)
+    print_service_log("SYSTEM", "Starting PECAN Combined CAN Dashboard Application", Colors.SYSTEM)
     print_service_log("SYSTEM", f"Platform: {platform.system()} {platform.machine()}", Colors.SYSTEM)
     print_service_log("SYSTEM", "Services: Web App (localhost:9998) + Base Station (CAN broadcasting)", Colors.SYSTEM)
     print_service_log("SYSTEM", "Press Ctrl+C to stop all services", Colors.SYSTEM)
     print()
 
     try:
-        # Start PEACAN web app in a separate thread
-        print_service_log("SYSTEM", "Starting PEACAN web application...", Colors.SYSTEM)
-        peacan_thread = threading.Thread(target=run_peacan_service, daemon=True)
-        peacan_thread.start()
+        # Start PECAN web app in a separate thread
+        print_service_log("SYSTEM", "Starting PECAN web application...", Colors.SYSTEM)
+        pecan_thread = threading.Thread(target=run_pecan_service, daemon=True)
+        pecan_thread.start()
         
-        # Give PEACAN a moment to start
+        # Give PECAN a moment to start
         time.sleep(3)
         
         # Start base station in a separate thread
@@ -294,10 +302,10 @@ def main():
         # Keep main thread alive and monitor services
         while not shutdown_event.is_set():
             # Check if threads are still alive
-            if peacan_thread.is_alive():
-                peacan_status = "✓"
+            if pecan_thread.is_alive():
+                pecan_status = "✓"
             else:
-                peacan_status = "✗"
+                pecan_status = "✗"
                 
             if base_thread.is_alive():
                 base_status = "✓"
@@ -306,7 +314,7 @@ def main():
                 
             # Print status every 30 seconds
             if int(time.time()) % 30 == 0:
-                print_service_log("SYSTEM", f"Status - PEACAN: {peacan_status} BASE: {base_status}", Colors.SYSTEM)
+                print_service_log("SYSTEM", f"Status - PECAN: {pecan_status} BASE: {base_status}", Colors.SYSTEM)
                 
             time.sleep(1)
             
