@@ -42,6 +42,11 @@ def load_dbc_file():
 
 db = load_dbc_file()
 
+if db:
+    print(f"Loaded {len(db.messages)} messages from DBC:")
+    for msg in db.messages:
+        print(f"  ID: {msg.frame_id} ({hex(msg.frame_id)}), Name: {msg.name}")
+
 def decode_can_message(can_id, data):
     """Decode CAN message using DBC."""
     if db is None:
@@ -63,6 +68,7 @@ def decode_can_message(can_id, data):
             'raw_data': list(data)
         }
     except Exception as e:
+        print(f"Failed to decode CAN ID {can_id} ({hex(can_id)}): {e}")
         return {
             'can_id': can_id,
             'message_name': 'Unknown',

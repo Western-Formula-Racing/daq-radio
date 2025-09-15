@@ -14,11 +14,16 @@ import threading
 import requests
 import argparse
 
-# Optional cantools import (for DBC decoding)
+# Optional cantools import (for DBC decoding)+
 try:
     import cantools
     try:
-        db = cantools.database.load_file('WFR25-6389976.dbc')
+        # Allow fallback paths for DBC file on /WFR25-6389976.dbc
+        try: 
+            db = cantools.database.load_file('WFR25-6389976.dbc')
+        except FileNotFoundError:
+            db = cantools.database.load_file('base-station/WFR25-6389976.dbc')
+
         print("DBC file loaded successfully - ready to decode CAN messages.")
     except FileNotFoundError:
         db = None
