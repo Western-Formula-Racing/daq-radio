@@ -33,8 +33,7 @@ daq-radio/
 │   ├── Dockerfile       # Docker configuration
 │   └── setup_and_run.sh # Setup script
 ├── .conda/              # Conda environment configuration
-├── .vscode/             # VS Code workspace settings
-└── SAVVYCAN_README.md   # SavvyCAN integration guide
+├── .vscode/             # VS Code workspace settings (gitignored)
 ```
 
 ## Key Components
