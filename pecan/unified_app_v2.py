@@ -1,35 +1,4 @@
 #!/usr/bin/env python3
-"""
-PECAN Dashbo    """
-    Provides color constants for different service types to create 
-    Docker-style logging with visual service identification.
-    """
-    PECAN = '\033[36m'  # Cyan - for web service logs
-    BASE = '\033[33m'    # Yellow - for base station logs  
-    SYSTEM = '\033[35m'  # Magenta - for system lifecycle logs
-    RESET = '\033[0m'    # Reset to default terminal color
-    BOLD = '\033[1m'     # Bold text formattingfied CAN Viewer & Broadcasting System (Version 2)
-
-This is the main entry point for the PECAN Dashboard application, which combines 
-both a CAN base station and web visualization interface in a single process using 
-threading architecture.
-
-Architecture:
-- Main Thread: System monitoring, logging, and graceful shutdown handling
-- PECAN Thread: Flask/Dash web server on port 9998 with real-time dashboard
-- BASE Thread: CAN broadcasting, UDP transmission, and test data generation
-
-The application provides:
-- Real-time CAN message visualization
-- DBC file support for message decoding
-- Named pipe communication between services
-- Docker-style logging with color-coded service prefixes
-- Cross-platform executable building with PyInstaller
-
-Author: Western Formula Racing Team
-Version: 2.0.0
-Python: 3.8+
-"""
 
 import sys
 import os
@@ -41,6 +10,7 @@ import platform
 import socket
 import json
 import requests
+import subprocess
 
 class Colors:
     """
@@ -111,125 +81,59 @@ def run_pecan_service():
 
 def run_base_service():
     """
-    Run the base station service with integrated CAN broadcasting logic.
+    Run the base station service by launching base.py with --test flag.
     
-    This function implements the base station functionality including:
-    1. UDP broadcasting on port 12345 for CAN data distribution
-    2. Time synchronization on port 12346
-    3. Named pipe creation for inter-service communication
-    4. DBC file loading for message decoding
-    5. Test mode with fake CAN message generation
+    This function:
+    1. Launches the base.py script with test mode enabled
+    2. Monitors the subprocess and handles shutdown
     
-    The service runs continuously until shutdown_event is set.
-    In test mode, generates fake CAN frames every second for demonstration.
-    
-    Network Configuration:
-        - UDP_PORT: 12345 (CAN data broadcast)
-        - TIME_SYNC_PORT: 12346 (time synchronization)
-        - NAMED_PIPE_PATH: /tmp/can_data_pipe (inter-service communication)
-        - HTTP_FORWARD_URL: http://127.0.0.1:8085/can (external forwarding)
+    The base.py script handles:
+    - UDP broadcasting on port 12345 for CAN data distribution
+    - Time synchronization on port 12346
+    - Named pipe creation for inter-service communication
+    - DBC file loading for message decoding
+    - Test mode with fake CAN message generation
     """
     try:
         print_service_log("BASE", "Initializing BASE station...", Colors.BASE)
         
-        # Base station configuration
-        UDP_PORT = 12345
-        TIME_SYNC_PORT = 12346
-        NAMED_PIPE_PATH = "/tmp/can_data_pipe"
-        HTTP_FORWARD_URL = "http://127.0.0.1:8085/can"
+        # Path to base.py script
+        base_script_path = os.path.join(os.path.dirname(__file__), '..', 'base-station', 'base.py')
         
-        # Load DBC file with fallback paths
-        try:
-            import cantools
-            # Try multiple DBC file locations for maximum compatibility
-            dbc_paths = [
-                'WFR25-6389976.dbc',                                    # Root directory
-                'dbc_files/WFR25-6389976.dbc',                         # Subfolder
-                os.path.join(os.path.dirname(__file__), 'WFR25-6389976.dbc'),  # Script directory
-                os.path.join(os.path.dirname(__file__), 'dbc_files', 'WFR25-6389976.dbc')  # Script subdirectory
-            ]
-            
-            db = None
-            for dbc_path in dbc_paths:
-                try:
-                    if os.path.exists(dbc_path):
-                        db = cantools.database.load_file(dbc_path)
-                        print_service_log("BASE", f"DBC file loaded: {dbc_path}", Colors.BASE)
-                        break
-                except Exception as e:
-                    continue
-            
-            if db is None:
-                print_service_log("BASE", "No DBC file found - raw CAN data only", Colors.BASE)
-                
-        except ImportError:
-            print_service_log("BASE", "cantools not available - raw CAN data only", Colors.BASE)
-            db = None
-
-        # Create UDP socket for CAN data broadcasting
-        udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        udp_sock.bind(('', UDP_PORT))
+        print_service_log("BASE", f"Launching base.py with --test from {base_script_path}", Colors.BASE)
         
-        # Create named pipe for inter-service communication
-        try:
-            if os.path.exists(NAMED_PIPE_PATH):
-                os.unlink(NAMED_PIPE_PATH)
-            os.mkfifo(NAMED_PIPE_PATH)
-            print_service_log("BASE", f"Created named pipe: {NAMED_PIPE_PATH}", Colors.BASE)
-        except Exception as e:
-            print_service_log("BASE", f"Named pipe exists or error: {e}", Colors.BASE)
-
-        print_service_log("BASE", f"Base station listening on UDP {UDP_PORT}", Colors.BASE)
-        print_service_log("BASE", f"Named pipe: {NAMED_PIPE_PATH}", Colors.BASE)
-        print_service_log("BASE", "TEST MODE: Sending fake CAN messages", Colors.BASE)
-
-        # Test mode - generate fake CAN messages for demonstration
-        def generate_test_data():
-            """
-            Generate fake CAN messages for testing and demonstration.
-            
-            Creates incrementing CAN frames with:
-            - ID: 0x123 (291 decimal)
-            - Data: [0x01, 0x02, counter, 0x04]
-            - Timestamp: Current time in milliseconds
-            
-            Messages are sent to the named pipe every second.
-            """
-            frame_count = 0
-            while not shutdown_event.is_set():
-                try:
-                    frame_count += 1
-                    # Generate fake CAN frame with incrementing counter
-                    fake_frame = {
-                        "id": 0x123,
-                        "data": [0x01, 0x02, frame_count & 0xFF, 0x04],
-                        "time": int(time.time() * 1000)
-                    }
-                    
-                    # Write to named pipe for PECAN service consumption
-                    try:
-                        with open(NAMED_PIPE_PATH, 'w') as pipe:
-                            json.dump(fake_frame, pipe)
-                            pipe.write('\n')
-                            pipe.flush()
-                        print_service_log("BASE", f"Sent test CAN frame #{frame_count}", Colors.BASE)
-                    except Exception as e:
-                        print_service_log("BASE", f"Pipe write error: {e}", Colors.BASE)
-                        
-                    time.sleep(1)  # 1 Hz message rate
-                except Exception as e:
-                    print_service_log("BASE", f"Test data error: {e}", Colors.BASE)
-                    time.sleep(1)
-
-        # Start test data generation
-        test_thread = threading.Thread(target=generate_test_data, daemon=True)
-        test_thread.start()
+        # Launch base.py --test as subprocess
+        base_process = subprocess.Popen(
+            ['python3', base_script_path, '--test'],
+            cwd=os.path.dirname(base_script_path),  # Run from base-station directory
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
         
-        # Keep base service alive
+        print_service_log("BASE", "Base station launched successfully", Colors.BASE)
+        
+        # Keep base service alive and monitor subprocess
         while not shutdown_event.is_set():
+            if base_process.poll() is not None:
+                # Process has terminated
+                stdout, stderr = base_process.communicate()
+                if stdout:
+                    print_service_log("BASE", f"Base process stdout: {stdout.strip()}", Colors.BASE)
+                if stderr:
+                    print_service_log("BASE", f"Base process stderr: {stderr.strip()}", Colors.BASE)
+                print_service_log("BASE", "Base process terminated", Colors.BASE)
+                break
             time.sleep(1)
+            
+        # Terminate subprocess on shutdown
+        if base_process.poll() is None:
+            base_process.terminate()
+            try:
+                base_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                base_process.kill()
+            print_service_log("BASE", "Base process terminated", Colors.BASE)
             
     except Exception as e:
         print_service_log("BASE", f"Error in BASE service: {e}", Colors.BASE)
