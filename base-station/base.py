@@ -170,7 +170,7 @@ def send_test_messages():
         msg = {
             "messages": [
                 # time in ms
-                {"id": "6789", "data": [1,2,3,4,5,6,7,8], "timestamp": int(time.time() * 1000)}
+                {"id": "1200", "data": [1,2,3,4,5,6,7,8], "timestamp": int(time.time() * 1000)}
             ]
         }
         test_sock.sendto(json.dumps(msg).encode(), ('127.0.0.1', UDP_PORT))

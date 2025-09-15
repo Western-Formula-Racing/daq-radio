@@ -21,11 +21,11 @@ lock = threading.Lock()  # For thread-safe access to CAN_MESSAGES
 def load_dbc_file():
     """Load DBC file with multiple path fallbacks"""
     dbc_paths = [
-        'WFR25-6389976.dbc',
-        'dbc_files/WFR25-6389976.dbc',
-        os.path.join(os.path.dirname(__file__), 'WFR25-6389976.dbc'),
-        os.path.join(os.path.dirname(__file__), 'dbc_files', 'WFR25-6389976.dbc'),
-        os.getenv("DBC_FILE", "dbc_files/WFR25-6389976.dbc")
+        'WFR25-eeae9849.dbc',
+        'dbc_files/WFR25-eeae9849.dbc',
+        os.path.join(os.path.dirname(__file__), 'WFR25-eeae9849.dbc'),
+        os.path.join(os.path.dirname(__file__), 'dbc_files', 'WFR25-eeae9849.dbc'),
+        os.getenv("DBC_FILE", "dbc_files/WFR25-eeae9849.dbc")
     ]
     
     for dbc_path in dbc_paths:

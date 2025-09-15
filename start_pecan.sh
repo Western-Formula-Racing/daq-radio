@@ -13,6 +13,6 @@ cloudflared tunnel run can-tunnel &
 # Wait a moment for tunnel to initialize
 sleep 3
 
-# Start the PECAN app
+# Start the Unified app
 echo "Starting PECAN application..."
-python app.py
+python unified_app_v2.py
