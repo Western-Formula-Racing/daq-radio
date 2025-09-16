@@ -14,7 +14,7 @@ dash_app = dash.Dash(__name__, server=app, routes_pathname_prefix='/dash/')
 
 # ─── CONFIG ────────────────────────────────────────────────────────────────
 CAN_MESSAGES = []  # Store decoded CAN messages
-MESSAGE_HISTORY_LIMIT = 1000
+MESSAGE_HISTORY_LIMIT = 1000  # Keep only the most recent 1000 messages
 lock = threading.Lock()  # For thread-safe access to CAN_MESSAGES
 
 # ─── LOAD DBC ──────────────────────────────────────────────────────────────
@@ -80,6 +80,7 @@ def decode_can_message(can_id, data):
 def named_pipe_listener():
     """Read CAN messages from named pipe."""
     pipe_path = "/tmp/can_data_pipe"
+    message_count = 0
     while True:
         try:
             # Open pipe for reading
@@ -88,6 +89,9 @@ def named_pipe_listener():
                 for line in pipe:
                     line = line.strip()
                     if line:
+                        message_count += 1
+                        if message_count % 100 == 0:
+                            print(f"Processed {message_count} messages from pipe")
                         # print(f"Received line: {line}")  # Debug print
                         try:
                             msg = json.loads(line)
@@ -101,6 +105,7 @@ def named_pipe_listener():
                                 CAN_MESSAGES.append(decoded)
                                 if len(CAN_MESSAGES) > MESSAGE_HISTORY_LIMIT:
                                     CAN_MESSAGES.pop(0)
+                                    print(f"Message limit reached ({MESSAGE_HISTORY_LIMIT}), removed oldest message. Total: {len(CAN_MESSAGES)}")
                             # message: CAN ID {can_id}, Raw Data {raw_data}")  # Debug print
                         except Exception as e:
                             print(f"Error parsing CAN message: {e}")

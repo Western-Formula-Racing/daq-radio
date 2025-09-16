@@ -59,6 +59,9 @@ udp_sock.bind(('', UDP_PORT))
 def setup_named_pipe():
     """Create a named pipe for local communication."""
     try:
+        if os.path.exists(NAMED_PIPE_PATH):
+            os.unlink(NAMED_PIPE_PATH)  # Remove existing pipe
+            print(f"Removed existing named pipe: {NAMED_PIPE_PATH}")
         os.mkfifo(NAMED_PIPE_PATH)
         print(f"Created named pipe: {NAMED_PIPE_PATH}")
     except FileExistsError:
@@ -116,12 +119,14 @@ def canserver_broadcast(frames):
     
     try:
         if not open_pipe():
+            print("Failed to open pipe for writing")
             return
             
         for frame in frames:
             line = json.dumps(frame) + "\n"
             pipe_file.write(line)
         pipe_file.flush()
+        print(f"Successfully wrote {len(frames)} frames to pipe")
     except (OSError, IOError) as e:
         if e.errno != 32:  # Ignore "Broken pipe" when no reader
             print(f"Pipe write error: {e}")
