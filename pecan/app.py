@@ -126,8 +126,8 @@ def update_table(n, time_range, can_id, message_name):
     # Debug: print current messages count
     print(f"Update table called. Total messages: {len(messages)}, Time range: {time_range}")
     
-    # Use a more lenient time filter - default to 600 seconds (10 minutes) if time_range is small
-    time_range = max(time_range or 60, 600)
+    # Use 60 seconds (1 minute) time filter - show only messages from last minute
+    time_range = time_range or 60
     local_tz = datetime.now().astimezone().tzinfo
     cutoff_time = datetime.now(local_tz) - timedelta(seconds=time_range)
     
