@@ -13,6 +13,14 @@ cloudflared tunnel run can-tunnel &
 # Wait a moment for tunnel to initialize
 sleep 3
 
-# Start the Unified app
+# Start the Base Station in the background
+cd ../base-station
+echo "Starting Base Station..."
+python base.py --test &
+
+sleep 2 
+# Start the PECAN app in the current terminal
+cd /home/wfr-daq/daq-radio/pecan
 echo "Starting PECAN application..."
-python unified_app_v2.py
+python app.py
+

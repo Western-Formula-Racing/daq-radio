@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 """
-Base station for receiving CAN-over-UDP JSON from ESP32, forwarding batches
-to an HTTP endpoint, and exposing a CANserver-compatible TCP service for SavvyCAN.
-
-Usage:
-    python3 base.py [--test]
+Base station with memory diagnostics and safeguards
 """
 
 import socket
@@ -13,17 +9,18 @@ import time
 import threading
 import requests
 import argparse
+import psutil
+import os
+from collections import deque
 
-# Optional cantools import (for DBC decoding)+
+# Optional cantools import
 try:
     import cantools
     try:
-        # Allow fallback paths for DBC file on /WFR25-6389976.dbc
         try: 
             db = cantools.database.load_file('WFR25-6389976.dbc')
         except FileNotFoundError:
             db = cantools.database.load_file('base-station/WFR25-6389976.dbc')
-
         print("DBC file loaded successfully - ready to decode CAN messages.")
     except FileNotFoundError:
         db = None
@@ -36,31 +33,31 @@ except ImportError:
     db = None
     print("cantools not installed. Install with: pip install cantools")
 
-import os
-
 # Configuration
-UDP_PORT = 12345               # incoming from ESP32
-TIME_SYNC_PORT = 12346         # for time sync broadcast
-NAMED_PIPE_PATH = "/tmp/can_data_pipe"  # Named pipe for local communication
+UDP_PORT = 12345
+TIME_SYNC_PORT = 12346
+NAMED_PIPE_PATH = "/tmp/can_data_pipe"
 HTTP_FORWARD_URL = "http://127.0.0.1:8085/can"
 
-# Command-line arguments
-parser = argparse.ArgumentParser(description='Base station with CANserver interface')
-parser.add_argument('--test', action='store_true', help='Enable testing mode with fake CAN messages')
+# Memory safeguards
+MAX_BATCH_SIZE = 1000  # Maximum frames to batch before forcing flush
+MAX_BATCH_AGE = 5      # Maximum seconds to hold frames before forcing flush
+
+parser = argparse.ArgumentParser(description='Base station with memory diagnostics')
+parser.add_argument('--test', action='store_true', help='Enable testing mode')
 args = parser.parse_args()
 
-# UDP listener socket for incoming CAN-over-UDP JSON
+# UDP listener socket
 udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 udp_sock.bind(('', UDP_PORT))
 
-# Setup named pipe for local communication
 def setup_named_pipe():
     """Create a named pipe for local communication."""
     try:
         if os.path.exists(NAMED_PIPE_PATH):
-            os.unlink(NAMED_PIPE_PATH)  # Remove existing pipe
+            os.unlink(NAMED_PIPE_PATH)
             print(f"Removed existing named pipe: {NAMED_PIPE_PATH}")
         os.mkfifo(NAMED_PIPE_PATH)
         print(f"Created named pipe: {NAMED_PIPE_PATH}")
@@ -70,15 +67,48 @@ def setup_named_pipe():
         print(f"Error creating named pipe: {e}")
 
 setup_named_pipe()
-
 print(f"Base station listening for ESP32 CAN JSON on UDP {UDP_PORT}")
 print(f"CAN data available via named pipe: {NAMED_PIPE_PATH}")
 
-# Batch for named pipe broadcasts
-batched_frames = []
+# Use deque with maxlen for automatic memory management
+batched_frames = deque(maxlen=MAX_BATCH_SIZE)
 batch_lock = threading.Lock()
 pipe_fd = None
 pipe_file = None
+last_batch_time = time.time()
+
+# Statistics
+stats = {
+    'udp_messages_received': 0,
+    'can_frames_processed': 0,
+    'pipe_writes_success': 0,
+    'pipe_writes_failed': 0,
+    'http_forwards_success': 0,
+    'http_forwards_failed': 0,
+    'last_message_time': 0
+}
+
+def print_stats():
+    """Print diagnostic statistics periodically."""
+    while True:
+        time.sleep(10)  # Print stats every 10 seconds
+        process = psutil.Process()
+        memory_mb = process.memory_info().rss / 1024 / 1024
+        
+        with batch_lock:
+            batch_size = len(batched_frames)
+        
+        time_since_last = time.time() - stats['last_message_time']
+        
+        print(f"\n=== DIAGNOSTICS ===")
+        print(f"Memory usage: {memory_mb:.1f} MB")
+        print(f"Batched frames: {batch_size}/{MAX_BATCH_SIZE}")
+        print(f"UDP messages received: {stats['udp_messages_received']}")
+        print(f"CAN frames processed: {stats['can_frames_processed']}")
+        print(f"Pipe writes: {stats['pipe_writes_success']} success, {stats['pipe_writes_failed']} failed")
+        print(f"HTTP forwards: {stats['http_forwards_success']} success, {stats['http_forwards_failed']} failed")
+        print(f"Time since last message: {time_since_last:.1f}s")
+        print(f"==================")
 
 def open_pipe():
     """Open the named pipe for writing."""
@@ -108,45 +138,47 @@ def close_pipe():
         print(f"Error closing pipe: {e}")
 
 def canserver_broadcast(frames):
-    """
-    Write CAN frames to named pipe for local communication.
-    Each frame: {"time":123456.789,"bus":0,"id":123,"data":[1,2,3]}
-    """
+    """Write CAN frames to named pipe with error handling."""
     global pipe_file
     if not frames:
         return
-    print(f"Writing {len(frames)} frame(s) to named pipe...")
     
     try:
         if not open_pipe():
             print("Failed to open pipe for writing")
+            stats['pipe_writes_failed'] += 1
             return
             
         for frame in frames:
             line = json.dumps(frame) + "\n"
             pipe_file.write(line)
         pipe_file.flush()
+        stats['pipe_writes_success'] += 1
         print(f"Successfully wrote {len(frames)} frames to pipe")
     except (OSError, IOError) as e:
+        stats['pipe_writes_failed'] += 1
         if e.errno != 32:  # Ignore "Broken pipe" when no reader
             print(f"Pipe write error: {e}")
-        close_pipe()  # Close and will reopen on next write
+        close_pipe()
     except Exception as e:
+        stats['pipe_writes_failed'] += 1
         print(f"Unexpected pipe error: {e}")
         close_pipe()
 
 def send_can_messages_batch(messages_batch):
-    """Send a batch of CAN messages (JSON) to HTTP endpoint."""
+    """Send a batch of CAN messages to HTTP endpoint."""
     try:
         r = requests.post(HTTP_FORWARD_URL, json=messages_batch, timeout=5)
-        if r.status_code != 200:
-            # print(f"HTTP forward error {r.status_code}")
-            pass
+        if r.status_code == 200:
+            stats['http_forwards_success'] += 1
+        else:
+            stats['http_forwards_failed'] += 1
     except Exception as e:
+        stats['http_forwards_failed'] += 1
         print(f"Error forwarding batch: {e}")
 
 def broadcast_time():
-    """Broadcast 8-byte big-endian timestamp for ESP32 sync."""
+    """Broadcast timestamp for ESP32 sync."""
     b_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     b_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     while True:
@@ -159,83 +191,108 @@ def broadcast_time():
         time.sleep(1)
 
 def broadcast_batch_timer():
-    """Broadcast accumulated CAN frames every second."""
+    """Broadcast accumulated CAN frames with memory safeguards."""
+    global last_batch_time
     while True:
         time.sleep(1)
+        current_time = time.time()
+        
         with batch_lock:
-            if batched_frames:
-                frames_to_send = batched_frames[:]
+            # Force flush if batch is full, old, or has any frames
+            should_flush = (len(batched_frames) >= MAX_BATCH_SIZE or 
+                          (batched_frames and current_time - last_batch_time >= MAX_BATCH_AGE) or
+                          len(batched_frames) > 0)
+            
+            if should_flush and batched_frames:
+                frames_to_send = list(batched_frames)  # Convert deque to list
                 batched_frames.clear()
+                last_batch_time = current_time
                 canserver_broadcast(frames_to_send)
 
 def send_test_messages():
-    """Send fake messages into UDP listener for testing."""
+    """Send fake messages for testing."""
     test_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    test_id = 1200
     while True:
         msg = {
             "messages": [
-                # time in ms
-                {"id": "1200", "data": [1,2,3,4,5,6,7,8], "timestamp": int(time.time() * 1000)}
+                {"id": str(test_id), "data": [1,2,3,4,5,6,7,8], "timestamp": int(time.time() * 1000)}
             ]
         }
         test_sock.sendto(json.dumps(msg).encode(), ('127.0.0.1', UDP_PORT))
+        # test_id += 1  # Increment ID to see different messages
         time.sleep(1)
 
 # Start background threads
 threading.Thread(target=broadcast_time, daemon=True).start()
 threading.Thread(target=broadcast_batch_timer, daemon=True).start()
+threading.Thread(target=print_stats, daemon=True).start()
+
 if args.test:
     threading.Thread(target=send_test_messages, daemon=True).start()
-    print("--- TEST MODE ENABLED: Sending fake CAN messages every second. ---")
+    print("--- TEST MODE ENABLED: Sending fake CAN messages ---")
 
-# Main loop
+# Main UDP listener loop 
 try:
+    print("Starting main UDP listener loop...")
     while True:
         data, addr = udp_sock.recvfrom(4096)
-        #  {len(data)} bytes from {addr}")
+        stats['udp_messages_received'] += 1
+        stats['last_message_time'] = time.time()
+        
+        if stats['udp_messages_received'] % 50 == 0:
+            print(f"Received {stats['udp_messages_received']} UDP messages so far...")
+        
         try:
             decoded = data.decode('utf-8')
             msg = json.loads(decoded)
         except Exception as e:
-            # --- DIAGNOSTIC PRINT ---
-            print(f"!!! ERROR: Could not decode or parse JSON from {addr}. Error: {e}")
+            print(f"!!! ERROR: Could not decode JSON from {addr}. Error: {e}")
             print(f"    Raw data was: {data}")
-            # ------------------------
             continue
 
         if isinstance(msg, dict) and "messages" in msg:
             send_can_messages_batch(msg)
+            processed_count = 0
+            
             for m in msg["messages"]:
                 try:
                     mid = int(m["id"], 0) if isinstance(m["id"], str) else int(m["id"])
                     mdata = m["data"]
                     if not isinstance(mdata, list):
                         continue
-                    # Accumulate frame for batch broadcast
+                    
                     frame = {
                         "time": m.get("timestamp"),
                         "bus": 0,
                         "id": mid,
                         "data": list(mdata)
                     }
+                    
                     with batch_lock:
                         batched_frames.append(frame)
+                    
+                    processed_count += 1
+                    stats['can_frames_processed'] += 1
+                    
                 except Exception as e:
-                    # --- DIAGNOSTIC PRINT ---
-                    print(f"!!! ERROR processing individual message: {e}")
-                    print(f"    Problematic message data was: {m}")
-                    # ------------------------
+                    print(f"!!! ERROR processing message: {e}")
+                    print(f"    Problematic message: {m}")
                     continue
-            # print(f"Successfully processed batch with {len(msg['messages'])} messages")
+            
+            if args.test:
+                if processed_count > 0:
+                    print(f"Processed {processed_count} CAN frames from batch")
+                else:
+                    print(f"!!! WARNING: Invalid message format from {addr}: {msg}")
         else:
-            print(f"!!! WARNING: Received valid JSON but it was missing the 'messages' key. Data: {msg}")
+            print(f"!!! WARNING: Invalid message format from {addr}: {msg}")
 
 except KeyboardInterrupt:
     print("Exiting...")
 finally:
     udp_sock.close()
-    close_pipe()  # Close pipe file descriptor
-    # Clean up named pipe
+    close_pipe()
     try:
         os.unlink(NAMED_PIPE_PATH)
         print(f"Cleaned up named pipe: {NAMED_PIPE_PATH}")
