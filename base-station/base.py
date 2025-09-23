@@ -12,6 +12,19 @@ import argparse
 import psutil
 import os
 from collections import deque
+import redis
+
+REDIS_URL = ""
+REDIS_CHANNEL_NAME = "can_messages"
+
+
+# Setting up Redis client
+try: 
+    redis_client = redis.Redis()
+    print("redis client initialized")
+except Exception as e:
+    print("redis database couldn't be reached")
+    print(e)
 
 # Optional cantools import
 try:
@@ -36,7 +49,7 @@ except ImportError:
 # Configuration
 UDP_PORT = 12345
 TIME_SYNC_PORT = 12346
-NAMED_PIPE_PATH = "/tmp/can_data_pipe"
+# NAMED_PIPE_PATH = "/tmp/can_data_pipe"
 HTTP_FORWARD_URL = "http://127.0.0.1:8085/can"
 
 # Memory safeguards
@@ -53,39 +66,39 @@ udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 udp_sock.bind(('', UDP_PORT))
 
-def setup_named_pipe():
-    """Create a named pipe for local communication."""
-    try:
-        if os.path.exists(NAMED_PIPE_PATH):
-            os.unlink(NAMED_PIPE_PATH)
-            print(f"Removed existing named pipe: {NAMED_PIPE_PATH}")
-        os.mkfifo(NAMED_PIPE_PATH)
-        print(f"Created named pipe: {NAMED_PIPE_PATH}")
-    except FileExistsError:
-        print(f"Named pipe already exists: {NAMED_PIPE_PATH}")
-    except Exception as e:
-        print(f"Error creating named pipe: {e}")
+# def setup_named_pipe():
+#     """Create a named pipe for local communication."""
+#     try:
+#         if os.path.exists(NAMED_PIPE_PATH):
+#             os.unlink(NAMED_PIPE_PATH)
+#             print(f"Removed existing named pipe: {NAMED_PIPE_PATH}")
+#         os.mkfifo(NAMED_PIPE_PATH)
+#         print(f"Created named pipe: {NAMED_PIPE_PATH}")
+#     except FileExistsError:
+#         print(f"Named pipe already exists: {NAMED_PIPE_PATH}")
+#     except Exception as e:
+#         print(f"Error creating named pipe: {e}")
 
-setup_named_pipe()
+# setup_named_pipe()
 print(f"Base station listening for ESP32 CAN JSON on UDP {UDP_PORT}")
-print(f"CAN data available via named pipe: {NAMED_PIPE_PATH}")
+print(f"CAN data available via Redis pub/sub")
 
 # Use deque with maxlen for automatic memory management
 batched_frames = deque(maxlen=MAX_BATCH_SIZE)
 batch_lock = threading.Lock()
-pipe_fd = None
-pipe_file = None
+# pipe_fd = None
+# pipe_file = None
 last_batch_time = time.time()
 
 # Statistics
 stats = {
     'udp_messages_received': 0,
     'can_frames_processed': 0,
-    'pipe_writes_success': 0,
-    'pipe_writes_failed': 0,
+    'messages_published_success': 0,
+    'messages_published_failed': 0,
     'http_forwards_success': 0,
     'http_forwards_failed': 0,
-    'last_message_time': 0
+    'last_message_time': 0.0
 }
 
 def print_stats():
@@ -105,65 +118,65 @@ def print_stats():
         print(f"Batched frames: {batch_size}/{MAX_BATCH_SIZE}")
         print(f"UDP messages received: {stats['udp_messages_received']}")
         print(f"CAN frames processed: {stats['can_frames_processed']}")
-        print(f"Pipe writes: {stats['pipe_writes_success']} success, {stats['pipe_writes_failed']} failed")
+        print(f"Pipe writes: {stats['messages_published_success']} success, {stats['messages_published_failed']} failed")
         print(f"HTTP forwards: {stats['http_forwards_success']} success, {stats['http_forwards_failed']} failed")
         print(f"Time since last message: {time_since_last:.1f}s")
         print(f"==================")
 
-def open_pipe():
-    """Open the named pipe for writing."""
-    global pipe_fd, pipe_file
-    try:
-        if pipe_fd is not None:
-            return True
-        pipe_fd = os.open(NAMED_PIPE_PATH, os.O_WRONLY | os.O_NONBLOCK)
-        pipe_file = os.fdopen(pipe_fd, 'w')
-        print("Opened named pipe for writing")
-        return True
-    except Exception as e:
-        print(f"Error opening pipe: {e}")
-        pipe_fd = None
-        pipe_file = None
-        return False
+# def open_pipe():
+#     """Open the named pipe for writing."""
+#     global pipe_fd, pipe_file
+#     try:
+#         if pipe_fd is not None:
+#             return True
+#         pipe_fd = os.open(NAMED_PIPE_PATH, os.O_WRONLY | os.O_NONBLOCK)
+#         pipe_file = os.fdopen(pipe_fd, 'w')
+#         print("Opened named pipe for writing")
+#         return True
+#     except Exception as e:
+#         print(f"Error opening pipe: {e}")
+#         pipe_fd = None
+#         pipe_file = None
+#         return False
 
-def close_pipe():
-    """Close the named pipe."""
-    global pipe_fd, pipe_file
-    try:
-        if pipe_file:
-            pipe_file.close()
-        pipe_fd = None
-        pipe_file = None
-    except Exception as e:
-        print(f"Error closing pipe: {e}")
+# def close_pipe():
+#     """Close the named pipe."""
+#     global pipe_fd, pipe_file
+#     try:
+#         if pipe_file:
+#             pipe_file.close()
+#         pipe_fd = None
+#         pipe_file = None
+#     except Exception as e:
+#         print(f"Error closing pipe: {e}")
 
 def canserver_broadcast(frames):
     """Write CAN frames to named pipe with error handling."""
-    global pipe_file
     if not frames:
         return
     
     try:
-        if not open_pipe():
+        if not redis_client:
             print("Failed to open pipe for writing")
-            stats['pipe_writes_failed'] += 1
+            stats['messages_published_failed'] += 1
             return
             
         for frame in frames:
             line = json.dumps(frame) + "\n"
-            pipe_file.write(line)
-        pipe_file.flush()
-        stats['pipe_writes_success'] += 1
+            redis_client.publish(REDIS_CHANNEL_NAME, line)
+            # pipe_file.write(line)
+        # pipe_file.flush()
+        stats['messages_published_success'] += 1
         print(f"Successfully wrote {len(frames)} frames to pipe")
     except (OSError, IOError) as e:
-        stats['pipe_writes_failed'] += 1
+        stats['messages_published_failed'] += 1
         if e.errno != 32:  # Ignore "Broken pipe" when no reader
             print(f"Pipe write error: {e}")
-        close_pipe()
+        # close_pipe()
     except Exception as e:
-        stats['pipe_writes_failed'] += 1
+        stats['messages_published_failed'] += 1
         print(f"Unexpected pipe error: {e}")
-        close_pipe()
+        # close_pipe()
 
 def send_can_messages_batch(messages_batch):
     """Send a batch of CAN messages to HTTP endpoint."""
@@ -292,9 +305,10 @@ except KeyboardInterrupt:
     print("Exiting...")
 finally:
     udp_sock.close()
-    close_pipe()
-    try:
-        os.unlink(NAMED_PIPE_PATH)
-        print(f"Cleaned up named pipe: {NAMED_PIPE_PATH}")
-    except FileNotFoundError:
-        pass
+    redis_client.close()
+    # close_pipe()
+    # try:
+    #     os.unlink(NAMED_PIPE_PATH)
+    #     # print(f"Cleaned up named pipe: {NAMED_PIPE_PATH}")
+    # except FileNotFoundError:
+    #     pass

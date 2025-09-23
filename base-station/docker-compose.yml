@@ -4,6 +4,15 @@ services:
     network_mode: host
     restart: unless-stopped
 
+  redis:
+    image: redis:8.2
+    # network_mode: host
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
   murmur:
     image: mumblevoip/murmur:latest
     network_mode: host
@@ -12,3 +21,6 @@ services:
       - ./murmur.ini:/etc/murmur/murmur.ini:ro
     environment:
       - MURMUR_SUPERUSER_PASSWORD=superuser_password
+
+volumes:
+  redis_data:
