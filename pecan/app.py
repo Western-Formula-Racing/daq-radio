@@ -17,10 +17,18 @@ dash_app = dash.Dash(__name__, server=app, routes_pathname_prefix='/dash/')
 CAN_MESSAGES = []  # Store decoded CAN messages
 MESSAGE_HISTORY_LIMIT = 1000  # Keep only the most recent 1000 messages
 lock = threading.Lock()  # For thread-safe access to CAN_MESSAGES
+IS_REDIS_ACTIVE: bool
 
-redis_client = redis.Redis()
-pubsub = redis_client.pubsub()
-pubsub.subscribe("can_messages")
+try:
+    redis_client = redis.Redis()
+    pubsub = redis_client.pubsub()
+    pubsub.subscribe("can_messages")
+    IS_REDIS_ACTIVE = True
+    print("Redis Pub/Sub is now Active and Working")
+except Exception as e:
+    print(f"There was an error with redis: {e}")
+    print("Resorting to Named Piping")
+    IS_REDIS_ACTIVE = False
 
 
 # ─── LOAD DBC ──────────────────────────────────────────────────────────────
@@ -85,41 +93,76 @@ def decode_can_message(can_id, data):
 
 def named_pipe_listener():
     """Read CAN messages from named pipe."""
-    # pipe_path = "/tmp/can_data_pipe"
+    pipe_path = "/tmp/can_data_pipe"
     message_count = 0
-    while True:
+    if IS_REDIS_ACTIVE:
+        while True:
+            try:
+                for sub_msg in pubsub.listen():
+                    sub_msg = sub_msg["data"].decode("utf-8")
+                    if sub_msg:
+                        message_count += 1
+                        if message_count % 100 == 0:
+                            print(f"Processed {message_count} messages from Redis Pub/Sub")
+                        try:
+                            msg = json.loads(sub_msg)
+                            can_id = msg['id']
+                            raw_data = bytes(msg['data'])
+                            # Use the timestamp from the message, convert UTC to local time
+                            original_timestamp = datetime.fromtimestamp(msg['time'] / 1000, tz=timezone.utc).astimezone()
+                            received_timestamp = datetime.now()  # When we received it locally
+                            
+                            decoded = decode_can_message(can_id, raw_data)
+                            decoded['timestamp'] = original_timestamp.isoformat()
+                            decoded['received_timestamp'] = received_timestamp.isoformat()  # Track when we received it
+                            
+                            with lock:
+                                CAN_MESSAGES.append(decoded)
+                                if len(CAN_MESSAGES) > MESSAGE_HISTORY_LIMIT:
+                                    CAN_MESSAGES.pop(0)
+                                    print(f"Message limit reached ({MESSAGE_HISTORY_LIMIT}), removed oldest message. Total: {len(CAN_MESSAGES)}")
+                        except Exception as e:
+                            print(f"Error parsing CAN message: {e}")
+            except Exception as e:
+                print(f"Redis Pub/Sub listener error: {e}")
+                time.sleep(5)  # Retry after 5 seconds
+    elif not IS_REDIS_ACTIVE:
         try:
-            # Open pipe for reading
-            # with open(pipe_path, 'r') as pipe:
-            #     print(f"Connected to named pipe: {pipe_path}")
-            for sub_msg in pubsub.listen():
-                sub_msg = sub_msg["data"].decode("utf-8")
-                if sub_msg:
-                    message_count += 1
-                    if message_count % 100 == 0:
-                        print(f"Processed {message_count} messages from pipe")
-                    try:
-                        msg = json.loads(sub_msg)
-                        can_id = msg['id']
-                        raw_data = bytes(msg['data'])
-                        # Use the timestamp from the message, convert UTC to local time
-                        original_timestamp = datetime.fromtimestamp(msg['time'] / 1000, tz=timezone.utc).astimezone()
-                        received_timestamp = datetime.now()  # When we received it locally
-                        
-                        decoded = decode_can_message(can_id, raw_data)
-                        decoded['timestamp'] = original_timestamp.isoformat()
-                        decoded['received_timestamp'] = received_timestamp.isoformat()  # Track when we received it
-                        
-                        with lock:
-                            CAN_MESSAGES.append(decoded)
-                            if len(CAN_MESSAGES) > MESSAGE_HISTORY_LIMIT:
-                                CAN_MESSAGES.pop(0)
-                                print(f"Message limit reached ({MESSAGE_HISTORY_LIMIT}), removed oldest message. Total: {len(CAN_MESSAGES)}")
-                    except Exception as e:
-                        print(f"Error parsing CAN message: {e}")
+            while True:
+                # Open pipe for reading
+                with open(pipe_path, 'r') as pipe:
+                    print(f"Connected to named pipe: {pipe_path}")
+                    for line in pipe:
+                        line = line.strip()
+                        if line:
+                            message_count += 1
+                            if message_count % 100 == 0:
+                                print(f"Processed {message_count} messages from pipe")
+                            try:
+                                msg = json.loads(line)
+                                can_id = msg['id']
+                                raw_data = bytes(msg['data'])
+                                # Use the timestamp from the message, convert UTC to local time
+                                original_timestamp = datetime.fromtimestamp(msg['time'] / 1000, tz=timezone.utc).astimezone()
+                                received_timestamp = datetime.now()  # When we received it locally
+                                
+                                decoded = decode_can_message(can_id, raw_data)
+                                decoded['timestamp'] = original_timestamp.isoformat()
+                                decoded['received_timestamp'] = received_timestamp.isoformat()  # Track when we received it
+                                
+                                with lock:
+                                    CAN_MESSAGES.append(decoded)
+                                    if len(CAN_MESSAGES) > MESSAGE_HISTORY_LIMIT:
+                                        CAN_MESSAGES.pop(0)
+                                        print(f"Message limit reached ({MESSAGE_HISTORY_LIMIT}), removed oldest message. Total: {len(CAN_MESSAGES)}")
+                            except Exception as e:
+                                print(f"Error parsing CAN message: {e}")
         except Exception as e:
             print(f"Named pipe listener error: {e}")
             time.sleep(5)  # Retry after 5 seconds
+    
+    else:
+        print("Nothing is being picked up")
 
 @dash_app.callback(
     Output('messages-table', 'data'),

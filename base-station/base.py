@@ -16,15 +16,19 @@ import redis
 
 REDIS_URL = ""
 REDIS_CHANNEL_NAME = "can_messages"
+IS_REDIS_ACTIVE:bool
 
 
 # Setting up Redis client
 try: 
     redis_client = redis.Redis()
+    redis_client.setex("test", 10, "True") # To test redis connection
     print("redis client initialized")
+    IS_REDIS_ACTIVE = True
 except Exception as e:
-    print("redis database couldn't be reached")
     print(e)
+    IS_REDIS_ACTIVE = False
+    print("redis database couldn't be reached. Switching to Named Pipes")
 
 # Optional cantools import
 try:
@@ -49,7 +53,7 @@ except ImportError:
 # Configuration
 UDP_PORT = 12345
 TIME_SYNC_PORT = 12346
-# NAMED_PIPE_PATH = "/tmp/can_data_pipe"
+NAMED_PIPE_PATH = "/tmp/can_data_pipe"
 HTTP_FORWARD_URL = "http://127.0.0.1:8085/can"
 
 # Memory safeguards
@@ -66,28 +70,31 @@ udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 udp_sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 udp_sock.bind(('', UDP_PORT))
 
-# def setup_named_pipe():
-#     """Create a named pipe for local communication."""
-#     try:
-#         if os.path.exists(NAMED_PIPE_PATH):
-#             os.unlink(NAMED_PIPE_PATH)
-#             print(f"Removed existing named pipe: {NAMED_PIPE_PATH}")
-#         os.mkfifo(NAMED_PIPE_PATH)
-#         print(f"Created named pipe: {NAMED_PIPE_PATH}")
-#     except FileExistsError:
-#         print(f"Named pipe already exists: {NAMED_PIPE_PATH}")
-#     except Exception as e:
-#         print(f"Error creating named pipe: {e}")
+def setup_named_pipe():
+    """Create a named pipe for local communication."""
+    try:
+        if os.path.exists(NAMED_PIPE_PATH):
+            os.unlink(NAMED_PIPE_PATH)
+            print(f"Removed existing named pipe: {NAMED_PIPE_PATH}")
+        os.mkfifo(NAMED_PIPE_PATH)
+        print(f"Created named pipe: {NAMED_PIPE_PATH}")
+    except FileExistsError:
+        print(f"Named pipe already exists: {NAMED_PIPE_PATH}")
+    except Exception as e:
+        print(f"Error creating named pipe: {e}")
 
-# setup_named_pipe()
+
+if not IS_REDIS_ACTIVE: 
+    setup_named_pipe()
 print(f"Base station listening for ESP32 CAN JSON on UDP {UDP_PORT}")
 print(f"CAN data available via Redis pub/sub")
 
 # Use deque with maxlen for automatic memory management
 batched_frames = deque(maxlen=MAX_BATCH_SIZE)
 batch_lock = threading.Lock()
-# pipe_fd = None
-# pipe_file = None
+if not IS_REDIS_ACTIVE:
+    pipe_fd = None
+    pipe_file = None
 last_batch_time = time.time()
 
 # Statistics
@@ -123,60 +130,85 @@ def print_stats():
         print(f"Time since last message: {time_since_last:.1f}s")
         print(f"==================")
 
-# def open_pipe():
-#     """Open the named pipe for writing."""
-#     global pipe_fd, pipe_file
-#     try:
-#         if pipe_fd is not None:
-#             return True
-#         pipe_fd = os.open(NAMED_PIPE_PATH, os.O_WRONLY | os.O_NONBLOCK)
-#         pipe_file = os.fdopen(pipe_fd, 'w')
-#         print("Opened named pipe for writing")
-#         return True
-#     except Exception as e:
-#         print(f"Error opening pipe: {e}")
-#         pipe_fd = None
-#         pipe_file = None
-#         return False
+# When testing piping on macOS, uncomment the pipe_fd with os.0RDWR as one of the args
 
-# def close_pipe():
-#     """Close the named pipe."""
-#     global pipe_fd, pipe_file
-#     try:
-#         if pipe_file:
-#             pipe_file.close()
-#         pipe_fd = None
-#         pipe_file = None
-#     except Exception as e:
-#         print(f"Error closing pipe: {e}")
+def open_pipe():
+    """Open the named pipe for writing."""
+    global pipe_fd, pipe_file
+    try:
+        if pipe_fd is not None:
+            return True
+        pipe_fd = os.open(NAMED_PIPE_PATH, os.O_WRONLY | os.O_NONBLOCK) # Uncomment on Base Station / comment out when testing on macOS
+        # pipe_fd = os.open(NAMED_PIPE_PATH, os.O_RDWR | os.O_NONBLOCK) # Added for macOS testing / comment out when on base station
+        pipe_file = os.fdopen(pipe_fd, 'w')
+        print("Opened named pipe for writing")
+        return True
+    except Exception as e:
+        print(f"Error opening pipe: {e}")
+        pipe_fd = None
+        pipe_file = None
+        return False
+
+def close_pipe():
+    """Close the named pipe."""
+    global pipe_fd, pipe_file
+    try:
+        if pipe_file:
+            pipe_file.close()
+        pipe_fd = None
+        pipe_file = None
+    except Exception as e:
+        print(f"Error closing pipe: {e}")
 
 def canserver_broadcast(frames):
     """Write CAN frames to named pipe with error handling."""
     if not frames:
         return
-    
+
     try:
-        if not redis_client:
-            print("Failed to open pipe for writing")
-            stats['messages_published_failed'] += 1
-            return
+        if IS_REDIS_ACTIVE:
+            for frame in frames:
+                line = json.dumps(frame) + "\n"
+                redis_client.publish(REDIS_CHANNEL_NAME, line)
+            stats['messages_published_success'] += 1
+            print(f"Successfully published {len(frames)} frames to Redis pub/sub")
+        elif not IS_REDIS_ACTIVE:
+            if not open_pipe():
+                print("Failed to open pipe for writing")
+                stats['messages_published_failed'] += 1
+                return
             
-        for frame in frames:
-            line = json.dumps(frame) + "\n"
-            redis_client.publish(REDIS_CHANNEL_NAME, line)
-            # pipe_file.write(line)
-        # pipe_file.flush()
-        stats['messages_published_success'] += 1
-        print(f"Successfully wrote {len(frames)} frames to pipe")
+            for frame in frames:
+                line = json.dumps(frame) + "\n"
+                pipe_file.write(line) # type:ignore
+            pipe_file.flush()  # type:ignore
+            stats['messages_published_success'] += 1
+            print(f"Successfully wrote {len(frames)} frames to pipe")
+
+            # else:
+            #     print("Failed to open pipe for writing")
+            #     stats['messages_published_failed'] += 1
+            #     return
+        else:
+            print("Both Methods (Named Pipe and Redis Pub/Sub) have failed")
+            return
     except (OSError, IOError) as e:
-        stats['messages_published_failed'] += 1
-        if e.errno != 32:  # Ignore "Broken pipe" when no reader
-            print(f"Pipe write error: {e}")
-        # close_pipe()
+        if not IS_REDIS_ACTIVE:
+            stats['messages_published_failed'] += 1
+            if e.errno != 32:  # Ignore "Broken pipe" when no reader
+                print(f"Pipe write error: {e}")
+            close_pipe()
+        else:
+            stats['messages_published_failed'] += 1
+            print(f"Failed uploading to Redis: {e}")
     except Exception as e:
-        stats['messages_published_failed'] += 1
-        print(f"Unexpected pipe error: {e}")
-        # close_pipe()
+        if not IS_REDIS_ACTIVE:
+            stats['messages_published_failed'] += 1
+            print(f"Unexpected pipe error: {e}")
+            close_pipe()
+        else:
+            stats['messages_published_failed'] += 1
+            print(f"Failed uploading to Redis: {e}")
 
 def send_can_messages_batch(messages_batch):
     """Send a batch of CAN messages to HTTP endpoint."""
@@ -245,7 +277,7 @@ if args.test:
     threading.Thread(target=send_test_messages, daemon=True).start()
     print("--- TEST MODE ENABLED: Sending fake CAN messages ---")
 
-# Main UDP listener loop 
+# Main UDP listener loop
 try:
     print("Starting main UDP listener loop...")
     while True:
@@ -305,10 +337,12 @@ except KeyboardInterrupt:
     print("Exiting...")
 finally:
     udp_sock.close()
-    redis_client.close()
-    # close_pipe()
-    # try:
-    #     os.unlink(NAMED_PIPE_PATH)
-    #     # print(f"Cleaned up named pipe: {NAMED_PIPE_PATH}")
-    # except FileNotFoundError:
-    #     pass
+    if IS_REDIS_ACTIVE:
+        redis_client.close()
+    elif not IS_REDIS_ACTIVE:
+        close_pipe()
+        try:
+            os.unlink(NAMED_PIPE_PATH)
+            # print(f"Cleaned up named pipe: {NAMED_PIPE_PATH}")
+        except FileNotFoundError:
+            pass
