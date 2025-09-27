@@ -4,30 +4,31 @@ import avatar from "../assets/avatar.png";
 import SidebarOption from "./SidebarOption";
 
 interface InputProps {
-  open: boolean;
+  isOpen: boolean;
   onClose: () => void;
 }
 
-function Sidebar({ open, onClose }: Readonly<InputProps>) {
+function Sidebar({ isOpen, onClose }: Readonly<InputProps>) {
   return (
     <div>
       {/* Listener for outside of sidebar clicks, could be changed to a button instead of a div for semantic reasons */}
-      {open && <div className="fixed inset-0 z-50" onClick={onClose}></div>}
+      {isOpen && <div className="fixed inset-0 z-50 hidden sm:block" onClick={onClose}></div>}
 
       <div
-        className={`fixed top-0 left-0 h-full w-2/9 flex flex-col justify-between bg-sidebar z-100 transform transition-transform duration-300 ${
-          open ? "translate-x-0" : "-translate-x-full"
+        className={`fixed top-0 left-0 h-full lg:w-2/9 md:w-2/5 sm:w-3/5 w-full flex flex-col justify-between bg-sidebar z-100 transform transition-all duration-300 overflow-y-auto overscroll-contain ${
+          isOpen ? "translate-x-0 opacity-100" : "-translate-x-full opacity-0 pointer-events-none"
         }`}
       >
-        <img className="my-10" src={banner} alt="banner" />
+        {/* When clicking the image the sidebar collapses, we'll see if we'll keep it that */}
+        <img className="my-10 cursor-pointer" onClick={onClose} src={banner} alt="banner" />
         <ul className="p-0">
+          {/* TODO: when clicking a option it should hide the side bar, implement this later */}
           <SidebarOption option="Dashboard" />
           <SidebarOption option="Sensor Information" />
           <SidebarOption option="Accumulator" />
           <SidebarOption option="add item 1" />
           <SidebarOption option="add item 2" />
           <SidebarOption option="add item 3" />
-          <SidebarOption option="add item 4" />
         </ul>
 
         {/* The <a> tags will be changed to Link when adding React Router */}

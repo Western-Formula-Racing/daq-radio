@@ -4,11 +4,11 @@ import Sidebar from "./components/Sidebar";
 import Hamburger from "./components/HamburgerMenu";
 
 function App() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
   return (
     <>
       <Hamburger trigger={() => setIsSidebarOpen(true)} />
-      <Sidebar open={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
     </>
   );
 }
