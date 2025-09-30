@@ -5,6 +5,8 @@ import threading
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from typing import Any, Deque, Dict, List, Optional, Literal
+import logging
+from contextlib import asynccontextmanager
 
 import cantools
 import redis
@@ -18,15 +20,36 @@ REDIS_CHANNEL = os.getenv("REDIS_CHANNEL", "can_messages")
 PIPE_PATH = os.getenv("PIPE_PATH", "/tmp/can_data_pipe")
 MESSAGE_HISTORY_LIMIT = int(os.getenv("MESSAGE_HISTORY_LIMIT", "1000"))
 
+# Configure Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-app = FastAPI(title="PECAN FastAPI")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global db
+    db = load_dbc_file()
+    if db:
+        try:
+            names = ", ".join(m.name for m in db.messages[:5])
+            logger.info(f"[DBC] Sample messages: {names} ...")
+        except Exception:
+            pass
+    _start_background_listener()
+
+    yield
+
+    _stop_background_listener()
+
+
+app = FastAPI(title="PECAN FastAPI", lifespan=lifespan)
 
 lock = threading.Lock()
 CAN_MESSAGES: Deque[Dict[str, Any]] = deque(maxlen=MESSAGE_HISTORY_LIMIT)
 
-db = None            
-redis_client = None  
-pubsub = None       
+db = None
+redis_client = None
+pubsub = None
 IS_REDIS_ACTIVE = False
 _listener_thread: Optional[threading.Thread] = None
 _stop_listener = threading.Event()
@@ -36,19 +59,22 @@ class Health(BaseModel):
     health: str
     status_code: int
 
+
 class ImportPayload(BaseModel):
-    id: str            
-    data: List[int]    
-    time: Optional[int] = None  
+    id: str
+    data: List[int]
+    time: Optional[int] = None
+
 
 class MessageOut(BaseModel):
-    timestamp: str            
-    received_timestamp: str    
+    timestamp: str
+    received_timestamp: str
     can_id: int
     message_name: str
     signals: Dict[str, Any]
     raw_data: List[int]
     error: Optional[str] = None
+
 
 FilterMode = Literal["received_time", "count", "original_time", "all"]
 
@@ -109,6 +135,7 @@ def _append_message(decoded: Dict[str, Any], original_ts: datetime, recv_ts: dat
     with lock:
         CAN_MESSAGES.append(decoded)
 
+
 def _parse_and_add(msg: Dict[str, Any]):
     """
     Expected inbound schema (both Redis and pipe lines):
@@ -125,7 +152,6 @@ def _parse_and_add(msg: Dict[str, Any]):
     if can_id_val is None or raw_data is None:
         raise ValueError("Missing 'id' or 'data' in message")
 
-  
     if isinstance(can_id_val, str):
         can_id_int = int(can_id_val, 0)
     else:
@@ -133,9 +159,10 @@ def _parse_and_add(msg: Dict[str, Any]):
 
     data_bytes = bytes(raw_data)
 
- 
     if epoch_ms is not None:
-        original_ts = datetime.fromtimestamp(epoch_ms / 1000.0, tz=timezone.utc).astimezone()
+        original_ts = datetime.fromtimestamp(
+            epoch_ms / 1000.0, tz=timezone.utc
+        ).astimezone()
     else:
         original_ts = datetime.now().astimezone()
     recv_ts = datetime.now().astimezone()
@@ -150,7 +177,7 @@ def _redis_listener():
     try:
         pubsub = redis_client.pubsub()
         pubsub.subscribe(REDIS_CHANNEL)
-        print(f"[REDIS] Subscribed to '{REDIS_CHANNEL}'")
+        logger.info(f"[REDIS] Subscribed to '{REDIS_CHANNEL}'")
         for item in pubsub.listen():
             if _stop_listener.is_set():
                 break
@@ -166,18 +193,19 @@ def _redis_listener():
                 _parse_and_add(msg_json)
                 msg_count += 1
                 if msg_count % 100 == 0:
-                    print(f"[REDIS] Processed {msg_count} messages")
+                    logger.info(f"[REDIS] Processed {msg_count} messages")
             except Exception as e:
-                print(f"[REDIS] Parse error: {e}")
+                logger.error(f"[REDIS] Parse error: {e}")
     except Exception as e:
-        print(f"[REDIS] Listener error: {e}")
+        logger.error(f"[REDIS] Listener error: {e}")
+
 
 def _pipe_listener():
     msg_count = 0
-    print(f"[PIPE] Listening on {PIPE_PATH}")
+    logger.info(f"[PIPE] Listening on {PIPE_PATH}")
     while not _stop_listener.is_set():
         try:
-        
+
             with open(PIPE_PATH, "r") as pipe:
                 for line in pipe:
                     if _stop_listener.is_set():
@@ -190,19 +218,20 @@ def _pipe_listener():
                         _parse_and_add(msg_json)
                         msg_count += 1
                         if msg_count % 100 == 0:
-                            print(f"[PIPE] Processed {msg_count} messages")
+                            logger.info(f"[PIPE] Processed {msg_count} messages")
                     except Exception as e:
-                        print(f"[PIPE] Line parse error: {e}")
+                        logger.error(f"[PIPE] Line parse error: {e}")
         except FileNotFoundError:
             try:
                 os.mkfifo(PIPE_PATH)
-                print(f"[PIPE] Created named pipe at {PIPE_PATH}")
+                logger.error(f"[PIPE] Created named pipe at {PIPE_PATH}")
             except FileExistsError:
                 pass
             time.sleep(1)
         except Exception as e:
-            print(f"[PIPE] Listener error: {e}")
+            logger.error(f"[PIPE] Listener error: {e}")
             time.sleep(5)
+
 
 def _start_background_listener():
     global IS_REDIS_ACTIVE, _listener_thread, redis_client
@@ -211,14 +240,15 @@ def _start_background_listener():
         redis_client.ping()
         IS_REDIS_ACTIVE = True
         target = _redis_listener
-        print("[BOOT] Redis available; using Pub/Sub")
+        logger.info("[BOOT] Redis available; using Pub/Sub")
     except Exception as e:
-        print(f"[BOOT] Redis unavailable ({e}); falling back to named pipe")
+        logger.info(f"[BOOT] Redis unavailable ({e}); falling back to named pipe")
         IS_REDIS_ACTIVE = False
         target = _pipe_listener
 
     _listener_thread = threading.Thread(target=target, daemon=True)
     _listener_thread.start()
+
 
 def _stop_background_listener():
     _stop_listener.set()
@@ -229,27 +259,11 @@ def _stop_background_listener():
         pass
 
 
-@app.on_event("startup")
-def on_startup():
-    global db
-    db = load_dbc_file()
-    if db:
-        try:
-            names = ", ".join(m.name for m in db.messages[:5])
-            print(f"[DBC] Sample messages: {names} ...")
-        except Exception:
-            pass
-    _start_background_listener()
-
-@app.on_event("shutdown")
-def on_shutdown():
-    _stop_background_listener()
-
-
 @app.get("/health", response_model=Health)
 def health_check():
     mode = "Redis Pub/Sub" if IS_REDIS_ACTIVE else "Named Pipe"
     return Health(health=f"Healthy ({mode})", status_code=200)
+
 
 @app.post("/api/import", status_code=201)
 def import_can_message(payload: ImportPayload):
@@ -258,10 +272,12 @@ def import_can_message(payload: ImportPayload):
     Useful for testing without Redis/pipe.
     """
     try:
-        can_id_int = int(payload.id, 0)  
+        can_id_int = int(payload.id, 0)
         data_bytes = bytes(payload.data)
         if payload.time is not None:
-            original_ts = datetime.fromtimestamp(payload.time / 1000.0, tz=timezone.utc).astimezone()
+            original_ts = datetime.fromtimestamp(
+                payload.time / 1000.0, tz=timezone.utc
+            ).astimezone()
         else:
             original_ts = datetime.now().astimezone()
         recv_ts = datetime.now().astimezone()
@@ -271,13 +287,28 @@ def import_can_message(payload: ImportPayload):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Decoding failed: {e}")
 
+
 @app.get("/api/messages", response_model=List[MessageOut])
 def get_messages(
-    filter_mode: FilterMode = Query("received_time", description="received_time | count | original_time | all"),
-    time_range: int = Query(60, ge=1, le=3600, description="Seconds (for time-based modes) or count (when filter_mode=count)"),
-    can_id: Optional[str] = Query(None, description="Exact CAN ID match (decimal or hex, e.g. 291 or 0x123)"),
+    filter_mode: FilterMode = Query(
+        "received_time", description="received_time | count | original_time | all"
+    ),
+    time_range: int = Query(
+        60,
+        ge=1,
+        le=3600,
+        description="Seconds (for time-based modes) or count (when filter_mode=count)",
+    ),
+    can_id: Optional[str] = Query(
+        None, description="Exact CAN ID match (decimal or hex, e.g. 291 or 0x123)"
+    ),
     message_name: Optional[str] = Query(None, description="Exact message name match"),
-    limit: int = Query(100, ge=1, le=500, description="Max rows returned (after filtering, newest first)"),
+    limit: int = Query(
+        100,
+        ge=1,
+        le=500,
+        description="Max rows returned (after filtering, newest first)",
+    ),
 ):
     """
     Flexible fetch for React tables.
@@ -289,28 +320,26 @@ def get_messages(
     Optional filters: can_id, message_name
     """
     with lock:
-        msgs = list(CAN_MESSAGES) 
+        msgs = list(CAN_MESSAGES)
 
-   
     filtered: List[Dict[str, Any]] = []
     now_local = datetime.now().astimezone()
     if filter_mode == "all":
         filtered = msgs
     elif filter_mode == "count":
-        filtered = msgs[-min(time_range, len(msgs)):]
+        filtered = msgs[-min(time_range, len(msgs)) :]
     elif filter_mode == "received_time":
         cutoff = now_local - timedelta(seconds=time_range)
         for m in msgs:
             t = datetime.fromisoformat(m["received_timestamp"])
             if t >= cutoff:
                 filtered.append(m)
-    else: 
+    else:
         cutoff = now_local - timedelta(seconds=time_range)
         for m in msgs:
             t = datetime.fromisoformat(m["timestamp"])
             if t >= cutoff:
                 filtered.append(m)
-
 
     if can_id:
         try:
@@ -320,7 +349,6 @@ def get_messages(
             filtered = []
     if message_name:
         filtered = [m for m in filtered if m.get("message_name") == message_name]
-
 
     filtered = list(reversed(filtered))[:limit]
 
@@ -336,22 +364,8 @@ def get_messages(
         )
         for m in filtered
     ]
-    
 
-                
+if __name__ == "__main__":
+    import uvicorn
 
-    
-
-
-
- 
-# app = FastAPI()
-
-# class TestReturn(BaseModel):
-#     health: str
-#     status_code: int
-
-# @app.get("/health")
-# def health_check():
-#     return TestReturn(health="Healthy", status_code=200)
-
+    uvicorn.run(app, host="127.0.0.1", port=8000)
