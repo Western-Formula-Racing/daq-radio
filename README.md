@@ -100,25 +100,32 @@ daq-radio/
 ## Contributing
 
 1. Activate the carThings environment
-2. Make your changes
-3. Test with both real hardware and simulation modes
-4. Update documentation as needed
-=======
-pecan
-├── app.py                # Main entry point of the Flask application
-├── requirements.txt      # List of dependencies for the project
-├── static
-│   ├── css
-│   │   └── styles.css    # CSS styles for the application
-│   └── js
-│       └── app.js        # JavaScript code for client-side interactions
-├── templates
-│   └── index.html        # Main HTML template for the application
-├── dbc_files
-│   └── example.dbc       # Example DBC file for testing
-└── README.md             # Documentation for the project
-```
 
+2. Make your changes
+
+3. Test with both real hardware and simulation modes
+
+4. Update documentation as needed
+
+   
+
+   ```
+   pecan
+   ├── app.py                # Main entry point of the Flask application
+   ├── requirements.txt      # List of dependencies for the project
+   ├── static
+   │   ├── css
+   │   │   └── styles.css    # CSS styles for the application
+   │   └── js
+   │       └── app.js        # JavaScript code for client-side interactions
+   ├── templates
+   │   └── index.html        # Main HTML template for the application
+   ├── dbc_files
+   │   └── example.dbc       # Example DBC file for testing
+   └── README.md             # Documentation for the project
+   ```
+
+   
 ## Features
 
 - **Real-time CAN Message Display**: View raw CAN messages as they are received.
@@ -145,7 +152,7 @@ This CAN viewer is part of a distributed timestamping system that ensures accura
 - **Named Pipe Output**: Messages are written to `/tmp/can_data_pipe` in CANserver-compatible format:
   ```json
   {"time": 1726310400000, "bus": 0, "id": 123, "data": [1, 2, 3, 4, 5, 6, 7, 8]}
-  ```
+
 - The original ESP32 timestamp is preserved in the `time` field
 
 ### 4. Message Processing (Pecan App)
@@ -206,4 +213,3 @@ This pipeline ensures that CAN messages from distributed ESP32 devices maintain 
 ## License
 
 This project is licensed under the MIT License. See the LICENSE file for more details.
->>>>>>> pecan-branch
