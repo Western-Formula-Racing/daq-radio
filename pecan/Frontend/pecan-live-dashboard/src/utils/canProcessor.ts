@@ -1,9 +1,11 @@
 import { Dbc, Can } from 'candied';
 
 // Simple type definitions for our use, align with InfluxDB3 schema for consistency
+// InfluxDB3 Schema: id -> canId, name -> messageName, signalName, sensorReading, time
 interface DecodedMessage {
   canId: number;
   messageName: string;
+  time: number;  // Timestamp from WebSocket message
   signals: {
     [signalName: string]: {
       sensorReading: number;
@@ -37,6 +39,7 @@ function parsePhysValue(physValue: string): { value: number; unit: string } {
 }
 
 interface CanLogEntry {
+  time: number;
   canId: number;
   data: number[];
 }
@@ -73,9 +76,10 @@ const testMessagesRaw = [
 
 const testMessages = testMessagesRaw.map(line => {
   const parts = line.split(',');
+  const time = parseInt(parts[0]);
   const canId = parseInt(parts[2]);
   const data = parts.slice(3).map(d => parseInt(d));
-  return { canId, data };
+  return { time, canId, data };
 });
 
 /**
@@ -108,7 +112,7 @@ export async function processTestMessages() {
       const decoded = can.decode(frame);
       
       if (decoded) {
-        console.log(`\nMessage ID: ${testMsg.canId} (${decoded.name})`);
+        console.log(`\nTime: ${testMsg.time}, Message ID: ${testMsg.canId} (${decoded.name})`);
         
         // Candied uses boundSignals property (not signals)
         if (decoded.boundSignals && decoded.boundSignals instanceof Map) {
@@ -166,12 +170,14 @@ export async function loadDbcFile(dbcPath: string): Promise<{ dbc: Dbc; data: an
  * @param canInstance - CAN decoder instance
  * @param canId - CAN message ID
  * @param messageData - Array of data bytes (0-255)
+ * @param time - Timestamp from WebSocket message
  * @returns Decoded message with signals or null if not found
  */
 export function decodeCanMessage(
   canInstance: Can,
   canId: number,
-  messageData: number[]
+  messageData: number[],
+  time: number
 ): DecodedMessage | null {
   try {
     const frame = canInstance.createFrame(canId, messageData);
@@ -197,6 +203,7 @@ export function decodeCanMessage(
     return {
       canId: decoded.id,
       messageName: decoded.name,
+      time: time,
       signals
     };
   } catch (error) {
@@ -208,7 +215,7 @@ export function decodeCanMessage(
 /**
  * Parse raw CAN log line (format: timestamp,CAN,id,data0,data1,...)
  * @param line - Raw CAN log line
- * @returns Parsed message object with canId and data
+ * @returns Parsed message object with time, canId and data
  */
 export function parseCanLogLine(line: string): CanLogEntry | null {
   try {
@@ -217,10 +224,11 @@ export function parseCanLogLine(line: string): CanLogEntry | null {
       return null;
     }
     
+    const time = parseInt(parts[0]);
     const canId = parseInt(parts[2]);
     const data = parts.slice(3).map(d => parseInt(d)).filter(d => !isNaN(d));
     
-    return { canId, data };
+    return { time, canId, data };
   } catch (error) {
     console.error('Error parsing CAN log line:', error);
     return null;
@@ -280,8 +288,8 @@ export async function createCanProcessor(dbcPath: string): Promise<any> {
     /**
      * Decode a CAN message
      */
-    decode: (canId: number, messageData: number[]): DecodedMessage | null => {
-      return decodeCanMessage(can, canId, messageData);
+    decode: (canId: number, messageData: number[], time: number): DecodedMessage | null => {
+      return decodeCanMessage(can, canId, messageData, time);
     },
     
     /**
@@ -290,7 +298,7 @@ export async function createCanProcessor(dbcPath: string): Promise<any> {
     processLogLine: (line: string): DecodedMessage | null => {
       const parsed = parseCanLogLine(line);
       if (!parsed) return null;
-      return decodeCanMessage(can, parsed.canId, parsed.data);
+      return decodeCanMessage(can, parsed.canId, parsed.data, parsed.time);
     },
     
     /**
@@ -306,13 +314,14 @@ export async function createCanProcessor(dbcPath: string): Promise<any> {
         return this.processLogLine(wsMessage);
       }
       
-      // If it's an object with canId/id and data properties
+      // If it's an object with time, canId/id and data properties
       if (typeof wsMessage === 'object') {
+        const time = wsMessage.time || wsMessage.timestamp || Date.now();
         const canId = wsMessage.canId || wsMessage.id;
         const data = wsMessage.data;
         
         if (canId !== undefined && Array.isArray(data)) {
-          return decodeCanMessage(can, canId, data);
+          return decodeCanMessage(can, canId, data, time);
         }
       }
       
@@ -343,6 +352,7 @@ export async function createCanProcessor(dbcPath: string): Promise<any> {
 
 /**
  * Example: Setup WebSocket listener with CAN processor
+ * Usage in your browser app:
  * 
  * import { createCanProcessor } from './canProcessor';
  * 
@@ -355,11 +365,19 @@ export async function createCanProcessor(dbcPath: string): Promise<any> {
  * ws.onmessage = (event) => {
  *   const decoded = processor.processWebSocketMessage(event.data);
  *   if (decoded) {
+ *     console.log('Time:', decoded.time);
  *     console.log('CAN ID:', decoded.canId);
  *     console.log('Message:', decoded.messageName);
  *     console.log('Signals:', decoded.signals);
  *     
- *     // Send to a table/graph
+ *     // Next step to tabel or graph
  *   }
  * };
+ * 
+ * // Supported WebSocket message formats:
+ * // 1. CSV string: "2952,CAN,170,4,12,9,0,0,16,64,0"
+ *                      ^ relative timestamp will be rejected automatically in the future
+ *      The 2025-2026 DAQ system will have absolute timestamps
+ * // 2. JSON object: { time: 2952, canId: 170, data: [4,12,9,0,0,16,64,0] }
+ * // 3. JSON with timestamp: { timestamp: 1234567890, id: 170, data: [...] }
  */
