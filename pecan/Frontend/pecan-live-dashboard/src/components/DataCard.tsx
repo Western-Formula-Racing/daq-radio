@@ -108,13 +108,13 @@ function DataCard({ msgID, name, category, data}: Readonly<InputProps>) {
                     widthClass="w-[150px]"
                     // TODO: Handle menu button events
                 >
-                    <div className="col-span-1 h-[40px] m-[5px] mx-[0px] w-100 rounded-t-md box-border bg-data-module-bg align-content-center place-items-center">
+                    <div className="col-span-1 h-[40px] m-[5px] mx-[0px] w-100 rounded-t-md box-border bg-data-module-bg flex justify-center items-center">
                         <p className="text-white font-semibold ">{msgID}</p>
                     </div>
                 </Dropdown>
 
                 {/* Message Name */}
-                <div className="col-span-3 h-[40px] m-[5px] mx-[0px] rounded-t-md box-border bg-data-module-bg align-content-center place-items-center">
+                <div className="col-span-3 h-[40px] m-[5px] mx-[0px] rounded-t-md box-border bg-data-module-bg flex justify-center items-center">
                     <p className="text-white text-[15px] font-semibold ">{name}</p>
                 </div>
 
@@ -122,7 +122,7 @@ function DataCard({ msgID, name, category, data}: Readonly<InputProps>) {
                 {/* Category Name */}
                 {/* div background colour will change based on which category is assigned to it  */}
                 <div
-                    className={`col-span-2 h-[40px] m-[5px] mx-[0px] rounded-t-md  box-border align-content-center place-items-center 
+                    className={`col-span-2 h-[40px] m-[5px] mx-[0px] rounded-t-md  box-border flex justify-center items-center 
                         ${category === "TEST" ? "bg-sky-400" :
                             category === "CAT1" ? "bg-green-400" :
                             category === "CAT2" ? "bg-sky-500" :

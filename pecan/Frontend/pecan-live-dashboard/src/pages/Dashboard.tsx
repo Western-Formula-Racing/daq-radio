@@ -4,7 +4,7 @@ function Dashboard() {
   return (
     <>
       <DataCard
-        msgID="1234"
+        msgID="2012"
         name="TEST_DATA"
         category="CAT1"
         data={[
