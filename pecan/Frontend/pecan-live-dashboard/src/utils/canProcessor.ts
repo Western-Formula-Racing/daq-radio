@@ -306,7 +306,7 @@ export async function createCanProcessor(dbcPath: string): Promise<any> {
      * @param wsMessage - WebSocket message (can be string or object)
      * @returns Decoded message or null
      */
-    processWebSocketMessage: (wsMessage: any): DecodedMessage | null => {
+    processWebSocketMessage: function(wsMessage: any): DecodedMessage | null {
       // Handle different WebSocket message formats
       
       // If it's a string, try parsing as CSV line
