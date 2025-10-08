@@ -13,18 +13,26 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-body {
-  background-color: #0d0c11;
-}
-
 @theme {
   --color-sidebar: #171720;
   --color-sidebarfg: #8e8eab;
   --color-option: #20202f;
-  --color-option-hover: #3d3d4f;
+  --color-option-select: #3d3d4f;
+
+  --color-data-module-bg: #20202f;
+  --color-dropdown-menu-bg: #8E8EAB;
+  --color-data-textbox-bg: #3D3D4F;
 
   --font-heading: "ZipSonik", sans-serif;
   --font-footer: "Days One", sans-serif;
+}
+
+body {
+  background-color: #0d0c11;
+}
+
+p {
+  margin-bottom: 0 !important;
 }
 
 /* temporary local fonts */
@@ -42,4 +50,19 @@ body {
   font-style: normal;
   font-display: swap;
   font-weight: 400;
+}
+
+@layer utilities {
+  @keyframes tab-in {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+  .animate-tab-in {
+    animation: tab-in 300ms ease-out forwards;
+    transform-origin: left;
+  }
 }
