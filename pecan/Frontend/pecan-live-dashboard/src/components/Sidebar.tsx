@@ -34,7 +34,7 @@ function Sidebar({ isOpen, onClose }: Readonly<InputProps>) {
             <NavLink onClick={onClose} to={"/"}>
               <img className="my-10 cursor-pointer" src={banner} alt="banner" />
             </NavLink>
-            {/* Could create a global function to close the sidebar and use it in the component rather than passing it in every time */}
+            {/* Could create a global function to close the sidebar and use it in the component rather than passing onClose in every time */}
             <ul className="p-0">
               <SidebarOption
                 option="Dashboard"
@@ -46,12 +46,17 @@ function Sidebar({ isOpen, onClose }: Readonly<InputProps>) {
                 path="/accumulator"
                 onClose={onClose}
               />
+              <SidebarOption
+                option="Chargecart"
+                path="/chargecart"
+                onClose={onClose}
+              />
             </ul>
           </div>
           <footer className="font-footer flex flex-col space-y-8 mb-10">
             {/* Should go to /account*/}
             <NavLink
-              to={"/"}
+              to={"/account"}
               className="!no-underline text-md flex flex-row space-x-6 ml-4"
               onClick={onClose}
             >
@@ -60,7 +65,7 @@ function Sidebar({ isOpen, onClose }: Readonly<InputProps>) {
             </NavLink>
             {/* Should go to /settings*/}
             <NavLink
-              to={"/"}
+              to={"/settings"}
               className="!no-underline flex flex-row space-x-6 text-md ml-4"
               onClick={onClose}
             >
