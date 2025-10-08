@@ -149,7 +149,7 @@ function DataCard({ msgID, name, category, data}: Readonly<InputProps>) {
                             widthClass="w-[120px]"
                             // TODO: Handle menu button events
                         >
-                            <div key={`${label}-${idx}`} className="grid grid-cols-5 w-full">
+                            <div key={idx} className="grid grid-cols-5 w-full">
                                 {/* Left column (label) */}
                                 <div className="col-span-3 p-[5px]">
                                     <DataTextBox align="center">{label}</DataTextBox>
