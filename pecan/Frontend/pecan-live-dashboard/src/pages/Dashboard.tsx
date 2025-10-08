@@ -57,22 +57,35 @@ function Dashboard() {
           messageData = event.data;
         }
         
-        // Use the processor to decode the raw CAN message
+        // Use the processor to decode the raw CAN message(s)
         const decoded = processor.processWebSocketMessage(messageData);
-        console.log('Decoded message:', decoded);
+        console.log('Decoded message(s):', decoded);
         
-        if (decoded && decoded.signals) {
-          const canId = decoded.canId.toString();
-          console.log(`Updating dashboard with CAN ID ${canId}:`, decoded.signals);
-          
-          // Update or create new message entry
+        // Handle both single messages and arrays of messages
+        const messagesToProcess = Array.isArray(decoded) ? decoded : [decoded];
+        
+        // Process each decoded message
+        const updates: { [canId: string]: any } = {};
+        
+        for (const message of messagesToProcess) {
+          if (message && message.signals) {
+            const canId = message.canId.toString();
+            console.log(`Processing CAN ID ${canId}:`, message.signals);
+            
+            updates[canId] = {
+              messageName: message.messageName || `CAN_${canId}`,
+              signals: message.signals,
+              lastUpdated: Date.now()
+            };
+          }
+        }
+        
+        // Batch update all messages at once for better performance
+        if (Object.keys(updates).length > 0) {
+          console.log(`Updating dashboard with ${Object.keys(updates).length} messages`);
           setCanMessages(prev => ({
             ...prev,
-            [canId]: {
-              messageName: decoded.messageName || `CAN_${canId}`,
-              signals: decoded.signals,
-              lastUpdated: Date.now()
-            }
+            ...updates
           }));
         }
       } catch (error) {

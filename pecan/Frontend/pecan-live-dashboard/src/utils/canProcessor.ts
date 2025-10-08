@@ -15,6 +15,20 @@ interface DecodedMessage {
   };
 }
 
+// Type for batch processing results
+type ProcessResult = DecodedMessage | DecodedMessage[] | null;
+
+// Type for input WebSocket messages
+interface WebSocketMessage {
+  time?: number;
+  timestamp?: number;
+  canId?: number;
+  id?: number;
+  data?: number[];
+}
+
+type WebSocketInput = string | WebSocketMessage | WebSocketMessage[];
+
 /**
  * Parse the physValue string from Candied (format: "123.45 voltage:V")
  * @param physValue - Physical value string from Candied
@@ -302,16 +316,58 @@ export async function createCanProcessor(dbcPath: string): Promise<any> {
     },
     
     /**
-     * Process WebSocket CAN message
-     * @param wsMessage - WebSocket message (can be string or object)
-     * @returns Decoded message or null
+     * Process multiple CAN messages in batch
+     * @param messages - Array of CAN messages
+     * @returns Array of decoded messages
      */
-    processWebSocketMessage: function(wsMessage: any): DecodedMessage | null {
+    processBatchMessages: function(messages: WebSocketInput[]): DecodedMessage[] {
+      const decodedMessages: DecodedMessage[] = [];
+      
+      for (const message of messages) {
+        const decoded = this.processWebSocketMessage(message);
+        if (decoded) {
+          // If the result is an array, flatten it
+          if (Array.isArray(decoded)) {
+            decodedMessages.push(...decoded);
+          } else {
+            decodedMessages.push(decoded);
+          }
+        }
+      }
+      
+      return decodedMessages;
+    },
+
+    /**
+     * Process WebSocket CAN message
+     * @param wsMessage - WebSocket message (can be string, object, or array of objects)
+     * @returns Decoded message or array of decoded messages or null
+     */
+    processWebSocketMessage: function(wsMessage: WebSocketInput): ProcessResult {
       // Handle different WebSocket message formats
       
       // If it's a string, try parsing as CSV line
       if (typeof wsMessage === 'string') {
         return this.processLogLine(wsMessage);
+      }
+      
+      // If it's an array of messages, process each one
+      if (Array.isArray(wsMessage)) {
+        const decodedMessages: DecodedMessage[] = [];
+        
+        for (const message of wsMessage) {
+          const decoded = this.processWebSocketMessage(message);
+          if (decoded) {
+            // If the recursive call returns an array, flatten it
+            if (Array.isArray(decoded)) {
+              decodedMessages.push(...decoded);
+            } else {
+              decodedMessages.push(decoded);
+            }
+          }
+        }
+        
+        return decodedMessages.length > 0 ? decodedMessages : null;
       }
       
       // If it's an object with time, canId/id and data properties
@@ -364,20 +420,31 @@ export async function createCanProcessor(dbcPath: string): Promise<any> {
  * 
  * ws.onmessage = (event) => {
  *   const decoded = processor.processWebSocketMessage(event.data);
- *   if (decoded) {
- *     console.log('Time:', decoded.time);
- *     console.log('CAN ID:', decoded.canId);
- *     console.log('Message:', decoded.messageName);
- *     console.log('Signals:', decoded.signals);
- *     
- *     // Next step to tabel or graph
- *   }
+ *   
+ *   // Handle both single messages and arrays of messages
+ *   const messages = Array.isArray(decoded) ? decoded : [decoded];
+ *   
+ *   messages.forEach(message => {
+ *     if (message) {
+ *       console.log('Time:', message.time);
+ *       console.log('CAN ID:', message.canId);
+ *       console.log('Message:', message.messageName);
+ *       console.log('Signals:', message.signals);
+ *       
+ *       // Next step to table or graph
+ *     }
+ *   });
  * };
  * 
  * // Supported WebSocket message formats:
  * // 1. CSV string: "2952,CAN,170,4,12,9,0,0,16,64,0"
  *                      ^ relative timestamp will be rejected automatically in the future
  *      The 2025-2026 DAQ system will have absolute timestamps
- * // 2. JSON object: { time: 2952, canId: 170, data: [4,12,9,0,0,16,64,0] }
+ * // 2. Single JSON object: { time: 2952, canId: 170, data: [4,12,9,0,0,16,64,0] }
  * // 3. JSON with timestamp: { timestamp: 1234567890, id: 170, data: [...] }
+ * // 4. Array of JSON objects: [
+ *      { time: 2952, canId: 170, data: [4,12,9,0,0,16,64,0] },
+ *      { time: 2953, canId: 176, data: [215,1,19,254,51,9,170,14] },
+ *      { time: 2954, canId: 192, data: [216,1,0,0,0,1,252,8] }
+ *    ]
  */

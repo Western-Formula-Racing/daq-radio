@@ -24,7 +24,8 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       try {
         const data = JSON.parse(body);
-        console.log('Received message to broadcast:', data);
+        const messageCount = Array.isArray(data) ? data.length : 1;
+        console.log(`Received ${messageCount} message(s) to broadcast:`, data);
         
         // Broadcast to all connected WebSocket clients
         wss.clients.forEach(client => {
@@ -34,7 +35,10 @@ const server = http.createServer((req, res) => {
         });
         
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, message: 'Message broadcasted' }));
+        res.end(JSON.stringify({ 
+          success: true, 
+          message: `${messageCount} message(s) broadcasted` 
+        }));
       } catch (error) {
         console.error('Error parsing message:', error);
         res.writeHead(400, { 'Content-Type': 'application/json' });
