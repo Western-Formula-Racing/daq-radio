@@ -3,8 +3,11 @@ import DataCard from "../components/DataCard";
 import { createCanProcessor } from "../utils/canProcessor";
 
 function Dashboard() {
-  const [canData, setCanData] = useState<{ [key: string]: { sensorReading: number; unit: string } }>({});
-  const [messageName, setMessageName] = useState("CAN_DATA");
+  const [canMessages, setCanMessages] = useState<{ [canId: string]: { 
+    messageName: string; 
+    signals: { [key: string]: { sensorReading: number; unit: string } };
+    lastUpdated: number;
+  } }>({});
   const [processor, setProcessor] = useState<any>(null);
 
   useEffect(() => {
@@ -13,14 +16,19 @@ function Dashboard() {
       setProcessor(proc);
       console.log('CAN processor initialized');
 
-      // For demo, set test data
-      setCanData({
-        "INV_Fast_DC_Bus_Voltage": { sensorReading: 123, unit: "V" },
-        "INV_Fast_Motor_Speed": { sensorReading: 123, unit: "rpm" },
-        "INV_Fast_Torque_Command": { sensorReading: 123, unit: "N.m" },
-        "INV_Fast_Torque_Feedback": { sensorReading: 123, unit: "N.m" }
+      // Initialize with demo data for CAN ID 176
+      setCanMessages({
+        "176": {
+          messageName: "M176_Fast_Info",
+          signals: {
+            "INV_Fast_DC_Bus_Voltage": { sensorReading: 123, unit: "V" },
+            "INV_Fast_Motor_Speed": { sensorReading: 123, unit: "rpm" },
+            "INV_Fast_Torque_Command": { sensorReading: 123, unit: "N.m" },
+            "INV_Fast_Torque_Feedback": { sensorReading: 123, unit: "N.m" }
+          },
+          lastUpdated: Date.now()
+        }
       });
-      setMessageName("M176_Fast_Info");
     }).catch((error) => {
       console.error('Failed to initialize CAN processor:', error);
     });
@@ -54,9 +62,18 @@ function Dashboard() {
         console.log('Decoded message:', decoded);
         
         if (decoded && decoded.signals) {
-          console.log('Updating dashboard with signals:', decoded.signals);
-          setCanData(decoded.signals);
-          setMessageName(decoded.messageName || "CAN_DATA");
+          const canId = decoded.canId.toString();
+          console.log(`Updating dashboard with CAN ID ${canId}:`, decoded.signals);
+          
+          // Update or create new message entry
+          setCanMessages(prev => ({
+            ...prev,
+            [canId]: {
+              messageName: decoded.messageName || `CAN_${canId}`,
+              signals: decoded.signals,
+              lastUpdated: Date.now()
+            }
+          }));
         }
       } catch (error) {
         console.error('Error processing WebSocket message:', error);
@@ -76,26 +93,48 @@ function Dashboard() {
     };
   }, [processor]);
 
-  const data = Object.entries(canData).map(([key, value]) => ({
-    [key]: `${value.sensorReading} ${value.unit}`
-  }));
-
   return (
-    <>
-      <DataCard
-        msgID="176"
-        name={messageName}
-        category="CAN"
-        data={data.length > 0 ? data : [{ "No Data": "Waiting for messages..." }]}
-      />
+    <div className="flex flex-wrap">
+      {Object.entries(canMessages).map(([canId, message]) => {
+        const data = Object.entries(message.signals).map(([key, value]) => ({
+          [key]: `${value.sensorReading} ${value.unit}`
+        }));
 
+        // Determine category based on signal names
+        let category = "NO CAT";
+        const signalNames = Object.keys(message.signals);
+        
+        // Check if any signal name contains specific keywords
+        const hasINV = signalNames.some(name => name.includes("INV"));
+        const hasBMS = signalNames.some(name => name.includes("BMS") || name.includes("TORCH"));
+        const hasVCU = signalNames.some(name => name.includes("VCU"));
+        
+        if (hasVCU) {
+          category = "VCU";
+        } else if (hasBMS) {
+          category = "BMS/TORCH";
+        } else if (hasINV) {
+          category = "INV";
+        } else { category = "NO CAT"; }
+
+        return (
+          <DataCard
+            key={canId}
+            msgID={canId}
+            name={message.messageName}
+            category={category}
+            data={data.length > 0 ? data : [{ "No Data": "Waiting for messages..." }]}
+          />
+        );
+      })}
+
+      {/* Static card for comparison */}
       <DataCard
         msgID="1006"
         name="TORCH_M1_V1"
         category="BMS/TORCH"
       />
-
-    </>
+    </div>
   );
 }
 
