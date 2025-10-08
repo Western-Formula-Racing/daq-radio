@@ -6,6 +6,7 @@
 
 body {
   margin: 0;
+  background-color: black;
 }
 
 @keyframes logo-spin {
