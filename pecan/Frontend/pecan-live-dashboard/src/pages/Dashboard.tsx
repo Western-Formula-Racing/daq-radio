@@ -7,6 +7,7 @@ function Dashboard() {
     messageName: string; 
     signals: { [key: string]: { sensorReading: number; unit: string } };
     lastUpdated: number;
+    rawData: string;
   } }>({});
   const [processor, setProcessor] = useState<any>(null);
 
@@ -26,7 +27,8 @@ function Dashboard() {
             "INV_Fast_Torque_Command": { sensorReading: 123, unit: "N.m" },
             "INV_Fast_Torque_Feedback": { sensorReading: 123, unit: "N.m" }
           },
-          lastUpdated: Date.now()
+          lastUpdated: Date.now(),
+          rawData: "00 01 02 03 04 05 06 07"
         }
       });
     }).catch((error) => {
@@ -75,7 +77,8 @@ function Dashboard() {
             updates[canId] = {
               messageName: message.messageName || `CAN_${canId}`,
               signals: message.signals,
-              lastUpdated: Date.now()
+              lastUpdated: Date.now(),
+              rawData: message.rawData
             };
           }
         }
@@ -113,30 +116,14 @@ function Dashboard() {
           [key]: `${value.sensorReading} ${value.unit}`
         }));
 
-        // Determine category based on signal names
-        let category = "NO CAT";
-        const signalNames = Object.keys(message.signals);
-        
-        // Check if any signal name contains specific keywords
-        const hasINV = signalNames.some(name => name.includes("INV"));
-        const hasBMS = signalNames.some(name => name.includes("BMS") || name.includes("TORCH"));
-        const hasVCU = signalNames.some(name => name.includes("VCU"));
-        
-        if (hasVCU) {
-          category = "VCU";
-        } else if (hasBMS) {
-          category = "BMS/TORCH";
-        } else if (hasINV) {
-          category = "INV";
-        } else { category = "NO CAT"; }
-
         return (
           <DataCard
             key={canId}
             msgID={canId}
-            name={message.messageName}
-            category={category}
+            messageName={message.messageName}
             data={data.length > 0 ? data : [{ "No Data": "Waiting for messages..." }]}
+            lastUpdated={message.lastUpdated}
+            rawData={message.rawData}
           />
         );
       })}
@@ -144,8 +131,10 @@ function Dashboard() {
       {/* Static card for comparison */}
       <DataCard
         msgID="1006"
-        name="TORCH_M1_V1"
+        messageName="TORCH_M1_V1"
         category="BMS/TORCH"
+        lastUpdated={Date.now()}
+        rawData="00 01 02 03 04 05 06 07"
       />
     </div>
   );

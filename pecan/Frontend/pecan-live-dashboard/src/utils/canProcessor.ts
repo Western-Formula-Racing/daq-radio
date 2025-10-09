@@ -13,6 +13,7 @@ interface DecodedMessage {
       // rawValue: number;
     };
   };
+  rawData: string;
 }
 
 // Type for batch processing results
@@ -218,7 +219,8 @@ export function decodeCanMessage(
       canId: decoded.id,
       messageName: decoded.name,
       time: time,
-      signals
+      signals,
+      rawData: messageData.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')
     };
   } catch (error) {
     console.error(`Error decoding message ${canId}:`, error);
