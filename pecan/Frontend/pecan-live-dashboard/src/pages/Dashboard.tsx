@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import DataCard from "../components/DataCard";
 import { createCanProcessor } from "../utils/canProcessor";
 
@@ -10,6 +10,18 @@ function Dashboard() {
     rawData: string;
   } }>({});
   const [processor, setProcessor] = useState<any>(null);
+  const [performanceStats, setPerformanceStats] = useState({
+    messagesPerSecond: 0,
+    avgProcessingTime: 0,
+    memoryUsage: 'N/A' as string | number,
+    fps: 0
+  });
+
+  const messageCountRef = useRef(0);
+  const processingTimesRef = useRef<number[]>([]);
+  const lastSecondRef = useRef(Date.now());
+  const frameCountRef = useRef(0);
+  const lastFpsUpdateRef = useRef(Date.now());
 
   useEffect(() => {
     // Initialize CAN processor
@@ -36,6 +48,52 @@ function Dashboard() {
     });
   }, []);
 
+  // Performance monitoring
+  useEffect(() => {
+    // FPS monitoring
+    const updateFPS = () => {
+      frameCountRef.current++;
+      const now = Date.now();
+      if (now - lastFpsUpdateRef.current >= 1000) {
+        const fps = Math.round((frameCountRef.current * 1000) / (now - lastFpsUpdateRef.current));
+        setPerformanceStats(prev => ({ ...prev, fps }));
+        
+        if (fps < 30) {
+          console.warn(`Low FPS: ${fps}`);
+        }
+        
+        frameCountRef.current = 0;
+        lastFpsUpdateRef.current = now;
+      }
+      requestAnimationFrame(updateFPS);
+    };
+    requestAnimationFrame(updateFPS);
+
+    // Memory monitoring
+    const updateMemory = () => {
+      if ('memory' in performance) {
+        const memInfo = (performance as any).memory;
+        const memoryMB = Math.round(memInfo.usedJSHeapSize / 1024 / 1024);
+        console.log('Memory info:', memInfo, 'Memory MB:', memoryMB);
+        setPerformanceStats(prev => ({ 
+          ...prev, 
+          memoryUsage: memoryMB
+        }));
+        
+        if (memoryMB > 100) {
+          console.warn(`High memory usage: ${memoryMB}MB`);
+        }
+      } else {
+        console.log('Performance.memory API not available');
+      }
+    };
+    const memoryInterval = setInterval(updateMemory, 2000);
+
+    return () => {
+      clearInterval(memoryInterval);
+    };
+  }, []);
+
   // WebSocket connection for real-time CAN data
   useEffect(() => {
     if (!processor) return;
@@ -47,6 +105,8 @@ function Dashboard() {
     };
 
     ws.onmessage = (event) => {
+      const startTime = performance.now();
+      
       try {
         console.log('Received WebSocket message:', event.data);
         
@@ -91,6 +151,46 @@ function Dashboard() {
             ...updates
           }));
         }
+
+        // Performance tracking
+        const processingTime = performance.now() - startTime;
+        processingTimesRef.current.push(processingTime);
+        
+        // Keep only last 100 processing times
+        if (processingTimesRef.current.length > 100) {
+          processingTimesRef.current = processingTimesRef.current.slice(-100);
+        }
+        
+        // Count actual CAN messages decoded
+        const canMessageCount = messagesToProcess.filter(msg => msg && msg.signals).length;
+        messageCountRef.current += canMessageCount;
+        
+        // Update stats every second
+        const now = Date.now();
+        if (now - lastSecondRef.current >= 1000) {
+          const messagesPerSecond = messageCountRef.current;
+          const avgProcessingTime = processingTimesRef.current.length > 0 
+            ? processingTimesRef.current.reduce((a, b) => a + b, 0) / processingTimesRef.current.length 
+            : 0;
+          
+          setPerformanceStats(prev => ({
+            ...prev,
+            messagesPerSecond,
+            avgProcessingTime: Math.round(avgProcessingTime * 100) / 100
+          }));
+          
+          // Performance warnings
+          if (messagesPerSecond > 100) {
+            console.warn(`High CAN message rate: ${messagesPerSecond} messages/sec`);
+          }
+          if (avgProcessingTime > 10) {
+            console.warn(`Slow processing: ${avgProcessingTime}ms average`);
+          }
+          
+          messageCountRef.current = 0;
+          lastSecondRef.current = now;
+        }
+        
       } catch (error) {
         console.error('Error processing WebSocket message:', error);
       }
@@ -110,32 +210,44 @@ function Dashboard() {
   }, [processor]);
 
   return (
-    <div className="flex flex-wrap">
-      {Object.entries(canMessages).map(([canId, message]) => {
-        const data = Object.entries(message.signals).map(([key, value]) => ({
-          [key]: `${value.sensorReading} ${value.unit}`
-        }));
+    <div className="flex flex-col min-h-screen">
+      <div className="flex flex-wrap flex-1">
+        {Object.entries(canMessages).map(([canId, message]) => {
+          const data = Object.entries(message.signals).map(([key, value]) => ({
+            [key]: `${value.sensorReading} ${value.unit}`
+          }));
 
-        return (
-          <DataCard
-            key={canId}
-            msgID={canId}
-            messageName={message.messageName}
-            data={data.length > 0 ? data : [{ "No Data": "Waiting for messages..." }]}
-            lastUpdated={message.lastUpdated}
-            rawData={message.rawData}
-          />
-        );
-      })}
+          return (
+            <DataCard
+              key={canId}
+              msgID={canId}
+              messageName={message.messageName}
+              data={data.length > 0 ? data : [{ "No Data": "Waiting for messages..." }]}
+              lastUpdated={message.lastUpdated}
+              rawData={message.rawData}
+            />
+          );
+        })}
 
-      {/* Static card for comparison */}
-      <DataCard
-        msgID="1006"
-        messageName="TORCH_M1_V1"
-        category="BMS/TORCH"
-        lastUpdated={Date.now()}
-        rawData="00 01 02 03 04 05 06 07"
-      />
+        {/* Static card for comparison */}
+        <DataCard
+          msgID="1006"
+          messageName="TORCH_M1_V1"
+          category="BMS/TORCH"
+          lastUpdated={Date.now()}
+          rawData="00 01 02 03 04 05 06 07"
+        />
+      </div>
+
+      {/* Performance Stats - low key at bottom */}
+      <div className="w-full py-2 px-4 bg-gray-700 text-gray-300 text-xs border-t border-gray-600">
+        <div className="flex justify-between items-center max-w-6xl mx-auto">
+          <span>FPS: {performanceStats.fps}</span>
+          <span>CAN frames/sec: {performanceStats.messagesPerSecond}</span>
+          <span>Avg: {performanceStats.avgProcessingTime}ms</span>
+          <span>Mem: {performanceStats.memoryUsage}{typeof performanceStats.memoryUsage === 'number' ? 'MB' : ''}</span>
+        </div>
+      </div>
     </div>
   );
 }
