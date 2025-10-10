@@ -98,7 +98,12 @@ function Dashboard() {
   useEffect(() => {
     if (!processor) return;
 
-    const ws = new WebSocket('ws://localhost:8080'); // Connect to WebSocket server
+    // Always use port 8080 for WebSocket (consistent across dev and prod)
+    const wsUrl = import.meta.env.DEV 
+      ? 'ws://localhost:8080'  // Development: separate WebSocket server
+      : `ws://${window.location.hostname}:8080`; // Production: same host, port 8080
+    
+    const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
       console.log('WebSocket connected');
