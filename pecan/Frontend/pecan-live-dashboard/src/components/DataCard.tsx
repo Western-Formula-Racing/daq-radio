@@ -207,7 +207,7 @@ function DataCard({ msgID, messageName, category, data, lastUpdated, rawData }: 
                 <div className="h-[50px] flex text-white text-xs items-center justify-start relative">
 
                     <p id="raw-data" className="font-semibold font-mono">&nbsp;&nbsp;&nbsp;{rawData || "00 01 02 03 04 05 06 07"}</p>
-                    <p id="raw-data-received" className="absolute left-[55%] font-semibold font-mono">Last Update:&nbsp;&nbsp;&nbsp;-{timeDiff}ms</p>
+                    <p id="raw-data-received" className="absolute left-[55%] font-semibold font-mono">Last Update:&nbsp;&nbsp;&nbsp;{timeDiff}ms</p>
 
                 </div>
             </div>
