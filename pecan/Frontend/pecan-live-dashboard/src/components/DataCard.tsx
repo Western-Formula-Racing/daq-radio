@@ -3,9 +3,11 @@ import React, { useState, useMemo, useEffect } from "react";
 
 interface InputProps {
     msgID: string;
-    name: string;
-    category: string;
+    messageName: string;
+    category?: string;
     data?: Record<string, string>[];
+    lastUpdated?: number;
+    rawData?: string;
 }
 
 // Defining the structure of the data, can be changed later
@@ -31,7 +33,29 @@ const DataTextBox = ({
   </div>
 );
 
-function DataCard({ msgID, name, category, data}: Readonly<InputProps>) {
+function DataCard({ msgID, messageName, category, data, lastUpdated, rawData }: Readonly<InputProps>) {
+
+    const [currentTime, setCurrentTime] = useState(Date.now());
+
+    useEffect(() => {
+        const interval = setInterval(() => setCurrentTime(Date.now()), 100);
+        return () => clearInterval(interval);
+    }, []);
+
+    const timeDiff = lastUpdated ? currentTime - lastUpdated : 0;
+
+    const computedCategory = useMemo(() => {
+        if (category) return category;
+        if (!data || data.length === 0) return "NO CAT";
+        const signalNames = data.flatMap(obj => Object.keys(obj));
+        const hasINV = signalNames.some(name => name.includes("INV"));
+        const hasBMS = signalNames.some(name => name.includes("BMS") || name.includes("TORCH")) || messageName.includes("TORCH");
+        const hasVCU = signalNames.some(name => name.includes("VCU"));
+        if (hasVCU) return "VCU";
+        else if (hasBMS) return "BMS/TORCH";
+        else if (hasINV) return "INV";
+        else return "NO CAT";
+    }, [category, data]);
 
     // Event handlers for dropdown menu options specific to the data cards
     const handleMenuSelect = (selection: string) => {
@@ -59,7 +83,21 @@ function DataCard({ msgID, name, category, data}: Readonly<InputProps>) {
           const entries = Object.entries(obj);
           if (!entries.length) return null;
           const [label, value] = entries[0];
-          return { [String(label)]: String(value) };
+          let processedValue = String(value);
+          const parts = processedValue.split(' ');
+          if (parts.length > 0) {
+            const strNum = parts[0];
+            const decimalPart = strNum.split('.')[1];
+            const decimalPlaces = decimalPart ? decimalPart.length : 0;
+            // Rounding to 4 decimal places if more than 4 exist
+            if (decimalPlaces > 4 && !isNaN(parseFloat(strNum))) {
+              const num = parseFloat(strNum);
+              const rounded = Math.round(num * 10000) / 10000;
+              parts[0] = rounded.toString();
+              processedValue = parts.join(' ');
+            }
+          }
+          return { [String(label)]: processedValue };
         })
         .filter(Boolean) as DataPair[];
 
@@ -115,7 +153,7 @@ function DataCard({ msgID, name, category, data}: Readonly<InputProps>) {
 
                 {/* Message Name */}
                 <div className="col-span-3 h-[40px] m-[5px] mx-[0px] rounded-t-md box-border bg-data-module-bg flex justify-center items-center">
-                    <p className="text-white text-[15px] font-semibold ">{name}</p>
+                    <p className="text-white text-[15px] font-semibold ">{messageName}</p>
                 </div>
 
 
@@ -123,15 +161,15 @@ function DataCard({ msgID, name, category, data}: Readonly<InputProps>) {
                 {/* div background colour will change based on which category is assigned to it  */}
                 <div
                     className={`col-span-2 h-[40px] m-[5px] mx-[0px] rounded-t-md  box-border flex justify-center items-center 
-                        ${category === "TEST" ? "bg-sky-400" :
-                            category === "CAT1" ? "bg-green-400" :
-                            category === "CAT2" ? "bg-sky-500" :
-                            category === "BMS/TORCH" ? "bg-orange-400" :
-                            category === "CAT4" ? "bg-red-500" :
+                        ${computedCategory === "TEST" ? "bg-sky-400" :
+                            computedCategory === "CAT1" ? "bg-green-400" :
+                            computedCategory === "CAT2" ? "bg-sky-500" :
+                            computedCategory === "BMS/TORCH" ? "bg-orange-400" :
+                            computedCategory === "CAT4" ? "bg-red-500" :
                             "bg-blue-500"}`} // Default 
                             // TODO: Assign data categories to colours
                 >
-                    <p className="text-white font-semibold ">{category}</p>
+                    <p className="text-white font-semibold ">{computedCategory}</p>
 
                 </div>
 
@@ -149,7 +187,7 @@ function DataCard({ msgID, name, category, data}: Readonly<InputProps>) {
                             widthClass="w-[120px]"
                             // TODO: Handle menu button events
                         >
-                            <div key={`${label}-${idx}`} className="grid grid-cols-5 w-full">
+                            <div key={idx} className="grid grid-cols-5 w-full">
                                 {/* Left column (label) */}
                                 <div className="col-span-3 p-[5px]">
                                     <DataTextBox align="center">{label}</DataTextBox>
@@ -166,10 +204,10 @@ function DataCard({ msgID, name, category, data}: Readonly<InputProps>) {
                 <div className="w-90 h-[2px] bg-white self-center rounded-xs"></div>
 
                 {/* Raw Data Display */}
-                <div className="h-[50px] grid grid-cols-6 text-white text-xs items-center justify-start">
+                <div className="h-[50px] flex text-white text-xs items-center justify-start relative">
 
-                    <p id="raw-data" className="col-span-4 font-semibold">Raw data:&nbsp;&nbsp;&nbsp;00 01 02 03 04 05 06 07</p>
-                    <p id="raw-data-received" className="col-span-2 text-end font-semibold">Received:&nbsp;&nbsp;&nbsp;-100ms</p>
+                    <p id="raw-data" className="font-semibold font-mono">&nbsp;&nbsp;&nbsp;{rawData || "00 01 02 03 04 05 06 07"}</p>
+                    <p id="raw-data-received" className="absolute left-[55%] font-semibold font-mono">Last Update:&nbsp;&nbsp;&nbsp;-{timeDiff}ms</p>
 
                 </div>
             </div>
