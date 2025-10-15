@@ -6,7 +6,7 @@ import os
 import time
 
 # WebSocket server URL
-WS_URL = 'ws://localhost:8080'
+WS_URL = 'ws://localhost:8080/ws'
 
 # Path to the CAN data file (CSV format: timestamp,CAN,canId,data1,data2,data3,data4,data5,data6,data7,data8)
 DATA_FILE = '2025-10-04-09-50-03.csv'  # Replace with the exact filename if different
