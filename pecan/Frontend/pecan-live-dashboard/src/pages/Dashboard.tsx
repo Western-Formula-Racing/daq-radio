@@ -98,10 +98,10 @@ function Dashboard() {
   useEffect(() => {
     if (!processor) return;
 
-    // Always use port 8080 for WebSocket (consistent across dev and prod)
-    const wsUrl = import.meta.env.DEV 
-      ? 'ws://localhost:8080'  // Development: separate WebSocket server
-      : `ws://${window.location.hostname}:8080`; // Production: same host, port 8080
+  const wsUrl = import.meta.env.DEV 
+    ? 'ws://localhost:8080/ws' 
+    : 'ws://192.168.4.1:8080/ws';  // Production: static IP (ESP32 AP Mode) with port 8080
+
     
     const ws = new WebSocket(wsUrl);
 
