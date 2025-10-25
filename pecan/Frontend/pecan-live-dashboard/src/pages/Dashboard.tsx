@@ -98,9 +98,9 @@ function Dashboard() {
   useEffect(() => {
     if (!processor) return;
 
-  const wsUrl = import.meta.env.DEV 
-    ? 'ws://localhost:8080/ws' 
-    : 'ws://192.168.4.1:8080/ws';  // Production: static IP (ESP32 AP Mode) with port 8080
+    const wsUrl = import.meta.env.DEV
+      ? 'ws://localhost:8080/ws'
+      : 'ws://192.168.4.1:8080/ws';  // Production: static IP (ESP32 AP Mode) with port 8080
 
     
     const ws = new WebSocket(wsUrl);
