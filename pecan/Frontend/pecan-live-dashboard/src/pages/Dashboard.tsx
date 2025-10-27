@@ -1,14 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import DataCard from "../components/DataCard";
 import { createCanProcessor } from "../utils/canProcessor";
+import { dataStore } from "../lib/DataStore";
 
 function Dashboard() {
-  const [canMessages, setCanMessages] = useState<{ [canId: string]: { 
-    messageName: string; 
-    signals: { [key: string]: { sensorReading: number; unit: string } };
-    lastUpdated: number;
-    rawData: string;
-  } }>({});
   const [processor, setProcessor] = useState<any>(null);
   const [performanceStats, setPerformanceStats] = useState({
     messagesPerSecond: 0,
@@ -16,6 +11,7 @@ function Dashboard() {
     memoryUsage: 'N/A' as string | number,
     fps: 0
   });
+  const [storeVersion, setStoreVersion] = useState(0);
 
   const messageCountRef = useRef(0);
   const processingTimesRef = useRef<number[]>([]);
@@ -30,22 +26,28 @@ function Dashboard() {
       console.log('CAN processor initialized');
 
       // Initialize with demo data for CAN ID 176
-      setCanMessages({
-        "176": {
-          messageName: "M176_Fast_Info",
-          signals: {
-            "INV_Fast_DC_Bus_Voltage": { sensorReading: 123, unit: "V" },
-            "INV_Fast_Motor_Speed": { sensorReading: 123, unit: "rpm" },
-            "INV_Fast_Torque_Command": { sensorReading: 123, unit: "N.m" },
-            "INV_Fast_Torque_Feedback": { sensorReading: 123, unit: "N.m" }
-          },
-          lastUpdated: Date.now(),
-          rawData: "00 01 02 03 04 05 06 07"
-        }
+      dataStore.ingestMessage({
+        msgID: "176",
+        messageName: "M176_Fast_Info",
+        data: {
+          "INV_Fast_DC_Bus_Voltage": { sensorReading: 123, unit: "V" },
+          "INV_Fast_Motor_Speed": { sensorReading: 123, unit: "rpm" },
+          "INV_Fast_Torque_Command": { sensorReading: 123, unit: "N.m" },
+          "INV_Fast_Torque_Feedback": { sensorReading: 123, unit: "N.m" }
+        },
+        rawData: "00 01 02 03 04 05 06 07"
       });
     }).catch((error) => {
       console.error('Failed to initialize CAN processor:', error);
     });
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = dataStore.subscribe(() => {
+      setStoreVersion((version) => version + 1);
+    });
+
+    return unsubscribe;
   }, []);
 
   // Performance monitoring
@@ -130,31 +132,20 @@ function Dashboard() {
         
         // Handle both single messages and arrays of messages
         const messagesToProcess = Array.isArray(decoded) ? decoded : [decoded];
-        
-        // Process each decoded message
-        const updates: { [canId: string]: any } = {};
-        
+
         for (const message of messagesToProcess) {
           if (message && message.signals) {
             const canId = message.canId.toString();
             console.log(`Processing CAN ID ${canId}:`, message.signals);
-            
-            updates[canId] = {
-              messageName: message.messageName || `CAN_${canId}`,
-              signals: message.signals,
-              lastUpdated: Date.now(),
-              rawData: message.rawData
-            };
+
+            dataStore.ingestMessage({
+              msgID: canId,
+              data: message.signals,
+              rawData: message.rawData,
+              timestamp: message.time,
+              messageName: message.messageName || `CAN_${canId}`
+            });
           }
-        }
-        
-        // Batch update all messages at once for better performance
-        if (Object.keys(updates).length > 0) {
-          console.log(`Updating dashboard with ${Object.keys(updates).length} messages`);
-          setCanMessages(prev => ({
-            ...prev,
-            ...updates
-          }));
         }
 
         // Performance tracking
@@ -214,25 +205,17 @@ function Dashboard() {
     };
   }, [processor]);
 
+  const messageIds = useMemo(() => dataStore.getMessageIds(), [storeVersion]);
+
   return (
     <div className="flex flex-col min-h-screen">
       <div className="flex flex-wrap flex-1">
-        {Object.entries(canMessages).map(([canId, message]) => {
-          const data = Object.entries(message.signals).map(([key, value]) => ({
-            [key]: `${value.sensorReading} ${value.unit}`
-          }));
-
-          return (
-            <DataCard
-              key={canId}
-              msgID={canId}
-              messageName={message.messageName}
-              data={data.length > 0 ? data : [{ "No Data": "Waiting for messages..." }]}
-              lastUpdated={message.lastUpdated}
-              rawData={message.rawData}
-            />
-          );
-        })}
+        {messageIds.map((canId) => (
+          <DataCard
+            key={canId}
+            msgID={canId}
+          />
+        ))}
 
         {/* Static card for comparison */}
         <DataCard
@@ -241,6 +224,7 @@ function Dashboard() {
           category="BMS/TORCH"
           lastUpdated={Date.now()}
           rawData="00 01 02 03 04 05 06 07"
+          useDataStore={false}
         />
       </div>
 

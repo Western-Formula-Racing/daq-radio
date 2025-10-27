@@ -1,13 +1,17 @@
 import Dropdown from "./Dropdown";
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { dataStore } from "../lib/DataStore";
+import type { TelemetrySample } from "../lib/DataStore";
 
 interface InputProps {
     msgID: string;
-    messageName: string;
+    messageName?: string;
     category?: string;
     data?: Record<string, string>[];
     lastUpdated?: number;
     rawData?: string;
+    historyWindowMs?: number;
+    useDataStore?: boolean;
 }
 
 // Defining the structure of the data, can be changed later
@@ -33,29 +37,67 @@ const DataTextBox = ({
   </div>
 );
 
-function DataCard({ msgID, messageName, category, data, lastUpdated, rawData }: Readonly<InputProps>) {
+function DataCard({
+  msgID,
+  messageName,
+  category,
+  data,
+  lastUpdated,
+  rawData,
+  historyWindowMs = 30000,
+  useDataStore,
+}: Readonly<InputProps>) {
 
     const [currentTime, setCurrentTime] = useState(Date.now());
+    const [latestSample, setLatestSample] = useState<TelemetrySample | undefined>();
+    const [historySamples, setHistorySamples] = useState<TelemetrySample[]>([]);
+
+    const shouldUseDataStore = useDataStore ?? data === undefined;
 
     useEffect(() => {
         const interval = setInterval(() => setCurrentTime(Date.now()), 100);
         return () => clearInterval(interval);
     }, []);
 
-    const timeDiff = lastUpdated ? currentTime - lastUpdated : 0;
+    const effectiveLastUpdated = latestSample?.timestamp ?? lastUpdated;
+    const effectiveRawData = latestSample?.rawData ?? rawData;
+    const effectiveMessageName = latestSample?.messageName ?? messageName ?? msgID;
+
+    const timeDiff = effectiveLastUpdated ? currentTime - effectiveLastUpdated : 0;
+
+    const updateFromStore = useCallback(() => {
+      const sample = dataStore.getLatest(msgID);
+      setLatestSample(sample);
+      if (historyWindowMs > 0) {
+        setHistorySamples(dataStore.getHistory(msgID, historyWindowMs));
+      }
+    }, [msgID, historyWindowMs]);
+
+    useEffect(() => {
+      if (!shouldUseDataStore) return;
+
+      updateFromStore();
+      const unsubscribe = dataStore.subscribe(updateFromStore);
+      return () => unsubscribe();
+    }, [shouldUseDataStore, updateFromStore]);
+
+    const historyCount = historySamples.length;
 
     const computedCategory = useMemo(() => {
         if (category) return category;
-        if (!data || data.length === 0) return "NO CAT";
-        const signalNames = data.flatMap(obj => Object.keys(obj));
+        const sourceData = shouldUseDataStore && latestSample
+          ? Object.keys(latestSample.data).map((key) => ({ [key]: latestSample.data[key].rawValue ?? "" }))
+          : data;
+        if (!sourceData || sourceData.length === 0) return "NO CAT";
+        const signalNames = sourceData.flatMap(obj => Object.keys(obj));
         const hasINV = signalNames.some(name => name.includes("INV"));
-        const hasBMS = signalNames.some(name => name.includes("BMS") || name.includes("TORCH")) || messageName.includes("TORCH");
+        const hasBMS = signalNames.some(name => name.includes("BMS") || name.includes("TORCH")) || effectiveMessageName.includes("TORCH");
         const hasVCU = signalNames.some(name => name.includes("VCU"));
         if (hasVCU) return "VCU";
         else if (hasBMS) return "BMS/TORCH";
         else if (hasINV) return "INV";
         else return "NO CAT";
-    }, [category, data]);
+    }, [category, data, latestSample, shouldUseDataStore, effectiveMessageName, messageName]);
 
     // Event handlers for dropdown menu options specific to the data cards
     const handleMenuSelect = (selection: string) => {
@@ -69,62 +111,78 @@ function DataCard({ msgID, messageName, category, data, lastUpdated, rawData }: 
 
     // Data population functions 
     const [dataPairs, setDataPairs] = useState<DataPair[]>([]);
-    const populateDataColumns = (incoming: DataPair[] | string) => {
-    try {
-      const parsed = typeof incoming === "string" ? (JSON.parse(incoming) as DataPair[]) : incoming;
 
-      if (!Array.isArray(parsed)) {
-        console.error("populateDataColumns: expected array of single-key objects");
-        return;
-      }
+    const populateDataColumns = useCallback((incoming: DataPair[] | string) => {
+      try {
+        const parsed = typeof incoming === "string" ? (JSON.parse(incoming) as DataPair[]) : incoming;
 
-      const cleaned = parsed
-        .map((obj) => {
-          const entries = Object.entries(obj);
-          if (!entries.length) return null;
-          const [label, value] = entries[0];
-          let processedValue = String(value);
-          const parts = processedValue.split(' ');
-          if (parts.length > 0) {
-            const strNum = parts[0];
-            const decimalPart = strNum.split('.')[1];
-            const decimalPlaces = decimalPart ? decimalPart.length : 0;
-            // Rounding to 4 decimal places if more than 4 exist
-            if (decimalPlaces > 4 && !isNaN(parseFloat(strNum))) {
-              const num = parseFloat(strNum);
-              const rounded = Math.round(num * 10000) / 10000;
-              parts[0] = rounded.toString();
-              processedValue = parts.join(' ');
+        if (!Array.isArray(parsed)) {
+          console.error("populateDataColumns: expected array of single-key objects");
+          return;
+        }
+
+        const cleaned = parsed
+          .map((obj) => {
+            const entries = Object.entries(obj);
+            if (!entries.length) return null;
+            const [label, value] = entries[0];
+            let processedValue = String(value);
+            const parts = processedValue.split(' ');
+            if (parts.length > 0) {
+              const strNum = parts[0];
+              const decimalPart = strNum.split('.')[1];
+              const decimalPlaces = decimalPart ? decimalPart.length : 0;
+              // Rounding to 4 decimal places if more than 4 exist
+              if (decimalPlaces > 4 && !isNaN(parseFloat(strNum))) {
+                const num = parseFloat(strNum);
+                const rounded = Math.round(num * 10000) / 10000;
+                parts[0] = rounded.toString();
+                processedValue = parts.join(' ');
+              }
             }
-          }
-          return { [String(label)]: processedValue };
-        })
-        .filter(Boolean) as DataPair[];
+            return { [String(label)]: processedValue };
+          })
+          .filter(Boolean) as DataPair[];
 
-      setDataPairs(cleaned);
-    } catch (err) {
-      console.error("populateDataColumns: invalid data", err);
-    }
-  };
+        setDataPairs(cleaned);
+      } catch (err) {
+        console.error("populateDataColumns: invalid data", err);
+      }
+    }, []);
 
-  // If the parent passes data, auto-load it.
-  useEffect(() => {
-    if (data && data.length) populateDataColumns(data);
-  }, [data]);
+    const buildPairsFromSample = useCallback((sample: TelemetrySample) => {
+      const formatted = Object.entries(sample.data).map(([label, value]) => ({
+        [label]: value.rawValue ?? `${value.sensorReading}${value.unit ? ` ${value.unit}` : ""}`,
+      }));
+      populateDataColumns(formatted);
+    }, [populateDataColumns]);
 
-  // Testing data for displaying, will need to feed 
-  useEffect(() => {
-    if (!data) {
-      populateDataColumns([
-        { "Voltage 1": "3.57 V" },
-        { "Voltage 2": "3.57 V" },
-        { "Voltage 3": "3.57 V" },
-        { "Voltage 4": "3.57 V" },
-      ]);
-    }
-  }, [data]);
+    // If the parent passes data, auto-load it.
+    useEffect(() => {
+      if (data && data.length) {
+        populateDataColumns(data);
+      }
+    }, [data, populateDataColumns]);
 
-  const rows = useMemo(
+    // Testing data for displaying, will need to feed 
+    useEffect(() => {
+      if (!shouldUseDataStore && !data) {
+        populateDataColumns([
+          { "Voltage 1": "3.57 V" },
+          { "Voltage 2": "3.57 V" },
+          { "Voltage 3": "3.57 V" },
+          { "Voltage 4": "3.57 V" },
+        ]);
+      }
+    }, [data, populateDataColumns, shouldUseDataStore]);
+
+    useEffect(() => {
+      if (shouldUseDataStore && latestSample) {
+        buildPairsFromSample(latestSample);
+      }
+    }, [shouldUseDataStore, latestSample, buildPairsFromSample]);
+
+  const rows = useMemo<[string, string][]>(
     () =>
       dataPairs.map((obj) => {
         const [label, value] = Object.entries(obj)[0];
@@ -134,8 +192,8 @@ function DataCard({ msgID, messageName, category, data, lastUpdated, rawData }: 
   );
 
     return (
-        //  Data Card 
-        <div className="w-[400px] m-[10px]">
+        //  Data Card
+        <div className="w-[400px] m-[10px]" data-history-count={historyCount}>
 
             {/* DM Header */}
             <div className="grid grid-cols-6 box-border gap-1.5 mx-[3px]">
@@ -153,7 +211,7 @@ function DataCard({ msgID, messageName, category, data, lastUpdated, rawData }: 
 
                 {/* Message Name */}
                 <div className="col-span-3 h-[40px] m-[5px] mx-[0px] rounded-t-md box-border bg-data-module-bg flex justify-center items-center">
-                    <p className="text-white text-[15px] font-semibold ">{messageName}</p>
+                    <p className="text-white text-[15px] font-semibold ">{effectiveMessageName}</p>
                 </div>
 
 
@@ -206,7 +264,7 @@ function DataCard({ msgID, messageName, category, data, lastUpdated, rawData }: 
                 {/* Raw Data Display */}
                 <div className="h-[50px] flex text-white text-xs items-center justify-start relative">
 
-                    <p id="raw-data" className="font-semibold font-mono">&nbsp;&nbsp;&nbsp;{rawData || "00 01 02 03 04 05 06 07"}</p>
+                    <p id="raw-data" className="font-semibold font-mono">&nbsp;&nbsp;&nbsp;{effectiveRawData || "00 01 02 03 04 05 06 07"}</p>
                     <p id="raw-data-received" className="absolute left-[55%] font-semibold font-mono">Last Update:&nbsp;&nbsp;&nbsp;{timeDiff}ms</p>
 
                 </div>
