@@ -1,7 +1,7 @@
 import Dropdown from "./Dropdown";
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { dataStore } from "../lib/DataStore";
-import type { TelemetrySample } from "../lib/DataStore";
+import type { TelemetrySample, TelemetrySignal } from "../lib/DataStore";
 
 interface InputProps {
     msgID: string;
@@ -15,7 +15,59 @@ interface InputProps {
 }
 
 // Defining the structure of the data, can be changed later
-type DataPair = Record<string, string>;
+type DataPair = [label: string, value: string];
+
+const DEFAULT_FALLBACK_ROWS: DataPair[] = [
+  ["Voltage 1", "3.57 V"],
+  ["Voltage 2", "3.57 V"],
+  ["Voltage 3", "3.57 V"],
+  ["Voltage 4", "3.57 V"],
+];
+
+const formatRawValue = (raw: string): string => {
+  const trimmed = raw.trim();
+  if (!trimmed) return "—";
+
+  const parts = trimmed.split(" ");
+  if (parts.length === 0) return "—";
+
+  const [valuePart, ...rest] = parts;
+  const decimalPart = valuePart.split(".")[1];
+  const decimalPlaces = decimalPart ? decimalPart.length : 0;
+
+  let displayValue = valuePart;
+  if (!Number.isNaN(Number(valuePart)) && decimalPlaces > 4) {
+    const rounded = Math.round(Number(valuePart) * 10_000) / 10_000;
+    displayValue = `${rounded}`;
+  }
+
+  return rest.length > 0 ? `${displayValue} ${rest.join(" ")}` : displayValue;
+};
+
+const formatSignal = (signal: TelemetrySignal): string => {
+  if (signal.rawValue) {
+    return formatRawValue(signal.rawValue);
+  }
+
+  if (!Number.isFinite(signal.sensorReading)) {
+    return "—";
+  }
+
+  const rounded = Math.round(signal.sensorReading * 10_000) / 10_000;
+  return signal.unit ? `${rounded} ${signal.unit}` : `${rounded}`;
+};
+
+const parseCardDataProp = (rows?: Record<string, string>[]): DataPair[] => {
+  if (!rows) return [];
+
+  return rows
+    .map((entry) => {
+      const [label, raw] = Object.entries(entry)[0] ?? [];
+      if (!label) return undefined;
+      return [label, formatRawValue(String(raw))] as DataPair;
+    })
+    .filter((row): row is DataPair => Boolean(row));
+};
 
 const DataTextBox = ({
   children,
@@ -110,86 +162,24 @@ function DataCard({
     };
 
     // Data population functions 
-    const [dataPairs, setDataPairs] = useState<DataPair[]>([]);
-
-    const populateDataColumns = useCallback((incoming: DataPair[] | string) => {
-      try {
-        const parsed = typeof incoming === "string" ? (JSON.parse(incoming) as DataPair[]) : incoming;
-
-        if (!Array.isArray(parsed)) {
-          console.error("populateDataColumns: expected array of single-key objects");
-          return;
+    const rows = useMemo<DataPair[]>(() => {
+      if (shouldUseDataStore) {
+        if (!latestSample) {
+          return [];
         }
 
-        const cleaned = parsed
-          .map((obj) => {
-            const entries = Object.entries(obj);
-            if (!entries.length) return null;
-            const [label, value] = entries[0];
-            let processedValue = String(value);
-            const parts = processedValue.split(' ');
-            if (parts.length > 0) {
-              const strNum = parts[0];
-              const decimalPart = strNum.split('.')[1];
-              const decimalPlaces = decimalPart ? decimalPart.length : 0;
-              // Rounding to 4 decimal places if more than 4 exist
-              if (decimalPlaces > 4 && !isNaN(parseFloat(strNum))) {
-                const num = parseFloat(strNum);
-                const rounded = Math.round(num * 10000) / 10000;
-                parts[0] = rounded.toString();
-                processedValue = parts.join(' ');
-              }
-            }
-            return { [String(label)]: processedValue };
-          })
-          .filter(Boolean) as DataPair[];
-
-        setDataPairs(cleaned);
-      } catch (err) {
-        console.error("populateDataColumns: invalid data", err);
-      }
-    }, []);
-
-    const buildPairsFromSample = useCallback((sample: TelemetrySample) => {
-      const formatted = Object.entries(sample.data).map(([label, value]) => ({
-        [label]: value.rawValue ?? `${value.sensorReading}${value.unit ? ` ${value.unit}` : ""}`,
-      }));
-      populateDataColumns(formatted);
-    }, [populateDataColumns]);
-
-    // If the parent passes data, auto-load it.
-    useEffect(() => {
-      if (data && data.length) {
-        populateDataColumns(data);
-      }
-    }, [data, populateDataColumns]);
-
-    // Testing data for displaying, will need to feed 
-    useEffect(() => {
-      if (!shouldUseDataStore && !data) {
-        populateDataColumns([
-          { "Voltage 1": "3.57 V" },
-          { "Voltage 2": "3.57 V" },
-          { "Voltage 3": "3.57 V" },
-          { "Voltage 4": "3.57 V" },
+        return Object.entries(latestSample.data).map(([label, value]) => [
+          label,
+          formatSignal(value),
         ]);
       }
-    }, [data, populateDataColumns, shouldUseDataStore]);
 
-    useEffect(() => {
-      if (shouldUseDataStore && latestSample) {
-        buildPairsFromSample(latestSample);
+      if (data && data.length > 0) {
+        return parseCardDataProp(data);
       }
-    }, [shouldUseDataStore, latestSample, buildPairsFromSample]);
 
-  const rows = useMemo<[string, string][]>(
-    () =>
-      dataPairs.map((obj) => {
-        const [label, value] = Object.entries(obj)[0];
-        return [label, value] as [string, string];
-      }),
-    [dataPairs]
-  );
+      return DEFAULT_FALLBACK_ROWS;
+    }, [shouldUseDataStore, latestSample, data]);
 
     return (
         //  Data Card
@@ -238,14 +228,20 @@ function DataCard({
 
                 {/* Data Display */}
                 <div className="w-full flex flex-col gap-2 p-[10px]">
-                    {rows.map(([label, value], idx) => (
+                    {rows.length === 0 ? (
+                      <div className="text-center text-xs text-white/60 py-4">
+                        No decoded signals yet
+                      </div>
+                    ) : (
+                      rows.map(([label, value]) => (
                         <Dropdown
+                            key={`${msgID}-${label}`}
                             items={["Graph 1", "Graph 2", "br", "New Graph"]}
                             onSelect={handleMenuSelect}
                             widthClass="w-[120px]"
                             // TODO: Handle menu button events
                         >
-                            <div key={idx} className="grid grid-cols-5 w-full">
+                            <div className="grid grid-cols-5 w-full">
                                 {/* Left column (label) */}
                                 <div className="col-span-3 p-[5px]">
                                     <DataTextBox align="center">{label}</DataTextBox>
@@ -256,7 +252,8 @@ function DataCard({
                                 </div>
                             </div>
                         </Dropdown>
-                    ))}
+                      ))
+                    )}
                 </div>
 
                 <div className="w-90 h-[2px] bg-white self-center rounded-xs"></div>
