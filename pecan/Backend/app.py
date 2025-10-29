@@ -11,11 +11,9 @@ from contextlib import asynccontextmanager
 import cantools
 import redis
 
-from fastapi.response import StreamingResponse
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio  # Added asyncio import
-
-
 
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -26,7 +24,6 @@ MESSAGE_HISTORY_LIMIT = int(os.getenv("MESSAGE_HISTORY_LIMIT", "1000"))
 # Configure Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 
 
 @asynccontextmanager
@@ -141,8 +138,6 @@ def _append_message(decoded: Dict[str, Any], original_ts: datetime, recv_ts: dat
     with lock:
         CAN_MESSAGES.append(decoded)
     _new_msg_event.set()  # Signal that a new message has been added
-
- 
 
 
 def _parse_and_add(msg: Dict[str, Any]):
@@ -267,49 +262,96 @@ def _stop_background_listener():
     except Exception:
         pass
 
-async def _sse_generator(request: Request):
-    """
-    Streams new CAN messages as a JSON. The Frontend applies filtering.
-    """
+# async def _sse_generator(request: Request):
+#     """
+#     Streams new CAN messages as a JSON. The Frontend applies filtering.
+#     """
+#     last_idx = 0
+#     heartbeat_interval = 15  # seconds
+#     loop = asyncio.get_event_loop()
+#     next_heartbeat = loop.time() + heartbeat_interval
+
+#     while True:
+#         if await request.is_disconnected():
+#             break
+
+#         with lock:
+#             snapshot = list(CAN_MESSAGES)
+
+#         if last_idx < len(snapshot):
+#             new_msgs = snapshot[last_idx:]
+#             last_idx = len(snapshot)
+#             for m in new_msgs:
+#                 yield f"data: {json.dumps(m)}\n\n"
+#             next_heartbeat = loop.time() + heartbeat_interval
+
+#         now = loop.time()
+#         if now >= next_heartbeat:
+#             yield ":\n\n"  # SSE comment as heartbeat
+#             next_heartbeat = now + heartbeat_interval
+#         try:
+#             await asyncio.wait_for(asyncio.to_thread(_new_msg_event.wait), timeout=1.0 )
+#         except asyncio.TimeoutError:
+#             pass
+#         finally:
+#             _new_msg_event.clear()
+
+# @app.get("/api/stream")
+# async def stream_messages(request: Request):
+#     headers = {
+#         "Content-Type": "text/event-stream",
+#         "Cache-Control": "no-cache",
+#         "Connection": "keep-alive",
+#         "X-Accel-Buffering": "no",  # Disable buffering for nginx
+#     }
+#     return StreamingResponse(_sse_generator(request), headers=headers)
+
+
+@app.websocket("/ws/messages")
+async def websocket_endpoint(websocket: WebSocket):
+
+    await websocket.accept()
+    logger.info(f"[WS] Client connected: {websocket.client}")
     last_idx = 0
-    heartbeat_interval = 15  # seconds
-    loop = asyncio.get_event_loop()
-    next_heartbeat = loop.time() + heartbeat_interval
 
-    while True:
-        if await request.is_disconnected():
-            break
+    try: 
+        while True:
 
-        with lock:
-            snapshot = list(CAN_MESSAGES)
+            with lock:
+                snapshot = list(CAN_MESSAGES)
 
-        if last_idx < len(snapshot):
-            new_msgs = snapshot[last_idx:]
-            last_idx = len(snapshot)
-            for m in new_msgs:
-                yield f"data: {json.dumps(m)}\n\n"
-            next_heartbeat = loop.time() + heartbeat_interval
+            if last_idx < len(snapshot):
+                new_msgs = snapshot[last_idx:]
+                last_idx = len(snapshot)
 
-        now = loop.time()
-        if now >= next_heartbeat:
-            yield ":\n\n"  # SSE comment as heartbeat
-            next_heartbeat = now + heartbeat_interval
-        try:
-            await asyncio.wait_for(asyncio.to_thread(_new_msg_event.wait), timeout=1.0 )
-        except asyncio.TimeoutError:
-            pass
-        finally:
-            _new_msg_event.clear()
+                for msg in new_msgs:
+                    await websocket.send_json(msg)
 
-@app.get("/api/stream")
-async def stream_messages(request: Request):
-    headers = {
-        "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
-        "Connection": "keep-alive",
-        "X-Accel-Buffering": "no",  # Disable buffering for nginx
-    }
-    return StreamingResponse(_sse_generator(request), headers=headers)
+            try:
+
+                await asyncio.wait_for(
+                    asyncio.to_thread(_new_msg_event.wait), timeout=1.0
+                )
+            except asyncio.TimeoutError:
+                try:
+                    await websocket.send_json({"type": "ping"})
+                except Exception:
+                    logger.error("[WS] Failed to send ping")
+                    break
+            finally:
+                if _new_msg_event.is_set():
+                    _new_msg_event.clear()
+
+            await asyncio.sleep(0.1)
+
+    except WebSocketDisconnect:
+        logger.info(f"[WS] Client disconnected: {websocket.client}")
+    except Exception as e:
+        logger.error(f"[WS] Error: {e}")
+    finally:
+        logger.info(f"[WS] Connection closed: {websocket.client}")
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
