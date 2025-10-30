@@ -14,6 +14,8 @@ import redis
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio  # Added asyncio import
+from pydantic import BaseModel
+
 
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
