@@ -1,35 +1,33 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useState } from "react";
+import "./App.css";
+import Sidebar from "./components/Sidebar";
+import Hamburger from "./components/HamburgerMenu";
+import { processTestMessages } from "./utils/canProcessor";
+import { Outlet } from "react-router";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="h-screen flex flex-row ">
+      <div className="h-screen w-[60px]">
+        <Hamburger trigger={() => setIsSidebarOpen(true)} />
+        <Sidebar
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
+        />
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
+
+      <main id="main-content" className=" w-100 h-full p-4">
+        <Outlet />
+      </main>
+
+      <div style={{ position: 'absolute', top: 0, right: 0, width: 200, height: 60, background: '#f0f0f0', borderRadius: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 0 }}>
       </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+
+      <button onClick={processTestMessages} style={{ position: 'absolute', top: 10, right: 10, zIndex: 1 }}>Process Test Messages</button>
+    </div>
+  );
 }
 
-export default App
+export default App;

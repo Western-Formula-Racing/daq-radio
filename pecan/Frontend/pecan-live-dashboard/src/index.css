@@ -1,68 +1,68 @@
+@import "bootstrap/dist/css/bootstrap.min.css";
+@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
+@theme {
+  --color-sidebar: #171720;
+  --color-sidebarfg: #8e8eab;
+  --color-option: #20202f;
+  --color-option-select: #3d3d4f;
+
+  --color-data-module-bg: #20202f;
+  --color-dropdown-menu-bg: #8E8EAB;
+  --color-data-textbox-bg: #3D3D4F;
+
+  --font-heading: "ZipSonik", sans-serif;
+  --font-footer: "Days One", sans-serif;
 }
 
 body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  background-color: #0d0c11;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+p {
+  margin-bottom: 0 !important;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+/* temporary local fonts */
+
+@font-face {
+  font-family: ZipSonik;
+  src: url("./assets/fonts/ZipSonik-Italic.otf") format("opentype");
+  font-style: normal;
+  font-display: swap;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
+@font-face {
+  font-family: Days One;
+  src: url("./assets/fonts/DaysOne-Regular.ttf") format("truetype");
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+}
+
+@layer utilities {
+  @keyframes tab-in {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
   }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
+  .animate-tab-in {
+    animation: tab-in 300ms ease-out forwards;
+    transform-origin: left;
   }
 }
