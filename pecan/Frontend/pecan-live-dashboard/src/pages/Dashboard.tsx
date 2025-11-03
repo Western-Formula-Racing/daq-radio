@@ -1,55 +1,24 @@
 import { useState, useEffect, useRef } from "react";
 import DataCard from "../components/DataCard";
-import { createCanProcessor } from "../utils/canProcessor";
 import { dataStore } from "../lib/DataStore";
 import { useAllLatestMessages, useDataStoreStats } from "../lib/useDataStore";
 
 function Dashboard() {
-  // Use the DataStore hook to get all latest messages
+  // Use the DataStore hooks to get all latest messages
   const allLatestMessages = useAllLatestMessages();
   const dataStoreStats = useDataStoreStats();
   
-  const [processor, setProcessor] = useState<any>(null);
   const [performanceStats, setPerformanceStats] = useState({
-    messagesPerSecond: 0,
-    avgProcessingTime: 0,
     memoryUsage: 'N/A' as string | number,
     fps: 0
   });
 
-  const messageCountRef = useRef(0);
-  const processingTimesRef = useRef<number[]>([]);
-  const lastSecondRef = useRef(Date.now());
   const frameCountRef = useRef(0);
   const lastFpsUpdateRef = useRef(Date.now());
 
   // TEMPORARY: Expose dataStore to console for testing
   useEffect(() => {
     (window as any).dataStore = dataStore;
-  }, []);
-
-  useEffect(() => {
-    // Initialize CAN processor
-    createCanProcessor('/assets/dbc.dbc').then((proc) => {
-      setProcessor(proc);
-      console.log('CAN processor initialized');
-
-      // Initialize DataStore with demo data for CAN ID 176
-      dataStore.ingestMessage({
-        msgID: "176",
-        messageName: "M176_Fast_Info",
-        data: {
-          "INV_Fast_DC_Bus_Voltage": { sensorReading: 123, unit: "V" },
-          "INV_Fast_Motor_Speed": { sensorReading: 123, unit: "rpm" },
-          "INV_Fast_Torque_Command": { sensorReading: 123, unit: "N.m" },
-          "INV_Fast_Torque_Feedback": { sensorReading: 123, unit: "N.m" }
-        },
-        rawData: "00 01 02 03 04 05 06 07",
-        timestamp: Date.now()
-      });
-    }).catch((error) => {
-      console.error('Failed to initialize CAN processor:', error);
-    });
   }, []);
 
   // Performance monitoring
@@ -98,126 +67,6 @@ function Dashboard() {
     };
   }, []);
 
-  // WebSocket connection for real-time CAN data
-  useEffect(() => {
-    if (!processor) return;
-
-    const wsUrl = import.meta.env.DEV
-      ? 'ws://localhost:8080/ws'
-      : 'ws://192.168.4.1:8080/ws';
-
-    const ws = new WebSocket(wsUrl);
-
-    ws.onopen = () => {
-      console.log('WebSocket connected');
-    };
-
-    ws.onmessage = (event) => {
-      const startTime = performance.now();
-      
-      try {
-        console.log('Received WebSocket message:', event.data);
-        
-        // Parse the JSON message from the server
-        let messageData;
-        try {
-          messageData = JSON.parse(event.data);
-        } catch (parseError) {
-          // If it's not JSON, treat as string (CSV format)
-          messageData = event.data;
-        }
-        
-        // Use the processor to decode the raw CAN message(s)
-        const decoded = processor.processWebSocketMessage(messageData);
-        console.log('Decoded message(s):', decoded);
-        
-        // Handle both single messages and arrays of messages
-        const messagesToProcess = Array.isArray(decoded) ? decoded : [decoded];
-        
-        // Process each decoded message and ingest into DataStore
-        for (const message of messagesToProcess) {
-          console.log('🔍 Message check:', {
-            hasMessage: !!message,
-            hasSignals: !!message?.signals,
-            message: message
-          });
-          
-          if (message && message.signals) {
-            const canId = message.canId.toString();
-            console.log(`✅ Processing CAN ID ${canId}:`, message.signals);
-            
-            // Ingest into DataStore
-            console.log('📥 Calling dataStore.ingestMessage for', canId);
-            dataStore.ingestMessage({
-              msgID: canId,
-              messageName: message.messageName || `CAN_${canId}`,
-              data: message.signals,
-              rawData: message.rawData,
-              timestamp: message.time || Date.now()
-            });
-            console.log('✅ Ingested successfully');
-          } else {
-            console.log('❌ Message failed check:', message);
-          }
-        }
-
-        // Performance tracking
-        const processingTime = performance.now() - startTime;
-        processingTimesRef.current.push(processingTime);
-        
-        // Keep only last 100 processing times
-        if (processingTimesRef.current.length > 100) {
-          processingTimesRef.current = processingTimesRef.current.slice(-100);
-        }
-        
-        // Count actual CAN messages decoded
-        const canMessageCount = messagesToProcess.filter(msg => msg && msg.signals).length;
-        messageCountRef.current += canMessageCount;
-        
-        // Update stats every second
-        const now = Date.now();
-        if (now - lastSecondRef.current >= 1000) {
-          const messagesPerSecond = messageCountRef.current;
-          const avgProcessingTime = processingTimesRef.current.length > 0 
-            ? processingTimesRef.current.reduce((a, b) => a + b, 0) / processingTimesRef.current.length 
-            : 0;
-          
-          setPerformanceStats(prev => ({
-            ...prev,
-            messagesPerSecond,
-            avgProcessingTime: Math.round(avgProcessingTime * 100) / 100
-          }));
-          
-          // Performance warnings
-          if (messagesPerSecond > 100) {
-            console.warn(`High CAN message rate: ${messagesPerSecond} messages/sec`);
-          }
-          if (avgProcessingTime > 10) {
-            console.warn(`Slow processing: ${avgProcessingTime}ms average`);
-          }
-          
-          messageCountRef.current = 0;
-          lastSecondRef.current = now;
-        }
-        
-      } catch (error) {
-        console.error('Error processing WebSocket message:', error);
-      }
-    };
-
-    ws.onclose = () => {
-      console.log('WebSocket disconnected');
-    };
-
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-
-    return () => {
-      ws.close();
-    };
-  }, [processor]);
-
   // Convert Map to array for rendering
   const canMessagesArray = Array.from(allLatestMessages.entries());
 
@@ -255,8 +104,7 @@ function Dashboard() {
       <div className="w-full py-2 px-4 bg-gray-700 text-gray-300 text-xs border-t border-gray-600">
         <div className="flex justify-between items-center max-w-6xl mx-auto">
           <span>FPS: {performanceStats.fps}</span>
-          <span>CAN frames/sec: {performanceStats.messagesPerSecond}</span>
-          <span>Avg: {performanceStats.avgProcessingTime}ms</span>
+          <span>CAN frames/sec: {dataStoreStats.totalMessages > 0 ? 'Live' : '0'}</span>
           <span>Mem: {performanceStats.memoryUsage}{typeof performanceStats.memoryUsage === 'number' ? 'MB' : ''}</span>
           <span>Store: {dataStoreStats.totalMessages} msgs, {dataStoreStats.totalSamples} samples</span>
           <span>Store Mem: {dataStoreStats.memoryEstimateMB}MB</span>
