@@ -49,6 +49,56 @@ daq-radio/
 - Transmits data to base station
 - Supports both real CAN hardware and CSV simulation
 
+### WebSocket Service Architecture
+
+The frontend uses a **centralized WebSocket service** that runs independently of any component, ensuring continuous data flow across all pages.
+
+#### Location
+```
+pecan/Frontend/pecan-live-dashboard/src/
+├── services/
+│   └── WebSocketService.ts    # WebSocket connection manager
+├── App.tsx                     # Service initialization
+└── pages/
+    └── Dashboard.tsx          # Displays data from DataStore
+```
+
+#### How It Works
+
+**1. Service Initialization (App.tsx)**
+- WebSocketService starts when the app mounts
+- Connects to ESP32 WebSocket server
+- Initializes CAN processor with DBC file
+- Stays active during entire app session
+
+**2. Message Processing (WebSocketService.ts)**
+```
+WebSocket Message → CAN Processor → DataStore → React Components
+```
+
+**3. Automatic Reconnection**
+- Up to 5 reconnection attempts on disconnect
+- Exponential backoff delay (2s, 4s, 6s, 8s, 10s)
+- Seamless recovery from network issues
+
+**4. Component Updates**
+- Components use DataStore hooks to access data
+- No WebSocket logic in display components
+- Clean separation of concerns
+
+#### Benefits
+- **Persistent Connection**: WebSocket stays alive across page navigation
+- **Centralized Management**: Single point of control for all telemetry data
+- **Automatic Recovery**: Handles disconnections gracefully
+- **Simpler Components**: Pages focus on display, not data fetching
+- **Scalability**: Multiple pages can show live data without multiple connections
+
+#### Development URL
+```
+Development:  ws://localhost:8080/ws
+Production:   ws://192.168.4.1:8080/ws  (ESP32 Access Point)
+```
+
 ### SavvyCAN Integration
 - Real-time CAN monitoring and analysis
 - UDP forwarding on port 12347
