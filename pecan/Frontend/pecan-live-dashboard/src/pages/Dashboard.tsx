@@ -1,14 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import DataCard from "../components/DataCard";
 import { createCanProcessor } from "../utils/canProcessor";
+import { dataStore } from "../lib/DataStore";
+import { useAllLatestMessages, useDataStoreStats } from "../lib/useDataStore";
 
 function Dashboard() {
-  const [canMessages, setCanMessages] = useState<{ [canId: string]: { 
-    messageName: string; 
-    signals: { [key: string]: { sensorReading: number; unit: string } };
-    lastUpdated: number;
-    rawData: string;
-  } }>({});
+  // Use the DataStore hook to get all latest messages
+  const allLatestMessages = useAllLatestMessages();
+  const dataStoreStats = useDataStoreStats();
+  
   const [processor, setProcessor] = useState<any>(null);
   const [performanceStats, setPerformanceStats] = useState({
     messagesPerSecond: 0,
@@ -23,25 +23,29 @@ function Dashboard() {
   const frameCountRef = useRef(0);
   const lastFpsUpdateRef = useRef(Date.now());
 
+  // TEMPORARY: Expose dataStore to console for testing
+  useEffect(() => {
+    (window as any).dataStore = dataStore;
+  }, []);
+
   useEffect(() => {
     // Initialize CAN processor
     createCanProcessor('/assets/dbc.dbc').then((proc) => {
       setProcessor(proc);
       console.log('CAN processor initialized');
 
-      // Initialize with demo data for CAN ID 176
-      setCanMessages({
-        "176": {
-          messageName: "M176_Fast_Info",
-          signals: {
-            "INV_Fast_DC_Bus_Voltage": { sensorReading: 123, unit: "V" },
-            "INV_Fast_Motor_Speed": { sensorReading: 123, unit: "rpm" },
-            "INV_Fast_Torque_Command": { sensorReading: 123, unit: "N.m" },
-            "INV_Fast_Torque_Feedback": { sensorReading: 123, unit: "N.m" }
-          },
-          lastUpdated: Date.now(),
-          rawData: "00 01 02 03 04 05 06 07"
-        }
+      // Initialize DataStore with demo data for CAN ID 176
+      dataStore.ingestMessage({
+        msgID: "176",
+        messageName: "M176_Fast_Info",
+        data: {
+          "INV_Fast_DC_Bus_Voltage": { sensorReading: 123, unit: "V" },
+          "INV_Fast_Motor_Speed": { sensorReading: 123, unit: "rpm" },
+          "INV_Fast_Torque_Command": { sensorReading: 123, unit: "N.m" },
+          "INV_Fast_Torque_Feedback": { sensorReading: 123, unit: "N.m" }
+        },
+        rawData: "00 01 02 03 04 05 06 07",
+        timestamp: Date.now()
       });
     }).catch((error) => {
       console.error('Failed to initialize CAN processor:', error);
@@ -100,9 +104,8 @@ function Dashboard() {
 
     const wsUrl = import.meta.env.DEV
       ? 'ws://localhost:8080/ws'
-      : 'ws://192.168.4.1:8080/ws';  // Production: static IP (ESP32 AP Mode) with port 8080
+      : 'ws://192.168.4.1:8080/ws';
 
-    
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
@@ -131,30 +134,31 @@ function Dashboard() {
         // Handle both single messages and arrays of messages
         const messagesToProcess = Array.isArray(decoded) ? decoded : [decoded];
         
-        // Process each decoded message
-        const updates: { [canId: string]: any } = {};
-        
+        // Process each decoded message and ingest into DataStore
         for (const message of messagesToProcess) {
+          console.log('🔍 Message check:', {
+            hasMessage: !!message,
+            hasSignals: !!message?.signals,
+            message: message
+          });
+          
           if (message && message.signals) {
             const canId = message.canId.toString();
-            console.log(`Processing CAN ID ${canId}:`, message.signals);
+            console.log(`✅ Processing CAN ID ${canId}:`, message.signals);
             
-            updates[canId] = {
+            // Ingest into DataStore
+            console.log('📥 Calling dataStore.ingestMessage for', canId);
+            dataStore.ingestMessage({
+              msgID: canId,
               messageName: message.messageName || `CAN_${canId}`,
-              signals: message.signals,
-              lastUpdated: Date.now(),
-              rawData: message.rawData
-            };
+              data: message.signals,
+              rawData: message.rawData,
+              timestamp: message.time || Date.now()
+            });
+            console.log('✅ Ingested successfully');
+          } else {
+            console.log('❌ Message failed check:', message);
           }
-        }
-        
-        // Batch update all messages at once for better performance
-        if (Object.keys(updates).length > 0) {
-          console.log(`Updating dashboard with ${Object.keys(updates).length} messages`);
-          setCanMessages(prev => ({
-            ...prev,
-            ...updates
-          }));
         }
 
         // Performance tracking
@@ -214,11 +218,14 @@ function Dashboard() {
     };
   }, [processor]);
 
+  // Convert Map to array for rendering
+  const canMessagesArray = Array.from(allLatestMessages.entries());
+
   return (
     <div className="flex flex-col min-h-screen">
       <div className="flex flex-wrap flex-1">
-        {Object.entries(canMessages).map(([canId, message]) => {
-          const data = Object.entries(message.signals).map(([key, value]) => ({
+        {canMessagesArray.map(([canId, sample]) => {
+          const data = Object.entries(sample.data).map(([key, value]) => ({
             [key]: `${value.sensorReading} ${value.unit}`
           }));
 
@@ -226,10 +233,10 @@ function Dashboard() {
             <DataCard
               key={canId}
               msgID={canId}
-              messageName={message.messageName}
+              messageName={sample.messageName}
               data={data.length > 0 ? data : [{ "No Data": "Waiting for messages..." }]}
-              lastUpdated={message.lastUpdated}
-              rawData={message.rawData}
+              lastUpdated={sample.timestamp}
+              rawData={sample.rawData}
             />
           );
         })}
@@ -251,6 +258,8 @@ function Dashboard() {
           <span>CAN frames/sec: {performanceStats.messagesPerSecond}</span>
           <span>Avg: {performanceStats.avgProcessingTime}ms</span>
           <span>Mem: {performanceStats.memoryUsage}{typeof performanceStats.memoryUsage === 'number' ? 'MB' : ''}</span>
+          <span>Store: {dataStoreStats.totalMessages} msgs, {dataStoreStats.totalSamples} samples</span>
+          <span>Store Mem: {dataStoreStats.memoryEstimateMB}MB</span>
         </div>
       </div>
     </div>
