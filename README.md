@@ -78,7 +78,7 @@ WebSocket Message → CAN Processor → DataStore → React Components
 
 **3. Automatic Reconnection**
 - Up to 5 reconnection attempts on disconnect
-- Exponential backoff delay (2s, 4s, 6s, 8s, 10s)
+- Linear backoff delay (2s, 4s, 6s, 8s, 10s) TODO: maybe change to exponential 
 - Seamless recovery from network issues
 
 **4. Component Updates**
