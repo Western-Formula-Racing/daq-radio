@@ -57,6 +57,8 @@ class DataStore {
   public static getInstance(retentionWindowMs?: number): DataStore {
     if (!DataStore.instance) {
       DataStore.instance = new DataStore(retentionWindowMs);
+    } else if (typeof retentionWindowMs === 'number') {
+      DataStore.instance.setRetentionWindow(retentionWindowMs);
     }
     return DataStore.instance;
   }
@@ -267,12 +269,19 @@ class DataStore {
    * @param windowMs - New retention window in milliseconds
    */
   public setRetentionWindow(windowMs: number): void {
+    if (windowMs === this.retentionWindowMs) {
+      return;
+    }
+
     this.retentionWindowMs = windowMs;
-    
+
     // Prune all messages with new window
     for (const msgID of this.buffer.keys()) {
       this.pruneOldSamples(msgID);
     }
+
+    // Notify subscribers since data might have been pruned
+    this.notifyAll();
   }
 
   /**
