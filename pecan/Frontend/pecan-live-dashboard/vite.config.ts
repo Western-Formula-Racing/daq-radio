@@ -72,8 +72,12 @@ function startWebSocketServer() {
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
-    react(), 
+    react(),
     tailwindcss(),
     websocketPlugin()
   ],
+  test: {
+    environment: 'node',
+    restoreMocks: true
+  }
 });
