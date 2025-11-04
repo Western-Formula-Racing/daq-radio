@@ -1,4 +1,5 @@
 import { Dbc, Can } from 'candied';
+import { dataStore } from '../lib/DataStore';
 
 // Simple type definitions for our use, align with InfluxDB3 schema for consistency
 // InfluxDB3 Schema: id -> canId, name -> messageName, signalName, sensorReading, time
@@ -103,7 +104,7 @@ const testMessages = testMessagesRaw.map(line => {
 export async function processTestMessages() {
   try {
     console.log('--- Starting CAN Message Processing ---');
-    
+
     // Fetch the DBC file content
     const dbcResponse = await fetch('/assets/dbc.dbc');
     const dbcText = await dbcResponse.text();
@@ -122,17 +123,17 @@ export async function processTestMessages() {
     for (const testMsg of testMessages) {
       // Create a CAN frame from the message ID and data
       const frame = can.createFrame(testMsg.canId, testMsg.data);
-      
+
       // Decode the frame using the DBC definitions
       const decoded = can.decode(frame);
-      
+
       if (decoded) {
         console.log(`\nTime: ${testMsg.time}, Message ID: ${testMsg.canId} (${decoded.name})`);
-        
+
         // Candied uses boundSignals property (not signals)
         if (decoded.boundSignals && decoded.boundSignals instanceof Map) {
           const signals: { [key: string]: any } = {};
-          
+
           decoded.boundSignals.forEach((signal, signalName) => {
             const parsed = parsePhysValue(signal.physValue);
             signals[signalName] = {
@@ -141,8 +142,18 @@ export async function processTestMessages() {
               // rawValue: signal.rawValue
             };
           });
-          
+
           console.log('Signals:', signals);
+
+          dataStore.ingestMessage({
+            msgID: testMsg.canId.toString(),
+            messageName: decoded.name || `CAN_${testMsg.canId}`,
+            data: signals,
+            rawData: testMsg.data
+              .map((byte) => byte.toString(16).padStart(2, '0').toUpperCase())
+              .join(' '),
+            timestamp: testMsg.time,
+          });
         } else {
           console.log('No signals found in decoded message');
         }

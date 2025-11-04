@@ -15,6 +15,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!pecan/Frontend/pecan-live-dashboard/src/lib/
 lib64/
 parts/
 sdist/
@@ -221,3 +222,4 @@ ENV/
 
 .idea/workspace.xml
 /.idea
+node_modules/

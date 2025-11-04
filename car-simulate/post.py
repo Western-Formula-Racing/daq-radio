@@ -1,3 +1,4 @@
+# DEPRECATED (moving to websocket)
 import requests
 import time
 import json
