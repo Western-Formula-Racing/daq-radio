@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import DataCard from "../components/DataCard";
 import DataRow from "../components/DataRow";
 
@@ -88,13 +88,18 @@ const data: Msg[] = [
 ];
 
 function Dashboard() {
-  const [sortingMethod, setSortingMethod] = useState("Name");
+  const [sortingMethod, setSortingMethod] = useState("name");
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [tickUpdate, setTickUpdate] = useState(Date.now());
-  const [isAtoZ, setIsAtoZ] = useState(true);
   const [sortIcon, setSortIcon] = useState("../src/assets/atoz.png");
-
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
+
+  const sortingFilter = useRef({
+    name: 0,
+    category: 0,
+    id: 1,
+    prev: "",
+  });
 
   // Persisting user view mode choice
   useEffect(() => {
@@ -112,29 +117,47 @@ function Dashboard() {
   const filteredMsgs = useMemo(() => {
     const base = [...dataItems];
     switch (sortingMethod) {
-      case "Name":
-        if (isAtoZ) {
-          setIsAtoZ(false);
-          setSortIcon("../src/assets/atoz.png");
-          setSortMenuOpen(false);
-          return base.sort((a, b) =>
-            (a.name ?? "").localeCompare(b.name ?? "")
-          );
-        } else {
-          setIsAtoZ(true);
-          setSortIcon("../src/assets/ztoa.png");
-          setSortMenuOpen(false);
-          return base.sort((a, b) =>
-            (b.name ?? "").localeCompare(a.name ?? "")
-          );
+      case "name":
+        setSortMenuOpen(false);
+        if (sortingFilter.current.prev == "name") {
+          sortingFilter.current.name = 1 - sortingFilter.current.name;
         }
-      case "Category":
-        setIsAtoZ((o) => !o);
+        sortingFilter.current.prev = "name";
+        if (sortingFilter.current.name == 0) {
+          //asc
+          setSortIcon("../src/assets/atoz.png");
+          return base.sort((a, b) => a.name.localeCompare(b.name));
+        } else {
+          //desc
+          setSortIcon("../src/assets/ztoa.png");
+          return base.sort((a, b) => b.name.localeCompare(a.name));
+        }
+      case "category":
         setSortIcon("../src/assets/sort.png");
         setSortMenuOpen(false);
+        sortingFilter.current.prev = "category";
         return base.sort((a, b) =>
           (a.category ?? "").localeCompare(b.category ?? "")
         );
+      case "id":
+        setSortMenuOpen(false);
+        if (sortingFilter.current.prev == "id") {
+          sortingFilter.current.id = 1 - sortingFilter.current.id;
+        }
+        sortingFilter.current.prev = "id";
+        if (sortingFilter.current.id == 0) {
+          //asc
+          setSortIcon("../src/assets/id_ascending.png");
+          return base.sort((a, b) =>
+            a.msgID.localeCompare(b.msgID, undefined, { numeric: true })
+          );
+        } else {
+          //desc
+          setSortIcon("../src/assets/id_descending.png");
+          return base.sort((a, b) =>
+            b.msgID.localeCompare(a.msgID, undefined, { numeric: true })
+          );
+        }
       // Error control; Shouldn't trigger but just in case
       default:
         return base;
@@ -167,7 +190,7 @@ function Dashboard() {
                     <div className="bg-dropdown-menu-secondary flex flex-col space-between w-full h-full rounded-b-md">
                       <button
                         onClick={() => {
-                          setSortingMethod("Name");
+                          setSortingMethod("name");
                           setTickUpdate(Date.now());
                         }}
                       >
@@ -175,11 +198,19 @@ function Dashboard() {
                       </button>
                       <button
                         onClick={() => {
-                          setSortingMethod("Category");
+                          setSortingMethod("category");
                           setTickUpdate(Date.now());
                         }}
                       >
                         Category
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSortingMethod("id");
+                          setTickUpdate(Date.now());
+                        }}
+                      >
+                        ID
                       </button>
                     </div>
                   </div>
