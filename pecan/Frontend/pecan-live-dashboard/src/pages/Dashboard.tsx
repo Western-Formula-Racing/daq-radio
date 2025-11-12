@@ -1,93 +1,82 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import DataCard from "../components/DataCard";
 import DataRow from "../components/DataRow";
-
-type Msg = {
-  msgID: string;
-  name: string;
-  category: string;
-  data?: Record<string, string>[];
-  rawData: string;
-  time: string;
-};
-
-const data: Msg[] = [
-  {
-    msgID: "1006", 
-    name: "TORCH_M1_V1", 
-    category: "BMS/TORCH", 
-    data: [
-      { "Voltage 1": "3.57 V" },
-      { "Voltage 2": "3.58 V" },
-      { "Voltage 3": "2.98 V" },
-      { "Voltage 4": "4.05 V" },
-    ],
-    rawData:"00 01 02 03 04 05 06 07 08 09",
-    time: "-100ms"
-  },
-  {
-    msgID: "2012",
-    name: "VCU_PDM_Rear_cmd",
-    category: "POWERTRAIN",
-    data: [
-      { "Rear Motor Enable": "True" },
-      { "Rear Motor Torque Cmd": "150 Nm" },
-      { "Rear Motor Speed Cmd": "4500 rpm" },
-    ],
-    rawData:"00 01 02 03 04 05 06 07 08 09",
-    time: "-100ms"
-  },
-  {
-    msgID: "173",
-    name: "M173_Modulation_And_Flux_Info",
-    category: "MOTOR CONTROL",
-    data: [
-      { "Modulation Index": "0.82" },
-      { "Flux Weakening": "Enabled" },
-      { "Phase Angle": "37°" },
-    ],
-    rawData:"00 01 02 03 04 05 06 07 08 09",
-    time: "-100ms"
-  },
-  {
-    msgID: "172",
-    name: "M172_Torque_And_Timer_Info",
-    category: "MOTOR CONTROL",
-    data: [
-      { "Actual Torque": "142 Nm" },
-      { "Timer Count": "350 ms" },
-      { "Commanded Torque": "150 Nm" },
-    ],
-    rawData:"00 01 02 03 04 05 06 07 08 09",
-    time: "-100ms"
-  },
-  {
-    msgID: "194",
-    name: "M194_Read_Write_Param_Response",
-    category: "DIAGNOSTICS",
-    data: [
-      { "Parameter Index": "0x15" },
-      { "Write Status": "Success" },
-      { "Response Code": "0x01" },
-    ],
-    rawData:"00 01 02 03 04 05 06 07 08 09",
-    time: "-100ms"
-  },
-  {
-    msgID: "193",
-    name: "M193_Read_Write_Param_Command",
-    category: "DIAGNOSTICS",
-    data: [
-      { "Parameter Index": "0x15" },
-      { "Write Value": "0x7A" },
-      { "Command Type": "Write" },
-    ],
-    rawData:"00 01 02 03 04 05 06 07 08 09",
-    time: "-100ms"
-  }
-]
+import { dataStore } from "../lib/DataStore";
+import { useAllLatestMessages, useDataStoreStats } from "../lib/useDataStore";
 
 function Dashboard() {
+
+  // Data
+  // =====================================================================
+
+  // Use the DataStore hooks to get all latest messages
+  const allLatestMessages = useAllLatestMessages();
+  const dataStoreStats = useDataStoreStats();
+
+  const [performanceStats, setPerformanceStats] = useState({
+    memoryUsage: 'N/A' as string | number,
+    fps: 0
+  });
+
+  const frameCountRef = useRef(0);
+  const lastFpsUpdateRef = useRef(Date.now());
+
+  // TEMPORARY: Expose dataStore to console for testing
+  useEffect(() => {
+    (window as any).dataStore = dataStore;
+  }, []);
+
+  // Performance monitoring
+  useEffect(() => {
+    // FPS monitoring
+    const updateFPS = () => {
+      frameCountRef.current++;
+      const now = Date.now();
+      if (now - lastFpsUpdateRef.current >= 1000) {
+        const fps = Math.round((frameCountRef.current * 1000) / (now - lastFpsUpdateRef.current));
+        setPerformanceStats(prev => ({ ...prev, fps }));
+
+        if (fps < 30) {
+          console.warn(`Low FPS: ${fps}`);
+        }
+
+        frameCountRef.current = 0;
+        lastFpsUpdateRef.current = now;
+      }
+      requestAnimationFrame(updateFPS);
+    };
+    requestAnimationFrame(updateFPS);
+
+    // Memory monitoring
+    const updateMemory = () => {
+      if ('memory' in performance) {
+        const memInfo = (performance as any).memory;
+        const memoryMB = Math.round(memInfo.usedJSHeapSize / 1024 / 1024);
+        console.log('Memory info:', memInfo, 'Memory MB:', memoryMB);
+        setPerformanceStats(prev => ({
+          ...prev,
+          memoryUsage: memoryMB
+        }));
+
+        if (memoryMB > 100) {
+          console.warn(`High memory usage: ${memoryMB}MB`);
+        }
+      } else {
+        console.log('Performance.memory API not available');
+      }
+    };
+    const memoryInterval = setInterval(updateMemory, 2000);
+
+    return () => {
+      clearInterval(memoryInterval);
+    };
+  }, []);
+
+  // Convert Map to array for rendering
+  const canMessagesArray = Array.from(allLatestMessages.entries());
+
+  // View Mode 
+  // =====================================================================
 
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
 
@@ -101,13 +90,13 @@ function Dashboard() {
     localStorage.setItem("dash:viewMode", viewMode);
   }, [viewMode]);
 
-  const dataItems = useMemo(() => data, []);
 
   return (
-    <>
-      <div className="grid grid-cols-3 gap-1 w-100 h-full">
-        {/* Data display section */}
-        <div className="col-span-2 p-4">
+    <div className="grid grid-cols-3 gap-0 w-100 h-full">
+      {/* Data display section */}
+      <div className="col-span-2 relative flex flex-col h-full overflow-y-auto">
+
+        <div className="flex-1 p-4 pb-16">
 
           {/* Data filter / view selection menu */}
           <div className="bg-data-module-bg w-full h-[100px] grid grid-cols-4 gap-1 rounded-md mb-[15px]">
@@ -129,19 +118,37 @@ function Dashboard() {
           </div>
 
           {viewMode === "cards" ? (
-            <div className="flex flex-row flex-wrap justify-between gap-y-[15px]">
-              {dataItems.map((m) => (
-                <DataCard
-                  key={m.msgID}
-                  msgID={m.msgID}
-                  name={m.name}
-                  category={m.category}
-                  data={m.data}
-                  rawData={m.rawData}
-                  time={m.time}
-                />
-              ))}
-            </div>
+            <>
+              <div className="columns-2 gap-4">
+                {canMessagesArray.map(([canId, sample]) => {
+                  const data = Object.entries(sample.data).map(([key, value]) => ({
+                    [key]: `${value.sensorReading} ${value.unit}`
+                  }));
+
+                  return (
+                    <div key={canId} className="mb-4 avoid-break">
+                      <DataCard
+                        key={canId}
+                        msgID={canId}
+                        name={sample.messageName}
+                        data={data.length > 0 ? data : [{ "No Data": "Waiting for messages..." }]}
+                        lastUpdated={sample.timestamp}
+                        rawData={sample.rawData}
+                      />
+                    </div>
+                  );
+                })}
+
+                {/* Static card for comparison */}
+                {/* <DataCard
+                  msgID="1006"
+                  name="TORCH_M1_V1"
+                  category="BMS/TORCH"
+                  lastUpdated={Date.now()}
+                  rawData="00 01 02 03 04 05 06 07"
+                /> */}
+              </div>
+            </>
           ) : (
             // List view box
             <div className="w-100 h-fit rounded-sm bg-sidebar">
@@ -171,29 +178,48 @@ function Dashboard() {
               </div>
 
               {/* Rows */}
-              {dataItems.map((m, i) => (
-                <DataRow
-                  key={m.msgID}
-                  msgID={m.msgID}
-                  name={m.name}
-                  category={m.category}
-                  data={m.data}
-                  rawData={m.rawData}
-                  time={m.time}
-                  index={i}
-                />
-              ))}
+
+              {canMessagesArray.map(([canId, sample], i) => {
+                const data = Object.entries(sample.data).map(([key, value]) => ({
+                  [key]: `${value.sensorReading} ${value.unit}`
+                }));
+
+                return (
+                  <DataRow
+                    key={canId}
+                    msgID={canId}
+                    name={sample.messageName}
+                    data={data.length > 0 ? data : [{ "No Data": "Waiting for messages..." }]}
+                    lastUpdated={sample.timestamp}
+                    rawData={sample.rawData}
+                    index={i}
+                  />
+                );
+              })}
             </div>
           )}
-
         </div>
 
-        {/* Graph display section */}
-        <div className="col-span-1 bg-sidebar">
-          {/* WIP */}
+        {/* Sticky Performance Tab */}
+        <div className="sticky bottom-0 inset-x-0">
+          <div className="w-full py-2 px-4 bg-data-textbox-bg/90 backdrop-blur text-gray-300 text-xs border-t border-white/10">
+            <div className="flex justify-between items-center max-w-6xl mx-auto">
+              <span>FPS: {performanceStats.fps}</span>
+              <span>CAN frames/sec: {dataStoreStats.totalMessages > 0 ? 'Live' : '0'}</span>
+              <span>Mem: {performanceStats.memoryUsage}{typeof performanceStats.memoryUsage === 'number' ? 'MB' : ''}</span>
+              <span>Store: {dataStoreStats.totalMessages} msgs, {dataStoreStats.totalSamples} samples</span>
+              <span>Store Mem: {dataStoreStats.memoryEstimateMB}MB</span>
+            </div>
+          </div>
         </div>
+
       </div>
-    </>
+      
+      {/* Graph display section */}
+      <div className="col-span-1 bg-sidebar">
+        {/* WIP */}
+      </div>
+    </div>
   );
 }
 

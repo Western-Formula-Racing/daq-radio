@@ -1,29 +1,51 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 interface DataRowProps {
     msgID: string;
     name: string;
-    category: string;
+    category?: string;
     data?: Record<string, string>[];
     rawData: string;
-    time: string;
+    lastUpdated: number;
     index: number; // for alternating row colors
 }
 
-export default function DataRow({ msgID, name, category, data, rawData, time, index }: Readonly<DataRowProps>) {
+export default function DataRow({ msgID, name, category, data, rawData, lastUpdated, index }: Readonly<DataRowProps>) {
+
+    const [currentTime, setCurrentTime] = useState(Date.now());
+
+    useEffect(() => {
+        const interval = setInterval(() => setCurrentTime(Date.now()), 100);
+        return () => clearInterval(interval);
+    }, []);
+
+    const timeDiff = lastUpdated ? currentTime - lastUpdated : 0;
+
+    const computedCategory = useMemo(() => {
+        if (category) return category;
+        if (!data || data.length === 0) return "NO CAT";
+        const signalNames = data.flatMap(obj => Object.keys(obj));
+        const hasINV = signalNames.some(name => name.includes("INV"));
+        const hasBMS = signalNames.some(name => name.includes("BMS") || name.includes("TORCH")) || name.includes("TORCH");
+        const hasVCU = signalNames.some(name => name.includes("VCU"));
+        if (hasVCU) return "VCU";
+        else if (hasBMS) return "BMS/TORCH";
+        else if (hasINV) return "INV";
+        else return "NO CAT";
+    }, [category, data]);
 
     // Category colour logic (same as DataCard)
     const categoryColor =
-        category === "POWERTRAIN" ? "bg-sky-400" :
-            category === "MOTOR CONTROL" ? "bg-green-400" :
-                category === "CAT2" ? "bg-sky-500" :
-                    category === "BMS/TORCH" ? "bg-orange-400" :
-                        category === "DIAGNOSTICS" ? "bg-red-500" :
-                            "bg-blue-500"; // default
+        computedCategory === "VCU" ? "bg-sky-400" :
+        computedCategory === "INV" ? "bg-green-400" :
+        computedCategory === "CAT2" ? "bg-sky-500" :
+        computedCategory === "BMS/TORCH" ? "bg-orange-400" :
+        computedCategory === "CAT4" ? "bg-red-500" :
+        "bg-blue-500"; // default
 
     // Alternating row background 
     const rowBg = index % 2 === 0 ? "bg-sidebar" : "bg-data-module-bg";
-
+8
     const [open, setOpen] = useState(false);
 
     const rows = useMemo(() => {
@@ -58,7 +80,7 @@ export default function DataRow({ msgID, name, category, data, rawData, time, in
 
                 {/* Category column with coloured background */}
                 <div className={`col-span-2 flex justify-left items-center px-3 font-bold text-xs ${categoryColor}`}>
-                    {category}
+                    {computedCategory}
                 </div>
 
                 {/* Data column */}
@@ -68,7 +90,7 @@ export default function DataRow({ msgID, name, category, data, rawData, time, in
 
                 {/* Time column */}
                 <div className="col-span-1 flex justify-left items-center pe-3">
-                    {time}
+                    {timeDiff}ms
                 </div>
             </div>
 
