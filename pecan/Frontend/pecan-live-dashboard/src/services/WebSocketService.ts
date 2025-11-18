@@ -11,7 +11,7 @@ export class WebSocketService {
   async initialize() {
     // Initialize CAN processor
     try {
-      this.processor = await createCanProcessor('/assets/dbc.dbc');
+      this.processor = await createCanProcessor();
       console.log('CAN processor initialized');
     } catch (error) {
       console.error('Failed to initialize CAN processor:', error);

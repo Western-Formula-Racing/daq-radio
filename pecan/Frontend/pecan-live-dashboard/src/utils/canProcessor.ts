@@ -1,5 +1,8 @@
 import { Dbc, Can } from 'candied';
 import { dataStore } from '../lib/DataStore';
+// Import DBC file as raw text - Vite's ?raw suffix loads file content at build time
+// Note: Files in src/assets/ cannot be fetched via URL, they must be imported
+import dbcFile from '../assets/dbc.dbc?raw';
 
 // Simple type definitions for our use, align with InfluxDB3 schema for consistency
 // InfluxDB3 Schema: id -> canId, name -> messageName, signalName, sensorReading, time
@@ -105,15 +108,20 @@ export async function processTestMessages() {
   try {
     console.log('--- Starting CAN Message Processing ---');
 
-    // Fetch the DBC file content
-    const dbcResponse = await fetch('/assets/dbc.dbc');
-    const dbcText = await dbcResponse.text();
+    // Use imported DBC file
+    const dbcText = dbcFile;
     console.log('DBC file loaded successfully');
+    console.log('DBC file size:', dbcText.length, 'bytes');
+    console.log('First 500 chars of DBC:', dbcText.substring(0, 500));
+    console.log('Number of BO_ lines:', (dbcText.match(/^BO_ /gm) || []).length);
 
     // Create DBC instance and load the content
     const dbc = new Dbc();
     const data = dbc.load(dbcText); // Candied's load() accepts text content directly!
     console.log('DBC parsed successfully');
+    console.log('Data object:', data);
+    console.log('Messages in DBC:', Array.from(data.messages.keys()));
+    console.log('Number of messages:', data.messages.size);
 
     // Create a CAN decoder instance
     const can = new Can();
@@ -299,11 +307,14 @@ export function getDbcMessages(dbcData: any): MessageInfo[] {
 
 /**
  * Create a CAN processing pipeline
- * @param dbcPath - Path to the DBC file
  * @returns Object with methods to process CAN messages
  */
-export async function createCanProcessor(dbcPath: string): Promise<any> {
-  const { dbc, data } = await loadDbcFile(dbcPath);
+export async function createCanProcessor(): Promise<any> {
+  // Use imported DBC file
+  const dbcText = dbcFile;
+  
+  const dbc = new Dbc();
+  const data = dbc.load(dbcText);
   const can = new Can();
   can.database = data; // Candied uses .database property
   
