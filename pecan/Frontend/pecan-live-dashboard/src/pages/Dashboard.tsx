@@ -198,6 +198,11 @@ function Dashboard() {
                                                     setSortingMethod("name");
                                                     setTickUpdate(Date.now());
                                                 }}
+                                                className={`${
+                                                    sortingMethod == "name"
+                                                        ? "font-bold"
+                                                        : "font-regular"
+                                                }`}
                                             >
                                                 Name
                                             </button>
@@ -208,6 +213,11 @@ function Dashboard() {
                                                     );
                                                     setTickUpdate(Date.now());
                                                 }}
+                                                className={`${
+                                                    sortingMethod == "category"
+                                                        ? "font-bold"
+                                                        : "font-regular"
+                                                }`}
                                             >
                                                 Category
                                             </button>
@@ -216,6 +226,11 @@ function Dashboard() {
                                                     setSortingMethod("id");
                                                     setTickUpdate(Date.now());
                                                 }}
+                                                className={`${
+                                                    sortingMethod == "id"
+                                                        ? "font-bold"
+                                                        : "font-regular"
+                                                }`}
                                             >
                                                 ID
                                             </button>
@@ -240,19 +255,6 @@ function Dashboard() {
                         </div>
                     </div>
 
-                    {/* SORTING BUTTONS */}
-                    <div className="flex col-span-4">
-                        <button
-                            onClick={() => {
-                                setSortingMethod("id");
-                                setTickUpdate(Date.now());
-                            }}
-                            className="w-[90px] h-[50px] p-[10px] mb-3 bg-option text-white font-semibold !rounded-lg hover:bg-option/99"
-                        >
-                            Msg ID
-                        </button>
-                    </div>
-
                     {viewMode === "cards" ? (
                         <div className="flex flex-row flex-wrap justify-between gap-y-[15px]">
                             {filteredMsgs.map((m) => (
@@ -274,7 +276,14 @@ function Dashboard() {
                             <div className="w-100 h-[40px] rounded-t-sm grid grid-cols-12 bg-data-module-bg text-white font-semibold text-sm shadow-md">
                                 {/* Message ID column */}
                                 <div className="col-span-1 flex justify-left items-center ps-3">
-                                    Msg ID
+                                    <button
+                                        onClick={() => {
+                                            setSortingMethod("id");
+                                            setTickUpdate(Date.now());
+                                        }}
+                                    >
+                                        Msg ID
+                                    </button>
                                 </div>
                                 {/* Message name column */}
                                 <div className="col-span-4 flex justify-left items-center px-3">
