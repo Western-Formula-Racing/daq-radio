@@ -29,7 +29,8 @@ function App() {
         />
       </div>
 
-      <main id="main-content" className=" w-100 h-full p-4">
+      {/* Main content area, Outlet element is needed to display the rendered child pages received from the routes */}
+      <main id="main-content" className=" w-100 h-full">
         <Outlet />
       </main>
 

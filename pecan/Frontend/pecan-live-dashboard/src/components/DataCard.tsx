@@ -2,17 +2,16 @@ import Dropdown from "./Dropdown";
 import React, { useState, useMemo, useEffect } from "react";
 
 interface InputProps {
-    msgID: string;
-    messageName: string;
-    category?: string;
-    data?: Record<string, string>[];
-    lastUpdated?: number;
-    rawData?: string;
+  msgID: string;
+  name: string;
+  category?: string;
+  data?: Record<string, string>[];
+  rawData: string;
+  lastUpdated?: number;
 }
 
 // Defining the structure of the data, can be changed later
 type DataPair = Record<string, string>;
-
 const DataTextBox = ({
   children,
   align = "center",
@@ -20,10 +19,9 @@ const DataTextBox = ({
   children: React.ReactNode;
   align?: "left" | "center" | "right";
 }) => (
-    
   <div
     className={[
-      "w-full rounded-full bg-data-textbox-bg text-white text-sm font-semibold py-2 px-1",
+      "w-full rounded-full bg-data-textbox-bg text-white text-xs font-semibold py-2 px-1",
       align === "left" && "text-left",
       align === "center" && "text-center",
       align === "right" && "text-right",
@@ -33,43 +31,49 @@ const DataTextBox = ({
   </div>
 );
 
-function DataCard({ msgID, messageName, category, data, lastUpdated, rawData }: Readonly<InputProps>) {
+function DataCard({ msgID, name, category, data, lastUpdated, rawData }: Readonly<InputProps>) {
 
-    const [currentTime, setCurrentTime] = useState(Date.now());
+  const [currentTime, setCurrentTime] = useState(Date.now());
 
-    useEffect(() => {
-        const interval = setInterval(() => setCurrentTime(Date.now()), 100);
-        return () => clearInterval(interval);
-    }, []);
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(Date.now()), 100);
+    return () => clearInterval(interval);
+  }, []);
 
-    const timeDiff = lastUpdated ? currentTime - lastUpdated : 0;
+  const timeDiff = lastUpdated ? currentTime - lastUpdated : 0;
 
-    const computedCategory = useMemo(() => {
-        if (category) return category;
-        if (!data || data.length === 0) return "NO CAT";
-        const signalNames = data.flatMap(obj => Object.keys(obj));
-        const hasINV = signalNames.some(name => name.includes("INV"));
-        const hasBMS = signalNames.some(name => name.includes("BMS") || name.includes("TORCH")) || messageName.includes("TORCH");
-        const hasVCU = signalNames.some(name => name.includes("VCU"));
-        if (hasVCU) return "VCU";
-        else if (hasBMS) return "BMS/TORCH";
-        else if (hasINV) return "INV";
-        else return "NO CAT";
-    }, [category, data]);
+  const computedCategory = useMemo(() => {
+    if (category) return category;
+    if (!data || data.length === 0) return "NO CAT";
+    const signalNames = data.flatMap(obj => Object.keys(obj));
+    const hasINV = signalNames.some(name => name.includes("INV"));
+    const hasBMS = signalNames.some(name => name.includes("BMS") || name.includes("TORCH")) || name.includes("TORCH");
+    const hasVCU = signalNames.some(name => name.includes("VCU"));
+    if (hasVCU) return "VCU";
+    else if (hasBMS) return "BMS/TORCH";
+    else if (hasINV) return "INV";
+    else return "NO CAT";
+  }, [category, data]);
 
-    // Event handlers for dropdown menu options specific to the data cards
-    const handleMenuSelect = (selection: string) => {
-        if (selection === "Add to Favourites") {
-            // TODO: Favourite card section
-            console.log(`${msgID} added to favourites.`);
-        } else if (selection === "Collapse") {
-            console.log(`${msgID} has been collapsed.`);
-        }
-    };
+  const [collapsed, setCollapsed] = useState(false);
+  const menuItems = collapsed ? ["Add to Favourites", "br", "Expand"] : ["Add to Favourites", "br", "Collapse"];
+  const toggleCollapsed = () => setCollapsed(prev => !prev);
 
-    // Data population functions 
-    const [dataPairs, setDataPairs] = useState<DataPair[]>([]);
-    const populateDataColumns = (incoming: DataPair[] | string) => {
+  // Event handlers for dropdown menu options specific to the data cards
+  const handleMenuSelect = (selection: string) => {
+    if (selection == "Add to Favourites") {
+      // TODO: Favourite card section
+      console.log(`${msgID} added to favourites.`);
+    } else if (selection == "Collapse") {
+      setCollapsed(true);
+    } else if (selection == "Expand") {
+      setCollapsed(false);
+    }
+  };
+
+  // Data population 
+  const [dataPairs, setDataPairs] = useState<DataPair[]>([]);
+  const populateDataColumns = (incoming: DataPair[] | string) => {
     try {
       const parsed = typeof incoming === "string" ? (JSON.parse(incoming) as DataPair[]) : incoming;
 
@@ -78,6 +82,7 @@ function DataCard({ msgID, messageName, category, data, lastUpdated, rawData }: 
         return;
       }
 
+      // Cleaning up data 
       const cleaned = parsed
         .map((obj) => {
           const entries = Object.entries(obj);
@@ -107,21 +112,9 @@ function DataCard({ msgID, messageName, category, data, lastUpdated, rawData }: 
     }
   };
 
-  // If the parent passes data, auto-load it.
+  // If the parent passes data, auto-load it
   useEffect(() => {
     if (data && data.length) populateDataColumns(data);
-  }, [data]);
-
-  // Testing data for displaying, will need to feed 
-  useEffect(() => {
-    if (!data) {
-      populateDataColumns([
-        { "Voltage 1": "3.57 V" },
-        { "Voltage 2": "3.57 V" },
-        { "Voltage 3": "3.57 V" },
-        { "Voltage 4": "3.57 V" },
-      ]);
-    }
   }, [data]);
 
   const rows = useMemo(
@@ -133,90 +126,91 @@ function DataCard({ msgID, messageName, category, data, lastUpdated, rawData }: 
     [dataPairs]
   );
 
-    return (
-        //  Data Card 
-        <div className="w-[400px] m-[10px]">
+  return (
+    //  Data Card 
+    <div className="min-w-[400px] max-w-[440px] w-100">
 
-            {/* DM Header */}
-            <div className="grid grid-cols-6 box-border gap-1.5 mx-[3px]">
-                {/* Message ID Button */}
-                <Dropdown
-                    items={["Add to Favourites", "br", "Collapse"]}
-                    onSelect={handleMenuSelect}
-                    widthClass="w-[150px]"
-                    // TODO: Handle menu button events
-                >
-                    <div className="col-span-1 h-[40px] m-[5px] mx-[0px] w-100 rounded-t-md box-border bg-data-module-bg flex justify-center items-center">
-                        <p className="text-white font-semibold ">{msgID}</p>
-                    </div>
-                </Dropdown>
+      {/* DM Header */}
+      <div className={`${collapsed ? "gap-0.5" : "gap-1.5"} grid grid-cols-6 box-border mx-[3px]`}>
+        {/* Message ID Button */}
+        <Dropdown
+          items={menuItems}
+          onSelect={handleMenuSelect}
+          widthClass="w-[150px]"
+        >
+          <div className={`${collapsed ? "rounded-l-lg bg-data-textbox-bg" : "rounded-t-md bg-data-module-bg"} col-span-1 h-[40px] mx-[0px] w-100 box-border flex justify-center items-center cursor-pointer`}>
+            <p className="text-white font-semibold ">{msgID}</p>
+          </div>
+        </Dropdown>
 
-                {/* Message Name */}
-                <div className="col-span-3 h-[40px] m-[5px] mx-[0px] rounded-t-md box-border bg-data-module-bg flex justify-center items-center">
-                    <p className="text-white text-[15px] font-semibold ">{messageName}</p>
-                </div>
-
-
-                {/* Category Name */}
-                {/* div background colour will change based on which category is assigned to it  */}
-                <div
-                    className={`col-span-2 h-[40px] m-[5px] mx-[0px] rounded-t-md  box-border flex justify-center items-center 
-                        ${computedCategory === "TEST" ? "bg-sky-400" :
-                            computedCategory === "CAT1" ? "bg-green-400" :
-                            computedCategory === "CAT2" ? "bg-sky-500" :
-                            computedCategory === "BMS/TORCH" ? "bg-orange-400" :
-                            computedCategory === "CAT4" ? "bg-red-500" :
-                            "bg-blue-500"}`} // Default 
-                            // TODO: Assign data categories to colours
-                >
-                    <p className="text-white font-semibold ">{computedCategory}</p>
-
-                </div>
-
-            </div>
-
-            {/* DM Content */}
-            <div id={msgID} className="w-100 h-fit min-h-[100px] rounded-md bg-data-module-bg flex flex-column box-border p-[10px]">
-
-                {/* Data Display */}
-                <div className="w-full flex flex-col gap-2 p-[10px]">
-                    {rows.map(([label, value], idx) => (
-                        <Dropdown
-                            items={["Graph 1", "Graph 2", "br", "New Graph"]}
-                            onSelect={handleMenuSelect}
-                            widthClass="w-[120px]"
-                            // TODO: Handle menu button events
-                        >
-                            <div key={idx} className="grid grid-cols-5 w-full">
-                                {/* Left column (label) */}
-                                <div className="col-span-3 p-[5px]">
-                                    <DataTextBox align="center">{label}</DataTextBox>
-                                </div>
-                                {/* Right column (value) */}
-                                <div className="col-span-2 p-[5px]">
-                                    <DataTextBox align="center">{value}</DataTextBox>
-                                </div>
-                            </div>
-                        </Dropdown>
-                    ))}
-                </div>
-
-                <div className="w-90 h-[2px] bg-white self-center rounded-xs"></div>
-
-                {/* Raw Data Display */}
-                <div className="h-[50px] flex text-white text-xs items-center justify-start relative">
-
-                    <p id="raw-data" className="font-semibold font-mono">&nbsp;&nbsp;&nbsp;{rawData || "00 01 02 03 04 05 06 07"}</p>
-                    <p id="raw-data-received" className="absolute left-[55%] font-semibold font-mono">Last Update:&nbsp;&nbsp;&nbsp;{timeDiff}ms</p>
-
-                </div>
-            </div>
-
-
-
+        {/* Message Name */}
+        <div className={`${collapsed ? "" : "rounded-t-md"} col-span-3 h-[40px] mx-[0px] box-border bg-data-module-bg flex justify-center items-center hover:brightness-110 transition`}>
+          <button type="button" onClick={toggleCollapsed} className={`h-[40px] mx-[0px] box-border bg-data-module-bg flex justify-center items-center`}>
+            <p className="text-white text-xs font-semibold ">{name}</p>
+          </button>
         </div>
 
-    );
+
+
+        {/* Category Name */}
+        {/* div background colour will change based on which category is assigned to it  */}
+        <div
+          className={`${collapsed ? "rounded-r-lg" : "rounded-t-md"} col-span-2 h-[40px] mx-[0px]  box-border flex justify-center items-center
+                        ${computedCategory === "VCU" ? "bg-sky-400" :
+              computedCategory === "INV" ? "bg-green-400" :
+                computedCategory === "CAT2" ? "bg-sky-500" :
+                  computedCategory === "BMS/TORCH" ? "bg-orange-400" :
+                    computedCategory === "CAT4" ? "bg-red-500" :
+                      "bg-blue-500"}`} // Default 
+        // TODO: Assign data categories to colours
+        >
+          <p className="text-white text-xs font-semibold">{computedCategory}</p>
+        </div>
+      </div>
+
+      {/* DM Content (collapsible) */}
+      <div
+        id={msgID}
+        className={[
+          "w-100 rounded-md bg-data-module-bg flex flex-column box-border  mt-1",
+          "overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out",
+          collapsed ? "max-h-0 opacity-0 pointer-events-none" : "p-[10px] max-h-[1000px] opacity-100",
+        ].join(" ")}
+        aria-expanded={!collapsed}
+      >
+        {/* Data Display */}
+        <div className="w-full flex flex-col gap-2 p-[10px]">
+          {rows.map(([label, value], idx) => (
+            <Dropdown
+              items={["Graph 1", "Graph 2", "br", "New Graph"]}
+              onSelect={handleMenuSelect}
+              widthClass="w-[120px]"
+            // TODO: Handle menu button events
+            >
+              <div key={`${label}-${idx}`} className="grid grid-cols-5 w-full">
+                {/* Left column (label) */}
+                <div className="col-span-3 p-[5px]">
+                  <DataTextBox align="center">{label}</DataTextBox>
+                </div>
+                {/* Right column (value) */}
+                <div className="col-span-2 p-[5px]">
+                  <DataTextBox align="center">{value}</DataTextBox>
+                </div>
+              </div>
+            </Dropdown>
+          ))}
+        </div>
+
+        <div className="w-90 h-[2px] bg-white self-center rounded-xs"></div>
+
+        {/* Raw Data Display */}
+        <div className="h-[50px] grid grid-cols-6 text-white text-xs items-center justify-start">
+          <p id="raw-data" className="col-span-4 font-semibold">&nbsp;&nbsp;&nbsp;{rawData || "00 01 02 03 04 05 06 07"}</p>
+          <p id="raw-data-received" className="col-span-2 text-end font-semibold">Last Update:&nbsp;&nbsp;&nbsp;{timeDiff}ms</p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default DataCard;
