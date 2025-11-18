@@ -1,5 +1,6 @@
 import Dropdown from "./Dropdown";
 import React, { useState, useMemo, useEffect } from "react";
+import { determineCategory, getCategoryColor } from "../config/categories";
 
 interface InputProps {
   msgID: string;
@@ -43,17 +44,12 @@ function DataCard({ msgID, name, category, data, lastUpdated, rawData }: Readonl
   const timeDiff = lastUpdated ? currentTime - lastUpdated : 0;
 
   const computedCategory = useMemo(() => {
-    if (category) return category;
-    if (!data || data.length === 0) return "NO CAT";
-    const signalNames = data.flatMap(obj => Object.keys(obj));
-    const hasINV = signalNames.some(name => name.includes("INV"));
-    const hasBMS = signalNames.some(name => name.includes("BMS") || name.includes("TORCH")) || name.includes("TORCH");
-    const hasVCU = signalNames.some(name => name.includes("VCU"));
-    if (hasVCU) return "VCU";
-    else if (hasBMS) return "BMS/TORCH";
-    else if (hasINV) return "INV";
-    else return "NO CAT";
-  }, [category, data]);
+    return determineCategory(msgID, category);
+  }, [category, msgID]);
+
+  const categoryColor = useMemo(() => {
+    return getCategoryColor(computedCategory);
+  }, [computedCategory]);
 
   const [collapsed, setCollapsed] = useState(false);
   const menuItems = collapsed ? ["Add to Favourites", "br", "Expand"] : ["Add to Favourites", "br", "Collapse"];
@@ -155,13 +151,7 @@ function DataCard({ msgID, name, category, data, lastUpdated, rawData }: Readonl
         {/* Category Name */}
         {/* div background colour will change based on which category is assigned to it  */}
         <div
-          className={`${collapsed ? "rounded-r-lg" : "rounded-t-md"} col-span-2 h-[40px] mx-[0px]  box-border flex justify-center items-center
-                        ${computedCategory === "VCU" ? "bg-sky-400" :
-              computedCategory === "INV" ? "bg-green-400" :
-                computedCategory === "CAT2" ? "bg-sky-500" :
-                  computedCategory === "BMS/TORCH" ? "bg-orange-400" :
-                    computedCategory === "CAT4" ? "bg-red-500" :
-                      "bg-blue-500"}`} // Default 
+          className={`${collapsed ? "rounded-r-lg" : "rounded-t-md"} col-span-2 h-[40px] mx-[0px]  box-border flex justify-center items-center ${categoryColor}`}
         // TODO: Assign data categories to colours
         >
           <p className="text-white text-xs font-semibold">{computedCategory}</p>

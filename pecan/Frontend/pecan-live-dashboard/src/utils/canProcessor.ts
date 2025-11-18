@@ -2,7 +2,7 @@ import { Dbc, Can } from 'candied';
 import { dataStore } from '../lib/DataStore';
 // Import DBC file as raw text - Vite's ?raw suffix loads file content at build time
 // Note: Files in src/assets/ cannot be fetched via URL, they must be imported
-import dbcFile from '../assets/dbc.dbc?raw';
+import dbcFile from '../assets/example.dbc?raw';
 
 // Simple type definitions for our use, align with InfluxDB3 schema for consistency
 // InfluxDB3 Schema: id -> canId, name -> messageName, signalName, sensorReading, time
@@ -70,27 +70,20 @@ interface MessageInfo {
   signals: any[];
 }
 
-// Some sample messages. CAN ID 2048 does not exist in the DBC.
+// Some sample messages for testing
 const testMessagesRaw = [
-  "2952,CAN,170,4,12,9,0,0,16,64,0",
-  "568586,CAN,168,176,0,59,3,35,0,69,252",
-  "568586,CAN,170,6,12,8,4,0,16,67,0",
-  "568586,CAN,171,0,0,0,0,0,0,0,0",
-  "568586,CAN,172,215,1,96,254,148,228,2,0",
-  "568586,CAN,173,79,20,0,0,0,0,91,252",
-  "568587,CAN,177,178,7,250,246,0,0,0,0",
-  "568587,CAN,192,216,1,0,0,0,1,252,8",
-  "568587,CAN,176,215,1,19,254,51,9,170,14",
-  "568590,CAN,176,215,1,49,254,60,9,173,14",
-  "568593,CAN,176,215,1,29,254,68,9,170,14",
-  "568593,CAN,2048,215,1,0,0,0,1,0,0",
-  "568594,CAN,192,216,1,0,0,0,1,252,8",
-  "568596,CAN,176,215,1,38,254,79,9,170,14",
-  "568599,CAN,176,215,1,36,254,89,9,165,14",
-  "568602,CAN,176,215,1,7,254,99,9,167,14",
-  "568606,CAN,192,132,1,0,0,0,1,252,8",
-  "568611,CAN,176,215,1,27,254,110,9,168,14",
-  "568625,CAN,163,243,205,55,31,16,0,0,0"
+  "0,CAN,256,146,86,42,123,205,255,0,0",
+  "12,CAN,512,171,16,130,253,163,79,0,0",
+  "25,CAN,256,31,89,34,125,23,0,0,0",
+  "37,CAN,512,202,16,247,254,156,82,0,0",
+  "50,CAN,256,193,91,57,74,192,255,0,0",
+  "62,CAN,512,132,16,157,2,142,77,0,0",
+  "75,CAN,256,211,94,35,107,220,0,0,0",
+  "87,CAN,512,94,16,100,255,179,94,0,0",
+  "100,CAN,256,64,112,81,127,13,0,0,0",
+  "112,CAN,512,57,16,102,0,163,80,0,0",
+  "125,CAN,256,85,91,78,110,54,0,0,0",
+  "137,CAN,512,22,17,166,0,151,80,0,0"
 ];
 
 const testMessages = testMessagesRaw.map(line => {

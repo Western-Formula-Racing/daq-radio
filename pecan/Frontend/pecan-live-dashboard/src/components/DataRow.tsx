@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { determineCategory, getCategoryColor } from "../config/categories";
 
 interface DataRowProps {
     msgID: string;
@@ -22,26 +23,12 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
     const timeDiff = lastUpdated ? currentTime - lastUpdated : 0;
 
     const computedCategory = useMemo(() => {
-        if (category) return category;
-        if (!data || data.length === 0) return "NO CAT";
-        const signalNames = data.flatMap(obj => Object.keys(obj));
-        const hasINV = signalNames.some(name => name.includes("INV"));
-        const hasBMS = signalNames.some(name => name.includes("BMS") || name.includes("TORCH")) || name.includes("TORCH");
-        const hasVCU = signalNames.some(name => name.includes("VCU"));
-        if (hasVCU) return "VCU";
-        else if (hasBMS) return "BMS/TORCH";
-        else if (hasINV) return "INV";
-        else return "NO CAT";
-    }, [category, data]);
+        return determineCategory(msgID, category);
+    }, [category, msgID]);
 
-    // Category colour logic (same as DataCard)
-    const categoryColor =
-        computedCategory === "VCU" ? "bg-sky-400" :
-        computedCategory === "INV" ? "bg-green-400" :
-        computedCategory === "CAT2" ? "bg-sky-500" :
-        computedCategory === "BMS/TORCH" ? "bg-orange-400" :
-        computedCategory === "CAT4" ? "bg-red-500" :
-        "bg-blue-500"; // default
+    const categoryColor = useMemo(() => {
+        return getCategoryColor(computedCategory);
+    }, [computedCategory]);
 
     // Alternating row background 
     const rowBg = index % 2 === 0 ? "bg-sidebar" : "bg-data-module-bg";

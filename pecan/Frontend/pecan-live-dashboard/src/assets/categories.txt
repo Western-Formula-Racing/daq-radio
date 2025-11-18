@@ -1,0 +1,9 @@
+# CAN Message Category Configuration
+# Format: CategoryName,TailwindColorClass,MessageIDs
+# Message IDs can be individual numbers or ranges (e.g., 100-110)
+# Lines starting with # are comments
+
+TEST MSG,bg-purple-500,256,512
+VCU,bg-sky-400,170,171,172,173
+BMS,bg-orange-400,168,176,177,192
+INV,bg-green-400,163,180-190
