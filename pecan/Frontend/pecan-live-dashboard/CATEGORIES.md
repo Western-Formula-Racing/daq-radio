@@ -14,7 +14,7 @@ CategoryName,TailwindColorClass,MessageIDs
 
 ### Components
 
-- **CategoryName**: Display name for the category (e.g., "VCU", "BMS/TORCH", "TEST MSG")
+- **CategoryName**: Display name for the category (e.g., "VCU", "BMS", "TEST MSG")
 - **TailwindColorClass**: Tailwind CSS background color class (e.g., "bg-purple-500", "bg-sky-400")
 - **MessageIDs**: Comma-separated list of CAN message IDs or ranges
 
