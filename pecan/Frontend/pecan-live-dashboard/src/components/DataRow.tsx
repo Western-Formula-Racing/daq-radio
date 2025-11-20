@@ -94,13 +94,6 @@ export default function DataRow({
                 <div
                     className={`col-span-2 flex justify-left items-center px-3 font-bold text-xs ${categoryColor}`}
                 >
-                    {category}
-                </div>
-
-                {/* Category column with coloured background */}
-                <div
-                    className={`col-span-2 flex justify-left items-center px-3 font-bold text-xs ${categoryColor}`}
-                >
                     {computedCategory}
                 </div>
 

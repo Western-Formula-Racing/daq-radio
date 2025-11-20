@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import DataCard from "../components/DataCard";
 import DataRow from "../components/DataRow";
 import { dataStore } from "../lib/DataStore";
@@ -11,12 +11,12 @@ function Dashboard() {
     const [sortIcon, setSortIcon] = useState("../src/assets/atoz.png");
     const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
 
-    // const sortingFilter = useRef({
-    //     name: 0,
-    //     category: 0,
-    //     id: 1,
-    //     prev: "",
-    // });
+    const sortingFilter = useRef({
+        name: 0,
+        category: 0,
+        id: 1,
+        prev: "",
+    });
 
     // Use the DataStore hooks to get all latest messages
     const allLatestMessages = useAllLatestMessages();
@@ -91,60 +91,79 @@ function Dashboard() {
     // Convert Map to array for rendering
     const canMessagesArray = Array.from(allLatestMessages.entries());
 
-    // Sorts the filtered messages, keeping the alphabetical direction when switching between name and category
-    // const filteredMsgs = useMemo(() => {
-    //     const base = [...canMessagesArray];
-    //     switch (sortingMethod) {
-    //         case "name":
-    //             setSortMenuOpen(false);
-    //             if (sortingFilter.current.prev == "name") {
-    //                 sortingFilter.current.name = 1 - sortingFilter.current.name;
-    //             }
-    //             sortingFilter.current.prev = "name";
-    //             if (sortingFilter.current.name == 0) {
-    //                 //asc
-    //                 setSortIcon("../src/assets/atoz.png");
-    //                 return base.sort((a, b) => );
-    //             } else {
-    //                 //desc
-    //                 setSortIcon("../src/assets/ztoa.png");
-    //                 return base.sort((a, b) => b.name.localeCompare(a.name));
-    //             }
-    //         case "category":
-    //             setSortIcon("../src/assets/sort.png");
-    //             setSortMenuOpen(false);
-    //             sortingFilter.current.prev = "category";
-    //             return base.sort((a, b) =>
-    //                 (a.category ?? "").localeCompare(b.category ?? "")
-    //             );
-    //         case "id":
-    //             setSortMenuOpen(false);
-    //             if (sortingFilter.current.prev == "id") {
-    //                 sortingFilter.current.id = 1 - sortingFilter.current.id;
-    //             }
-    //             sortingFilter.current.prev = "id";
-    //             if (sortingFilter.current.id == 0) {
-    //                 //asc
-    //                 setSortIcon("../src/assets/id_ascending.png");
-    //                 return base.sort((a, b) =>
-    //                     a.msgID.localeCompare(b.msgID, undefined, {
-    //                         numeric: true,
-    //                     })
-    //                 );
-    //             } else {
-    //                 //desc
-    //                 setSortIcon("../src/assets/id_descending.png");
-    //                 return base.sort((a, b) =>
-    //                     b.msgID.localeCompare(a.msgID, undefined, {
-    //                         numeric: true,
-    //                     })
-    //                 );
-    //             }
-    //         // Error control; Shouldn't trigger but just in case
-    //         default:
-    //             return base;
-    //     }
-    // }, [dataItems, sortingMethod, tickUpdate]);
+    const filteredMsgs = useMemo(() => {
+        const base = [...canMessagesArray];
+        switch (sortingMethod) {
+            case "name":
+                setSortMenuOpen(false);
+                if (sortingFilter.current.prev == "name") {
+                    sortingFilter.current.name = 1 - sortingFilter.current.name;
+                }
+                sortingFilter.current.prev = "name";
+                if (sortingFilter.current.name == 0) {
+                    //asc
+                    setSortIcon("../src/assets/atoz.png");
+                    return base.sort((a, b) =>
+                        a[1].messageName.localeCompare(b[1].messageName)
+                    );
+                } else {
+                    //desc
+                    setSortIcon("../src/assets/ztoa.png");
+                    return base.sort((a, b) =>
+                        b[1].messageName.localeCompare(a[1].messageName)
+                    );
+                }
+            case "category":
+                setSortMenuOpen(false);
+                if (sortingFilter.current.prev == "category") {
+                    sortingFilter.current.id = 1 - sortingFilter.current.id;
+                }
+                sortingFilter.current.prev = "category";
+                if (sortingFilter.current.id == 0) {
+                    //asc
+                    setSortIcon("../src/assets/sort.png");
+                    return base.sort((a, b) =>
+                        a[1].messageName
+                            .split("_")[0]
+                            .localeCompare(b[1].messageName.split("_")[0])
+                    );
+                } else {
+                    //desc
+                    setSortIcon("../src/assets/sort.png");
+                    return base.sort((a, b) =>
+                        b[1].messageName
+                            .split("_")[0]
+                            .localeCompare(a[1].messageName.split("_")[0])
+                    );
+                }
+            case "id":
+                setSortMenuOpen(false);
+                if (sortingFilter.current.prev == "id") {
+                    sortingFilter.current.id = 1 - sortingFilter.current.id;
+                }
+                sortingFilter.current.prev = "id";
+                if (sortingFilter.current.id == 0) {
+                    //asc
+                    setSortIcon("../src/assets/id_ascending.png");
+                    return base.sort((a, b) =>
+                        a[1].msgID.localeCompare(b[1].msgID, undefined, {
+                            numeric: true,
+                        })
+                    );
+                } else {
+                    //desc
+                    setSortIcon("../src/assets/id_descending.png");
+                    return base.sort((a, b) =>
+                        b[1].msgID.localeCompare(a[1].msgID, undefined, {
+                            numeric: true,
+                        })
+                    );
+                }
+            // Error control; Shouldn't trigger but just in case
+            default:
+                return base;
+        }
+    }, [sortingMethod, tickUpdate]);
 
     return (
         <>
@@ -172,6 +191,12 @@ function Dashboard() {
                                         </span>
                                         <div className="bg-dropdown-menu-secondary flex flex-col space-between w-full h-full rounded-b-md">
                                             <button
+                                                className={`${
+                                                    sortingFilter.current
+                                                        .prev === "name"
+                                                        ? "font-bold"
+                                                        : "font-regular"
+                                                }`}
                                                 onClick={() => {
                                                     setSortingMethod("name");
                                                     setTickUpdate(Date.now());
@@ -180,6 +205,12 @@ function Dashboard() {
                                                 Name
                                             </button>
                                             <button
+                                                className={`${
+                                                    sortingFilter.current
+                                                        .prev === "category"
+                                                        ? "font-bold"
+                                                        : "font-regular"
+                                                }`}
                                                 onClick={() => {
                                                     setSortingMethod(
                                                         "category"
@@ -190,6 +221,12 @@ function Dashboard() {
                                                 Category
                                             </button>
                                             <button
+                                                className={`${
+                                                    sortingFilter.current
+                                                        .prev === "id"
+                                                        ? "font-bold"
+                                                        : "font-regular"
+                                                }`}
                                                 onClick={() => {
                                                     setSortingMethod("id");
                                                     setTickUpdate(Date.now());
@@ -218,23 +255,10 @@ function Dashboard() {
                         </div>
                     </div>
 
-                    {/* SORTING BUTTONS */}
-                    <div className="flex col-span-4">
-                        <button
-                            onClick={() => {
-                                setSortingMethod("id");
-                                setTickUpdate(Date.now());
-                            }}
-                            className="w-[90px] h-[50px] p-[10px] mb-3 bg-option text-white font-semibold !rounded-lg hover:bg-option/99"
-                        >
-                            Msg ID
-                        </button>
-                    </div>
-
                     {viewMode === "cards" ? (
                         <>
                             <div className="columns-2 gap-4">
-                                {canMessagesArray.map(([canId, sample]) => {
+                                {filteredMsgs.map(([canId, sample]) => {
                                     const data = Object.entries(
                                         sample.data
                                     ).map(([key, value]) => ({
@@ -268,13 +292,13 @@ function Dashboard() {
                                 })}
 
                                 {/* Static card for comparison */}
-                                <DataCard
+                                {/* <DataCard
                                     msgID="1006"
                                     name="TORCH_M1_V1"
                                     category="BMS/TORCH"
                                     lastUpdated={Date.now()}
                                     rawData="00 01 02 03 04 05 06 07"
-                                />
+                                /> */}
                             </div>
                         </>
                     ) : (
@@ -284,11 +308,30 @@ function Dashboard() {
                             <div className="w-100 h-[40px] rounded-t-sm grid grid-cols-12 bg-data-module-bg text-white font-semibold text-sm shadow-md">
                                 {/* Message ID column */}
                                 <div className="col-span-1 flex justify-left items-center ps-3">
-                                    Msg ID
+                                    <button
+                                        onClick={() => {
+                                            setSortingMethod("id");
+                                            setTickUpdate(Date.now());
+                                        }}
+                                    >
+                                        Msg ID
+                                    </button>
                                 </div>
                                 {/* Message name column */}
                                 <div className="col-span-4 flex justify-left items-center px-3">
                                     Message Name
+                                </div>
+                                {/* Category column */}
+                                <div className="col-span-2 rounded-t-sm bg-data-textbox-bg flex justify-left items-center px-3">
+                                    Category
+                                </div>
+                                {/* Data column */}
+                                <div className="col-span-4 flex justify-left items-center px-3">
+                                    Data
+                                </div>
+                                {/* Time column */}
+                                <div className="col-span-1 flex justify-left items-center ps-3">
+                                    Time
                                 </div>
 
                                 {/* Rows */}
