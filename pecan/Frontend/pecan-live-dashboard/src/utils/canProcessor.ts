@@ -1,23 +1,24 @@
-import { Dbc, Can } from 'candied';
-import { dataStore } from '../lib/DataStore';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { Dbc, Can } from "candied";
+import { dataStore } from "../lib/DataStore";
 // Import DBC file as raw text - Vite's ?raw suffix loads file content at build time
 // Note: Files in src/assets/ cannot be fetched via URL, they must be imported
-import dbcFile from '../assets/dbc.dbc?raw';
+import dbcFile from "../assets/dbc.dbc?raw";
 
 // Simple type definitions for our use, align with InfluxDB3 schema for consistency
 // InfluxDB3 Schema: id -> canId, name -> messageName, signalName, sensorReading, time
 interface DecodedMessage {
-  canId: number;
-  messageName: string;
-  time: number;  // Timestamp from WebSocket message
-  signals: {
-    [signalName: string]: {
-      sensorReading: number;
-      unit: string;
-      // rawValue: number;
+    canId: number;
+    messageName: string;
+    time: number; // Timestamp from WebSocket message
+    signals: {
+        [signalName: string]: {
+            sensorReading: number;
+            unit: string;
+            // rawValue: number;
+        };
     };
-  };
-  rawData: string;
+    rawData: string;
 }
 
 // Type for batch processing results
@@ -25,11 +26,11 @@ type ProcessResult = DecodedMessage | DecodedMessage[] | null;
 
 // Type for input WebSocket messages
 interface WebSocketMessage {
-  time?: number;
-  timestamp?: number;
-  canId?: number;
-  id?: number;
-  data?: number[];
+    time?: number;
+    timestamp?: number;
+    canId?: number;
+    id?: number;
+    data?: number[];
 }
 
 type WebSocketInput = string | WebSocketMessage | WebSocketMessage[];
@@ -40,143 +41,154 @@ type WebSocketInput = string | WebSocketMessage | WebSocketMessage[];
  * @returns Object with numeric value and unit string
  */
 function parsePhysValue(physValue: string): { value: number; unit: string } {
-  // Format is typically: "123.45 voltage:V" or just "123.45"
-  const parts = physValue.trim().split(' ');
-  const value = parseFloat(parts[0]);
-  
-  // Extract unit if present (after the colon)
-  let unit = '';
-  if (parts.length > 1) {
-    const unitPart = parts.slice(1).join(' ');
-    const colonIndex = unitPart.indexOf(':');
-    if (colonIndex !== -1) {
-      unit = unitPart.substring(colonIndex + 1);
+    // Format is typically: "123.45 voltage:V" or just "123.45"
+    const parts = physValue.trim().split(" ");
+    const value = parseFloat(parts[0]);
+
+    // Extract unit if present (after the colon)
+    let unit = "";
+    if (parts.length > 1) {
+        const unitPart = parts.slice(1).join(" ");
+        const colonIndex = unitPart.indexOf(":");
+        if (colonIndex !== -1) {
+            unit = unitPart.substring(colonIndex + 1);
+        }
     }
-  }
-  
-  return { value, unit };
+
+    return { value, unit };
 }
 
 interface CanLogEntry {
-  time: number;
-  canId: number;
-  data: number[];
+    time: number;
+    canId: number;
+    data: number[];
 }
 
 interface MessageInfo {
-  messageName: string;
-  canId: number;
-  dlc: number;
-  signals: any[];
+    messageName: string;
+    canId: number;
+    dlc: number;
+    signals: any[];
 }
 
 // Some sample messages. CAN ID 2048 does not exist in the DBC.
 const testMessagesRaw = [
-  "2952,CAN,170,4,12,9,0,0,16,64,0",
-  "568586,CAN,168,176,0,59,3,35,0,69,252",
-  "568586,CAN,170,6,12,8,4,0,16,67,0",
-  "568586,CAN,171,0,0,0,0,0,0,0,0",
-  "568586,CAN,172,215,1,96,254,148,228,2,0",
-  "568586,CAN,173,79,20,0,0,0,0,91,252",
-  "568587,CAN,177,178,7,250,246,0,0,0,0",
-  "568587,CAN,192,216,1,0,0,0,1,252,8",
-  "568587,CAN,176,215,1,19,254,51,9,170,14",
-  "568590,CAN,176,215,1,49,254,60,9,173,14",
-  "568593,CAN,176,215,1,29,254,68,9,170,14",
-  "568593,CAN,2048,215,1,0,0,0,1,0,0",
-  "568594,CAN,192,216,1,0,0,0,1,252,8",
-  "568596,CAN,176,215,1,38,254,79,9,170,14",
-  "568599,CAN,176,215,1,36,254,89,9,165,14",
-  "568602,CAN,176,215,1,7,254,99,9,167,14",
-  "568606,CAN,192,132,1,0,0,0,1,252,8",
-  "568611,CAN,176,215,1,27,254,110,9,168,14",
-  "568625,CAN,163,243,205,55,31,16,0,0,0"
+    "2952,CAN,170,4,12,9,0,0,16,64,0",
+    "568586,CAN,168,176,0,59,3,35,0,69,252",
+    "568586,CAN,170,6,12,8,4,0,16,67,0",
+    "568586,CAN,171,0,0,0,0,0,0,0,0",
+    "568586,CAN,172,215,1,96,254,148,228,2,0",
+    "568586,CAN,173,79,20,0,0,0,0,91,252",
+    "568587,CAN,177,178,7,250,246,0,0,0,0",
+    "568587,CAN,192,216,1,0,0,0,1,252,8",
+    "568587,CAN,176,215,1,19,254,51,9,170,14",
+    "568590,CAN,176,215,1,49,254,60,9,173,14",
+    "568593,CAN,176,215,1,29,254,68,9,170,14",
+    "568593,CAN,2048,215,1,0,0,0,1,0,0",
+    "568594,CAN,192,216,1,0,0,0,1,252,8",
+    "568596,CAN,176,215,1,38,254,79,9,170,14",
+    "568599,CAN,176,215,1,36,254,89,9,165,14",
+    "568602,CAN,176,215,1,7,254,99,9,167,14",
+    "568606,CAN,192,132,1,0,0,0,1,252,8",
+    "568611,CAN,176,215,1,27,254,110,9,168,14",
+    "568625,CAN,163,243,205,55,31,16,0,0,0",
 ];
 
-const testMessages = testMessagesRaw.map(line => {
-  const parts = line.split(',');
-  const time = parseInt(parts[0]);
-  const canId = parseInt(parts[2]);
-  const data = parts.slice(3).map(d => parseInt(d));
-  return { time, canId, data };
+const testMessages = testMessagesRaw.map((line) => {
+    const parts = line.split(",");
+    const time = parseInt(parts[0]);
+    const canId = parseInt(parts[2]);
+    const data = parts.slice(3).map((d) => parseInt(d));
+    return { time, canId, data };
 });
 
 /**
  * Process test CAN messages using the DBC file
  */
 export async function processTestMessages() {
-  try {
-    console.log('--- Starting CAN Message Processing ---');
+    try {
+        console.log("--- Starting CAN Message Processing ---");
 
-    // Use imported DBC file
-    const dbcText = dbcFile;
-    console.log('DBC file loaded successfully');
-    console.log('DBC file size:', dbcText.length, 'bytes');
-    console.log('First 500 chars of DBC:', dbcText.substring(0, 500));
-    console.log('Number of BO_ lines:', (dbcText.match(/^BO_ /gm) || []).length);
+        // Use imported DBC file
+        const dbcText = dbcFile;
+        console.log("DBC file loaded successfully");
+        console.log("DBC file size:", dbcText.length, "bytes");
+        console.log("First 500 chars of DBC:", dbcText.substring(0, 500));
+        console.log(
+            "Number of BO_ lines:",
+            (dbcText.match(/^BO_ /gm) || []).length
+        );
 
-    // Create DBC instance and load the content
-    const dbc = new Dbc();
-    const data = dbc.load(dbcText); // Candied's load() accepts text content directly!
-    console.log('DBC parsed successfully');
-    console.log('Data object:', data);
-    console.log('Messages in DBC:', Array.from(data.messages.keys()));
-    console.log('Number of messages:', data.messages.size);
+        // Create DBC instance and load the content
+        const dbc = new Dbc();
+        const data = dbc.load(dbcText); // Candied's load() accepts text content directly!
+        console.log("DBC parsed successfully");
+        console.log("Data object:", data);
+        console.log("Messages in DBC:", Array.from(data.messages.keys()));
+        console.log("Number of messages:", data.messages.size);
 
-    // Create a CAN decoder instance
-    const can = new Can();
-    can.database = data; // Candied uses .database property
+        // Create a CAN decoder instance
+        const can = new Can();
+        can.database = data; // Candied uses .database property
 
-    // Process each test message
-    for (const testMsg of testMessages) {
-      // Create a CAN frame from the message ID and data
-      const frame = can.createFrame(testMsg.canId, testMsg.data);
+        // Process each test message
+        for (const testMsg of testMessages) {
+            // Create a CAN frame from the message ID and data
+            const frame = can.createFrame(testMsg.canId, testMsg.data);
 
-      // Decode the frame using the DBC definitions
-      const decoded = can.decode(frame);
+            // Decode the frame using the DBC definitions
+            const decoded = can.decode(frame);
 
-      if (decoded) {
-        console.log(`\nTime: ${testMsg.time}, Message ID: ${testMsg.canId} (${decoded.name})`);
+            if (decoded) {
+                console.log(
+                    `\nTime: ${testMsg.time}, Message ID: ${testMsg.canId} (${decoded.name})`
+                );
 
-        // Candied uses boundSignals property (not signals)
-        if (decoded.boundSignals && decoded.boundSignals instanceof Map) {
-          const signals: { [key: string]: any } = {};
+                // Candied uses boundSignals property (not signals)
+                if (
+                    decoded.boundSignals &&
+                    decoded.boundSignals instanceof Map
+                ) {
+                    const signals: { [key: string]: any } = {};
 
-          decoded.boundSignals.forEach((signal, signalName) => {
-            const parsed = parsePhysValue(signal.physValue);
-            signals[signalName] = {
-              sensorReading: parsed.value,
-              unit: parsed.unit,
-              // rawValue: signal.rawValue
-            };
-          });
+                    decoded.boundSignals.forEach((signal, signalName) => {
+                        const parsed = parsePhysValue(signal.physValue);
+                        signals[signalName] = {
+                            sensorReading: parsed.value,
+                            unit: parsed.unit,
+                            // rawValue: signal.rawValue
+                        };
+                    });
 
-          console.log('Signals:', signals);
+                    console.log("Signals:", signals);
 
-          dataStore.ingestMessage({
-            msgID: testMsg.canId.toString(),
-            messageName: decoded.name || `CAN_${testMsg.canId}`,
-            data: signals,
-            rawData: testMsg.data
-              .map((byte) => byte.toString(16).padStart(2, '0').toUpperCase())
-              .join(' '),
-            timestamp: testMsg.time,
-          });
-        } else {
-          console.log('No signals found in decoded message');
+                    dataStore.ingestMessage({
+                        msgID: testMsg.canId.toString(),
+                        messageName: decoded.name || `CAN_${testMsg.canId}`,
+                        data: signals,
+                        rawData: testMsg.data
+                            .map((byte) =>
+                                byte.toString(16).padStart(2, "0").toUpperCase()
+                            )
+                            .join(" "),
+                        timestamp: testMsg.time,
+                    });
+                } else {
+                    console.log("No signals found in decoded message");
+                }
+            } else {
+                console.warn(
+                    `Message ID ${testMsg.canId} not found in DBC file`
+                );
+            }
         }
-      } else {
-        console.warn(`Message ID ${testMsg.canId} not found in DBC file`);
-      }
+
+        console.log("\n--- Processing Complete ---");
+        return data;
+    } catch (error) {
+        console.error("Error processing CAN messages:", error);
+        throw error;
     }
-    
-    console.log('\n--- Processing Complete ---');
-    return data;
-    
-  } catch (error) {
-    console.error('Error processing CAN messages:', error);
-    throw error;
-  }
 }
 
 /**
@@ -184,19 +196,21 @@ export async function processTestMessages() {
  * @param dbcPath - Path to the DBC file (URL or local path)
  * @returns Parsed DBC data structure
  */
-export async function loadDbcFile(dbcPath: string): Promise<{ dbc: Dbc; data: any }> {
-  try {
-    const response = await fetch(dbcPath);
-    const dbcText = await response.text();
-    
-    const dbc = new Dbc();
-    const data = dbc.load(dbcText); // Candied's load() works with text content
-    
-    return { dbc, data };
-  } catch (error) {
-    console.error('Error loading DBC file:', error);
-    throw error;
-  }
+export async function loadDbcFile(
+    dbcPath: string
+): Promise<{ dbc: Dbc; data: any }> {
+    try {
+        const response = await fetch(dbcPath);
+        const dbcText = await response.text();
+
+        const dbc = new Dbc();
+        const data = dbc.load(dbcText); // Candied's load() works with text content
+
+        return { dbc, data };
+    } catch (error) {
+        console.error("Error loading DBC file:", error);
+        throw error;
+    }
 }
 
 /**
@@ -208,43 +222,45 @@ export async function loadDbcFile(dbcPath: string): Promise<{ dbc: Dbc; data: an
  * @returns Decoded message with signals or null if not found
  */
 export function decodeCanMessage(
-  canInstance: Can,
-  canId: number,
-  messageData: number[],
-  time: number
+    canInstance: Can,
+    canId: number,
+    messageData: number[],
+    time: number
 ): DecodedMessage | null {
-  try {
-    const frame = canInstance.createFrame(canId, messageData);
-    const decoded = canInstance.decode(frame);
-    
-    if (!decoded) {
-      return null;
-    }
+    try {
+        const frame = canInstance.createFrame(canId, messageData);
+        const decoded = canInstance.decode(frame);
 
-    // Candied uses boundSignals (not signals)
-    const signals: { [key: string]: any } = {};
-    if (decoded.boundSignals && decoded.boundSignals instanceof Map) {
-      decoded.boundSignals.forEach((signal, signalName) => {
-        const parsed = parsePhysValue(signal.physValue);
-        signals[signalName] = {
-          sensorReading: parsed.value,
-          unit: parsed.unit,
-          // rawValue: signal.rawValue
+        if (!decoded) {
+            return null;
+        }
+
+        // Candied uses boundSignals (not signals)
+        const signals: { [key: string]: any } = {};
+        if (decoded.boundSignals && decoded.boundSignals instanceof Map) {
+            decoded.boundSignals.forEach((signal, signalName) => {
+                const parsed = parsePhysValue(signal.physValue);
+                signals[signalName] = {
+                    sensorReading: parsed.value,
+                    unit: parsed.unit,
+                    // rawValue: signal.rawValue
+                };
+            });
+        }
+
+        return {
+            canId: decoded.id,
+            messageName: decoded.name,
+            time: time,
+            signals,
+            rawData: messageData
+                .map((b) => b.toString(16).padStart(2, "0").toUpperCase())
+                .join(" "),
         };
-      });
+    } catch (error) {
+        console.error(`Error decoding message ${canId}:`, error);
+        return null;
     }
-
-    return {
-      canId: decoded.id,
-      messageName: decoded.name,
-      time: time,
-      signals,
-      rawData: messageData.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')
-    };
-  } catch (error) {
-    console.error(`Error decoding message ${canId}:`, error);
-    return null;
-  }
 }
 
 /**
@@ -253,21 +269,24 @@ export function decodeCanMessage(
  * @returns Parsed message object with time, canId and data
  */
 export function parseCanLogLine(line: string): CanLogEntry | null {
-  try {
-    const parts = line.split(',');
-    if (parts.length < 3) {
-      return null;
+    try {
+        const parts = line.split(",");
+        if (parts.length < 3) {
+            return null;
+        }
+
+        const time = parseInt(parts[0]);
+        const canId = parseInt(parts[2]);
+        const data = parts
+            .slice(3)
+            .map((d) => parseInt(d))
+            .filter((d) => !isNaN(d));
+
+        return { time, canId, data };
+    } catch (error) {
+        console.error("Error parsing CAN log line:", error);
+        return null;
     }
-    
-    const time = parseInt(parts[0]);
-    const canId = parseInt(parts[2]);
-    const data = parts.slice(3).map(d => parseInt(d)).filter(d => !isNaN(d));
-    
-    return { time, canId, data };
-  } catch (error) {
-    console.error('Error parsing CAN log line:', error);
-    return null;
-  }
 }
 
 /**
@@ -276,33 +295,33 @@ export function parseCanLogLine(line: string): CanLogEntry | null {
  * @returns Array of message information
  */
 export function getDbcMessages(dbcData: any): MessageInfo[] {
-  const messages: MessageInfo[] = [];
-  
-  dbcData.messages.forEach((message: any, messageName: string) => {
-    const signals: any[] = [];
-    
-    message.signals.forEach((signal: any, signalName: string) => {
-      signals.push({
-        signalName: signalName,
-        startBit: signal.startBit,
-        length: signal.length,
-        factor: signal.factor,
-        offset: signal.offset,
-        unit: signal.unit,
-        min: signal.min,
-        max: signal.max
-      });
+    const messages: MessageInfo[] = [];
+
+    dbcData.messages.forEach((message: any, messageName: string) => {
+        const signals: any[] = [];
+
+        message.signals.forEach((signal: any, signalName: string) => {
+            signals.push({
+                signalName: signalName,
+                startBit: signal.startBit,
+                length: signal.length,
+                factor: signal.factor,
+                offset: signal.offset,
+                unit: signal.unit,
+                min: signal.min,
+                max: signal.max,
+            });
+        });
+
+        messages.push({
+            messageName: messageName,
+            canId: message.id,
+            dlc: message.dlc,
+            signals,
+        });
     });
-    
-    messages.push({
-      messageName: messageName,
-      canId: message.id,
-      dlc: message.dlc,
-      signals
-    });
-  });
-  
-  return messages;
+
+    return messages;
 }
 
 /**
@@ -310,156 +329,170 @@ export function getDbcMessages(dbcData: any): MessageInfo[] {
  * @returns Object with methods to process CAN messages
  */
 export async function createCanProcessor(): Promise<any> {
-  // Use imported DBC file
-  const dbcText = dbcFile;
-  
-  const dbc = new Dbc();
-  const data = dbc.load(dbcText);
-  const can = new Can();
-  can.database = data; // Candied uses .database property
-  
-  return {
-    dbc,
-    data,
-    can,
-    
-    /**
-     * Decode a CAN message
-     */
-    decode: (canId: number, messageData: number[], time: number): DecodedMessage | null => {
-      return decodeCanMessage(can, canId, messageData, time);
-    },
-    
-    /**
-     * Process a raw CAN log line
-     */
-    processLogLine: (line: string): DecodedMessage | null => {
-      const parsed = parseCanLogLine(line);
-      if (!parsed) return null;
-      return decodeCanMessage(can, parsed.canId, parsed.data, parsed.time);
-    },
-    
-    /**
-     * Process multiple CAN messages in batch
-     * @param messages - Array of CAN messages
-     * @returns Array of decoded messages
-     */
-    processBatchMessages: function(messages: WebSocketInput[]): DecodedMessage[] {
-      const decodedMessages: DecodedMessage[] = [];
-      
-      for (const message of messages) {
-        const decoded = this.processWebSocketMessage(message);
-        if (decoded) {
-          // If the result is an array, flatten it
-          if (Array.isArray(decoded)) {
-            decodedMessages.push(...decoded);
-          } else {
-            decodedMessages.push(decoded);
-          }
-        }
-      }
-      
-      return decodedMessages;
-    },
+    // Use imported DBC file
+    const dbcText = dbcFile;
 
-    /**
-     * Process WebSocket CAN message
-     * @param wsMessage - WebSocket message (can be string, object, or array of objects)
-     * @returns Decoded message or array of decoded messages or null
-     */
-    processWebSocketMessage: function(wsMessage: WebSocketInput): ProcessResult {
-      // Handle different WebSocket message formats
-      
-      // If it's a string, try parsing as CSV line
-      if (typeof wsMessage === 'string') {
-        return this.processLogLine(wsMessage);
-      }
-      
-      // If it's an array of messages, process each one
-      if (Array.isArray(wsMessage)) {
-        const decodedMessages: DecodedMessage[] = [];
-        
-        for (const message of wsMessage) {
-          const decoded = this.processWebSocketMessage(message);
-          if (decoded) {
-            // If the recursive call returns an array, flatten it
-            if (Array.isArray(decoded)) {
-              decodedMessages.push(...decoded);
-            } else {
-              decodedMessages.push(decoded);
+    const dbc = new Dbc();
+    const data = dbc.load(dbcText);
+    const can = new Can();
+    can.database = data; // Candied uses .database property
+
+    return {
+        dbc,
+        data,
+        can,
+
+        /**
+         * Decode a CAN message
+         */
+        decode: (
+            canId: number,
+            messageData: number[],
+            time: number
+        ): DecodedMessage | null => {
+            return decodeCanMessage(can, canId, messageData, time);
+        },
+
+        /**
+         * Process a raw CAN log line
+         */
+        processLogLine: (line: string): DecodedMessage | null => {
+            const parsed = parseCanLogLine(line);
+            if (!parsed) return null;
+            return decodeCanMessage(
+                can,
+                parsed.canId,
+                parsed.data,
+                parsed.time
+            );
+        },
+
+        /**
+         * Process multiple CAN messages in batch
+         * @param messages - Array of CAN messages
+         * @returns Array of decoded messages
+         */
+        processBatchMessages: function (
+            messages: WebSocketInput[]
+        ): DecodedMessage[] {
+            const decodedMessages: DecodedMessage[] = [];
+
+            for (const message of messages) {
+                const decoded = this.processWebSocketMessage(message);
+                if (decoded) {
+                    // If the result is an array, flatten it
+                    if (Array.isArray(decoded)) {
+                        decodedMessages.push(...decoded);
+                    } else {
+                        decodedMessages.push(decoded);
+                    }
+                }
             }
-          }
-        }
-        
-        return decodedMessages.length > 0 ? decodedMessages : null;
-      }
-      
-      // If it's an object with time, canId/id and data properties
-      if (typeof wsMessage === 'object') {
-        const time = wsMessage.time || wsMessage.timestamp || Date.now();
-        const canId = wsMessage.canId || wsMessage.id;
-        const data = wsMessage.data;
-        
-        if (canId !== undefined && Array.isArray(data)) {
-          return decodeCanMessage(can, canId, data, time);
-        }
-      }
-      
-      return null;
-    },
-    
-    /**
-     * Get all messages in the DBC
-     */
-    getMessages: (): MessageInfo[] => {
-      return getDbcMessages(data);
-    },
-    
-    /**
-     * Get a specific message by ID
-     */
-    getMessageById: (canId: number): any => {
-      let foundMessage = null;
-      data.messages.forEach((message: any) => {
-        if (message.id === canId) {
-          foundMessage = message;
-        }
-      });
-      return foundMessage;
-    }
-  };
+
+            return decodedMessages;
+        },
+
+        /**
+         * Process WebSocket CAN message
+         * @param wsMessage - WebSocket message (can be string, object, or array of objects)
+         * @returns Decoded message or array of decoded messages or null
+         */
+        processWebSocketMessage: function (
+            wsMessage: WebSocketInput
+        ): ProcessResult {
+            // Handle different WebSocket message formats
+
+            // If it's a string, try parsing as CSV line
+            if (typeof wsMessage === "string") {
+                return this.processLogLine(wsMessage);
+            }
+
+            // If it's an array of messages, process each one
+            if (Array.isArray(wsMessage)) {
+                const decodedMessages: DecodedMessage[] = [];
+
+                for (const message of wsMessage) {
+                    const decoded = this.processWebSocketMessage(message);
+                    if (decoded) {
+                        // If the recursive call returns an array, flatten it
+                        if (Array.isArray(decoded)) {
+                            decodedMessages.push(...decoded);
+                        } else {
+                            decodedMessages.push(decoded);
+                        }
+                    }
+                }
+
+                return decodedMessages.length > 0 ? decodedMessages : null;
+            }
+
+            // If it's an object with time, canId/id and data properties
+            if (typeof wsMessage === "object") {
+                const time =
+                    wsMessage.time || wsMessage.timestamp || Date.now();
+                const canId = wsMessage.canId || wsMessage.id;
+                const data = wsMessage.data;
+
+                if (canId !== undefined && Array.isArray(data)) {
+                    return decodeCanMessage(can, canId, data, time);
+                }
+            }
+
+            return null;
+        },
+
+        /**
+         * Get all messages in the DBC
+         */
+        getMessages: (): MessageInfo[] => {
+            return getDbcMessages(data);
+        },
+
+        /**
+         * Get a specific message by ID
+         */
+        getMessageById: (canId: number): any => {
+            let foundMessage = null;
+            data.messages.forEach((message: any) => {
+                if (message.id === canId) {
+                    foundMessage = message;
+                }
+            });
+            return foundMessage;
+        },
+    };
 }
 
 /**
  * Example: Setup WebSocket listener with CAN processor
  * Usage in your browser app:
- * 
+ *
  * import { createCanProcessor } from './canProcessor';
- * 
+ *
  * // Initialize the processor
  * const processor = await createCanProcessor('/assets/dbc.dbc');
- * 
+ *
  * // Setup WebSocket
  * const ws = new WebSocket('ws://your-server:port');
- * 
+ *
  * ws.onmessage = (event) => {
  *   const decoded = processor.processWebSocketMessage(event.data);
- *   
+ *
  *   // Handle both single messages and arrays of messages
  *   const messages = Array.isArray(decoded) ? decoded : [decoded];
- *   
+ *
  *   messages.forEach(message => {
  *     if (message) {
  *       console.log('Time:', message.time);
  *       console.log('CAN ID:', message.canId);
  *       console.log('Message:', message.messageName);
  *       console.log('Signals:', message.signals);
- *       
+ *
  *       // Next step to table or graph
  *     }
  *   });
  * };
- * 
+ *
  * // Supported WebSocket message formats:
  * // 1. CSV string: "2952,CAN,170,4,12,9,0,0,16,64,0"
  *                      ^ relative timestamp will be rejected automatically in the future
