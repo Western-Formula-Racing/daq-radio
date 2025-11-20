@@ -1,50 +1,52 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 interface DataRowProps {
-  msgID: string;
-  name: string;
-  category: string;
-  data?: Record<string, string>[];
-  rawData: string;
-  time: string;
-  index: number; // for alternating row colors
+    msgID: string;
+    name: string;
+    category?: string;
+    data?: Record<string, string>[];
+    rawData: string;
+    lastUpdated: number;
+    index: number; // for alternating row colors
 }
 
-export default function DataRow({
-  msgID,
-  name,
-  category,
-  data,
-  rawData,
-  time,
-  index,
-}: Readonly<DataRowProps>) {
-  // Category colour logic (same as DataCard)
-  const categoryColor =
-    category === "POWERTRAIN"
-      ? "bg-sky-400"
-      : category === "MOTOR CONTROL"
-      ? "bg-green-400"
-      : category === "CAT2"
-      ? "bg-sky-500"
-      : category === "BMS/TORCH"
-      ? "bg-orange-400"
-      : category === "DIAGNOSTICS"
-      ? "bg-red-500"
-      : "bg-blue-500"; // default
+export default function DataRow({ msgID, name, category, data, rawData, lastUpdated, index }: Readonly<DataRowProps>) {
 
-  // Alternating row background
-  const rowBg = index % 2 === 0 ? "bg-sidebar" : "bg-data-module-bg";
+    const [currentTime, setCurrentTime] = useState(Date.now());
 
-  const [open, setOpen] = useState(false);
+    useEffect(() => {
+        const interval = setInterval(() => setCurrentTime(Date.now()), 100);
+        return () => clearInterval(interval);
+    }, []);
 
-  const rows = useMemo(() => {
-    if (!data || !data.length) return [] as [string, string][];
-    return data.map((obj) => {
-      const [label, value] = Object.entries(obj)[0] ?? ["", ""];
-      return [String(label), String(value)] as [string, string];
-    });
-  }, [data]);
+    const timeDiff = lastUpdated ? currentTime - lastUpdated : 0;
+
+    const computedCategory = useMemo(() => {
+        if (category) return category;
+        if (!data || data.length === 0) return "NO CAT";
+        const signalNames = data.flatMap(obj => Object.keys(obj));
+        const hasINV = signalNames.some(name => name.includes("INV"));
+        const hasBMS = signalNames.some(name => name.includes("BMS") || name.includes("TORCH")) || name.includes("TORCH");
+        const hasVCU = signalNames.some(name => name.includes("VCU"));
+        if (hasVCU) return "VCU";
+        else if (hasBMS) return "BMS/TORCH";
+        else if (hasINV) return "INV";
+        else return "NO CAT";
+    }, [category, data]);
+
+    // Category colour logic (same as DataCard)
+    const categoryColor =
+        computedCategory === "VCU" ? "bg-sky-400" :
+        computedCategory === "INV" ? "bg-green-400" :
+        computedCategory === "CAT2" ? "bg-sky-500" :
+        computedCategory === "BMS/TORCH" ? "bg-orange-400" :
+        computedCategory === "CAT4" ? "bg-red-500" :
+        "bg-blue-500"; // default
+
+    // Alternating row background 
+    const rowBg = index % 2 === 0 ? "bg-sidebar" : "bg-data-module-bg";
+8
+    const [open, setOpen] = useState(false);
 
   const toggle = () => setOpen((v) => !v);
 
@@ -74,10 +76,10 @@ export default function DataRow({
           {category}
         </div>
 
-        {/* Data column */}
-        <div className="col-span-4 flex justify-left items-center px-3 truncate">
-          {rawData}
-        </div>
+                {/* Category column with coloured background */}
+                <div className={`col-span-2 flex justify-left items-center px-3 font-bold text-xs ${categoryColor}`}>
+                    {computedCategory}
+                </div>
 
         {/* Time column */}
         <div className="col-span-1 flex justify-left items-center pe-3">
@@ -102,6 +104,10 @@ export default function DataRow({
               <div className="w-full text-white text-sm font-semibold py-2 px-3 text-left border-b-3 border-data-textbox-bg bg-data-textbox-bg/50">
                 Sensor
               </div>
+                {/* Time column */}
+                <div className="col-span-1 flex justify-left items-center pe-3">
+                    {timeDiff}ms
+                </div>
             </div>
             <div className="col-span-3">
               <div className="w-full text-white text-sm font-semibold py-2 px-3 text-left border-b-3 border-l-3 border-data-textbox-bg bg-data-textbox-bg/50">

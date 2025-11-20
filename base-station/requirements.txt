@@ -1,2 +1,4 @@
 redis
 cantools
+requests
+psutil

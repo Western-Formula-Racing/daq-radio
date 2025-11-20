@@ -4,10 +4,10 @@ import React, { useState, useMemo, useEffect } from "react";
 interface InputProps {
   msgID: string;
   name: string;
-  category: string;
+  category?: string;
   data?: Record<string, string>[];
   rawData: string;
-  time: string;
+  lastUpdated?: number;
 }
 
 // Defining the structure of the data, can be changed later
@@ -21,7 +21,7 @@ const DataTextBox = ({
 }) => (
   <div
     className={[
-      "w-full rounded-full bg-data-textbox-bg text-white text-sm font-semibold py-2 px-1",
+      "w-full rounded-full bg-data-textbox-bg text-white text-xs font-semibold py-2 px-1",
       align === "left" && "text-left",
       align === "center" && "text-center",
       align === "right" && "text-right",
@@ -31,11 +31,33 @@ const DataTextBox = ({
   </div>
 );
 
-function DataCard({ msgID, name, category, data, rawData, time}: Readonly<InputProps>) {
+function DataCard({ msgID, name, category, data, lastUpdated, rawData }: Readonly<InputProps>) {
+
+  const [currentTime, setCurrentTime] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setCurrentTime(Date.now()), 100);
+    return () => clearInterval(interval);
+  }, []);
+
+  const timeDiff = lastUpdated ? currentTime - lastUpdated : 0;
+
+  const computedCategory = useMemo(() => {
+    if (category) return category;
+    if (!data || data.length === 0) return "NO CAT";
+    const signalNames = data.flatMap(obj => Object.keys(obj));
+    const hasINV = signalNames.some(name => name.includes("INV"));
+    const hasBMS = signalNames.some(name => name.includes("BMS") || name.includes("TORCH")) || name.includes("TORCH");
+    const hasVCU = signalNames.some(name => name.includes("VCU"));
+    if (hasVCU) return "VCU";
+    else if (hasBMS) return "BMS/TORCH";
+    else if (hasINV) return "INV";
+    else return "NO CAT";
+  }, [category, data]);
 
   const [collapsed, setCollapsed] = useState(false);
-
   const menuItems = collapsed ? ["Add to Favourites", "br", "Expand"] : ["Add to Favourites", "br", "Collapse"];
+  const toggleCollapsed = () => setCollapsed(prev => !prev);
 
   // Event handlers for dropdown menu options specific to the data cards
   const handleMenuSelect = (selection: string) => {
@@ -66,7 +88,21 @@ function DataCard({ msgID, name, category, data, rawData, time}: Readonly<InputP
           const entries = Object.entries(obj);
           if (!entries.length) return null;
           const [label, value] = entries[0];
-          return { [String(label)]: String(value) };
+          let processedValue = String(value);
+          const parts = processedValue.split(' ');
+          if (parts.length > 0) {
+            const strNum = parts[0];
+            const decimalPart = strNum.split('.')[1];
+            const decimalPlaces = decimalPart ? decimalPart.length : 0;
+            // Rounding to 4 decimal places if more than 4 exist
+            if (decimalPlaces > 4 && !isNaN(parseFloat(strNum))) {
+              const num = parseFloat(strNum);
+              const rounded = Math.round(num * 10000) / 10000;
+              parts[0] = rounded.toString();
+              processedValue = parts.join(' ');
+            }
+          }
+          return { [String(label)]: processedValue };
         })
         .filter(Boolean) as DataPair[];
 
@@ -100,7 +136,7 @@ function DataCard({ msgID, name, category, data, rawData, time}: Readonly<InputP
         <Dropdown
           items={menuItems}
           onSelect={handleMenuSelect}
-          widthClass="w-[150px]" 
+          widthClass="w-[150px]"
         >
           <div className={`${collapsed ? "rounded-l-lg bg-data-textbox-bg" : "rounded-t-md bg-data-module-bg"} col-span-1 h-[40px] mx-[0px] w-100 box-border flex justify-center items-center cursor-pointer`}>
             <p className="text-white font-semibold ">{msgID}</p>
@@ -108,31 +144,31 @@ function DataCard({ msgID, name, category, data, rawData, time}: Readonly<InputP
         </Dropdown>
 
         {/* Message Name */}
-        <div className={`${collapsed ? "" : "rounded-t-md"} col-span-3 h-[40px] mx-[0px] box-border bg-data-module-bg flex justify-center items-center`}>
-          <p className="text-white text-xs font-semibold ">{name}</p>
+        <div className={`${collapsed ? "" : "rounded-t-md"} col-span-3 h-[40px] mx-[0px] box-border bg-data-module-bg flex justify-center items-center hover:brightness-110 transition`}>
+          <button type="button" onClick={toggleCollapsed} className={`h-[40px] mx-[0px] box-border bg-data-module-bg flex justify-center items-center`}>
+            <p className="text-white text-xs font-semibold ">{name}</p>
+          </button>
         </div>
+
 
 
         {/* Category Name */}
         {/* div background colour will change based on which category is assigned to it  */}
         <div
           className={`${collapsed ? "rounded-r-lg" : "rounded-t-md"} col-span-2 h-[40px] mx-[0px]  box-border flex justify-center items-center
-                        ${category === "POWERTRAIN" ? "bg-sky-400" :
-                          category === "MOTOR CONTROL" ? "bg-green-400" :
-                          category === "CAT2" ? "bg-sky-500" :
-                          category === "BMS/TORCH" ? "bg-orange-400" :
-                          category === "DIAGNOSTICS" ? "bg-red-500" :
-                          "bg-blue-500"}`} // Default 
+                        ${computedCategory === "VCU" ? "bg-sky-400" :
+              computedCategory === "INV" ? "bg-green-400" :
+                computedCategory === "CAT2" ? "bg-sky-500" :
+                  computedCategory === "BMS/TORCH" ? "bg-orange-400" :
+                    computedCategory === "CAT4" ? "bg-red-500" :
+                      "bg-blue-500"}`} // Default 
         // TODO: Assign data categories to colours
         >
-          <p className="text-white text-xs font-semibold ">{category}</p>
-
+          <p className="text-white text-xs font-semibold">{computedCategory}</p>
         </div>
-
       </div>
 
       {/* DM Content (collapsible) */}
-
       <div
         id={msgID}
         className={[
@@ -142,7 +178,6 @@ function DataCard({ msgID, name, category, data, rawData, time}: Readonly<InputP
         ].join(" ")}
         aria-expanded={!collapsed}
       >
-
         {/* Data Display */}
         <div className="w-full flex flex-col gap-2 p-[10px]">
           {rows.map(([label, value], idx) => (
@@ -170,14 +205,11 @@ function DataCard({ msgID, name, category, data, rawData, time}: Readonly<InputP
 
         {/* Raw Data Display */}
         <div className="h-[50px] grid grid-cols-6 text-white text-xs items-center justify-start">
-
-          <p id="raw-data" className="col-span-4 font-semibold">Raw data:&nbsp;&nbsp;&nbsp;{rawData}</p>
-          <p id="raw-data-received" className="col-span-2 text-end font-semibold">Received:&nbsp;&nbsp;&nbsp;{time}</p>
-
+          <p id="raw-data" className="col-span-4 font-semibold">&nbsp;&nbsp;&nbsp;{rawData || "00 01 02 03 04 05 06 07"}</p>
+          <p id="raw-data-received" className="col-span-2 text-end font-semibold">Last Update:&nbsp;&nbsp;&nbsp;{timeDiff}ms</p>
         </div>
       </div>
     </div>
-
   );
 }
 
