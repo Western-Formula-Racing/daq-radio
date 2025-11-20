@@ -176,11 +176,6 @@ function Dashboard() {
                                                     setSortingMethod("name");
                                                     setTickUpdate(Date.now());
                                                 }}
-                                                className={`${
-                                                    sortingMethod == "name"
-                                                        ? "font-bold"
-                                                        : "font-regular"
-                                                }`}
                                             >
                                                 Name
                                             </button>
@@ -191,11 +186,6 @@ function Dashboard() {
                                                     );
                                                     setTickUpdate(Date.now());
                                                 }}
-                                                className={`${
-                                                    sortingMethod == "category"
-                                                        ? "font-bold"
-                                                        : "font-regular"
-                                                }`}
                                             >
                                                 Category
                                             </button>
@@ -204,11 +194,6 @@ function Dashboard() {
                                                     setSortingMethod("id");
                                                     setTickUpdate(Date.now());
                                                 }}
-                                                className={`${
-                                                    sortingMethod == "id"
-                                                        ? "font-bold"
-                                                        : "font-regular"
-                                                }`}
                                             >
                                                 ID
                                             </button>
@@ -231,6 +216,19 @@ function Dashboard() {
                                 <img src="../src/assets/grid-view.png" />
                             </button>
                         </div>
+                    </div>
+
+                    {/* SORTING BUTTONS */}
+                    <div className="flex col-span-4">
+                        <button
+                            onClick={() => {
+                                setSortingMethod("id");
+                                setTickUpdate(Date.now());
+                            }}
+                            className="w-[90px] h-[50px] p-[10px] mb-3 bg-option text-white font-semibold !rounded-lg hover:bg-option/99"
+                        >
+                            Msg ID
+                        </button>
                     </div>
 
                     {viewMode === "cards" ? (
