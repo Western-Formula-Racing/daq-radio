@@ -2,7 +2,12 @@ import { Dbc, Can } from 'candied';
 import { dataStore } from '../lib/DataStore';
 // Import DBC file as raw text - Vite's ?raw suffix loads file content at build time
 // Note: Files in src/assets/ cannot be fetched via URL, they must be imported
-import dbcFile from '../assets/example.dbc?raw';
+// Import both DBC files
+import localDbc from '../assets/local.dbc?raw';
+import exampleDbc from '../assets/example.dbc?raw';
+
+// Use local.dbc for development, example.dbc for production
+const dbcFile = import.meta.env.DEV ? localDbc : exampleDbc;
 
 // Simple type definitions for our use, align with InfluxDB3 schema for consistency
 // InfluxDB3 Schema: id -> canId, name -> messageName, signalName, sensorReading, time

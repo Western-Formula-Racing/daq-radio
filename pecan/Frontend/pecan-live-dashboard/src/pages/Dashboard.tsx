@@ -25,7 +25,7 @@ function Dashboard() {
   // =====================================================================
   const [plots, setPlots] = useState<Plot[]>([]);
   const [nextPlotId, setNextPlotId] = useState(1);
-  const [plotTimeWindow, setPlotTimeWindow] = useState(60000); // Default 60s in ms
+  const [plotTimeWindow, setPlotTimeWindow] = useState(30000); // Default 30s in ms
   const [plotControls, setPlotControls] = useState<{
     visible: boolean;
     signalInfo: {
@@ -556,7 +556,11 @@ function Dashboard() {
               max="300"
               value={plotTimeWindow / 1000}
               onChange={(e) => {
-                const seconds = Math.max(5, Math.min(300, Number(e.target.value)));
+                const value = e.target.value;
+                if (value === '' || value === null) {
+                  return;
+                }
+                const seconds = Math.max(5, Math.min(300, Number(value)));
                 setPlotTimeWindow(seconds * 1000);
               }}
               className="bg-data-textbox-bg text-white rounded px-2 py-1 text-sm"

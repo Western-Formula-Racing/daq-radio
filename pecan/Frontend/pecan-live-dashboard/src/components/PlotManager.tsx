@@ -74,7 +74,6 @@ function PlotManager({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const traces: any[] = [];
       const now = Date.now();
-      const startTime = now - timeWindowMs;
 
       signals.forEach((signal) => {
         const history = dataStore.getHistory(signal.msgID, timeWindowMs);
@@ -86,8 +85,8 @@ function PlotManager({
         history.forEach((sample) => {
           const signalData = sample.data[signal.signalName];
           if (signalData !== undefined) {
-            // Convert timestamp to seconds relative to start of window
-            const timeInSeconds = (sample.timestamp - startTime) / 1000;
+            // Convert timestamp to seconds relative to now (negative for past)
+            const timeInSeconds = (sample.timestamp - now) / 1000;
             xData.push(timeInSeconds);
             yData.push(signalData.sensorReading);
           }
@@ -111,7 +110,7 @@ function PlotManager({
           title: `Plot ${plotId}`,
           xaxis: {
             title: "Time (s)",
-            range: [0, timeWindowMs / 1000],
+            range: [-(timeWindowMs / 1000), 0],
           },
           yaxis: {
             title: "Value",
