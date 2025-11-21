@@ -57,7 +57,6 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
     }, [data]);
 
     const toggle = () => setOpen((v) => !v);
-    const toggle = () => setOpen((v) => !v);
 
     return (
         <div className="w-full">

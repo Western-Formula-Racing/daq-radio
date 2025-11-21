@@ -90,55 +90,59 @@ function Dashboard() {
   // Sorting Logic
   // =====================================================================
   
-  // Sorts the filtered messages, keeping the alphabetical direction when switching between name and category
-  const filteredMsgs = useMemo(() => {
-    const base = [...canMessagesArray];
+  // Update sort icon and close menu when sorting method changes
+  useEffect(() => {
+    setSortMenuOpen(false);
+    
     switch (sortingMethod) {
       case "name":
-        setSortMenuOpen(false);
         if (sortingFilter.current.prev == "name") {
           sortingFilter.current.name = 1 - sortingFilter.current.name;
         }
         sortingFilter.current.prev = "name";
-        if (sortingFilter.current.name == 0) {
-          //asc
-          setSortIcon("../src/assets/atoz.png");
-          return base.sort((a, b) => a[1].messageName.localeCompare(b[1].messageName));
-        } else {
-          //desc
-          setSortIcon("../src/assets/ztoa.png");
-          return base.sort((a, b) => b[1].messageName.localeCompare(a[1].messageName));
-        }
+        setSortIcon(sortingFilter.current.name == 0 ? "../src/assets/atoz.png" : "../src/assets/ztoa.png");
+        break;
       case "category":
         setSortIcon("../src/assets/sort.png");
-        setSortMenuOpen(false);
         sortingFilter.current.prev = "category";
-        // Category sorting would need category data from messages
-        return base;
+        break;
       case "id":
-        setSortMenuOpen(false);
         if (sortingFilter.current.prev == "id") {
           sortingFilter.current.id = 1 - sortingFilter.current.id;
         }
         sortingFilter.current.prev = "id";
+        setSortIcon(sortingFilter.current.id == 0 ? "../src/assets/id_ascending.png" : "../src/assets/id_descending.png");
+        break;
+    }
+  }, [sortingMethod, tickUpdate]);
+
+  // Sorts the filtered messages
+  const filteredMsgs = useMemo(() => {
+    const base = [...canMessagesArray];
+    switch (sortingMethod) {
+      case "name":
+        if (sortingFilter.current.name == 0) {
+          return base.sort((a, b) => a[1].messageName.localeCompare(b[1].messageName));
+        } else {
+          return base.sort((a, b) => b[1].messageName.localeCompare(a[1].messageName));
+        }
+      case "category":
+        // Category sorting would need category data from messages
+        return base;
+      case "id":
         if (sortingFilter.current.id == 0) {
-          //asc
-          setSortIcon("../src/assets/id_ascending.png");
           return base.sort((a, b) =>
             a[0].localeCompare(b[0], undefined, {
               numeric: true,
             })
           );
         } else {
-          //desc
-          setSortIcon("../src/assets/id_descending.png");
           return base.sort((a, b) =>
             b[0].localeCompare(a[0], undefined, {
               numeric: true,
             })
           );
         }
-      // Error control; Shouldn't trigger but just in case
       default:
         return base;
     }
