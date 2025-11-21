@@ -9,9 +9,16 @@ interface DataRowProps {
     rawData: string;
     lastUpdated: number;
     index: number; // for alternating row colors
+    onSignalClick?: (
+        msgID: string,
+        signalName: string,
+        messageName: string,
+        unit: string,
+        event: React.MouseEvent
+    ) => void;
 }
 
-export default function DataRow({ msgID, name, category, data, rawData, lastUpdated, index }: Readonly<DataRowProps>) {
+export default function DataRow({ msgID, name, category, data, rawData, lastUpdated, index, onSignalClick }: Readonly<DataRowProps>) {
 
     const [currentTime, setCurrentTime] = useState(Date.now());
 
@@ -102,20 +109,33 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
                                 Value
                             </div>
                         </div>
-                        {rows.map(([label, value], idx) => (
-                            <div key={`${label}-${idx}`} className="col-span-5 grid grid-cols-5">
-                                <div className="col-span-2">
-                                    <div className="w-full text-white text-sm font-semibold py-2 px-3 text-left">
-                                        {label}
+                        {rows.map(([label, value], idx) => {
+                            // Extract unit from value (e.g., "123.45 V" -> "V")
+                            const parts = value.split(" ");
+                            const unit = parts.length > 1 ? parts.slice(1).join(" ") : "";
+
+                            return (
+                                <div key={`${label}-${idx}`} className="col-span-5 grid grid-cols-5">
+                                    <div
+                                        className="col-span-2 cursor-pointer hover:bg-data-textbox-bg/30"
+                                        onClick={(e) => {
+                                            if (onSignalClick) {
+                                                onSignalClick(msgID, label, name, unit, e);
+                                            }
+                                        }}
+                                    >
+                                        <div className="w-full text-white text-sm font-semibold py-2 px-3 text-left">
+                                            {label}
+                                        </div>
+                                    </div>
+                                    <div className="col-span-3 border-l-3 border-data-textbox-bg">
+                                        <div className="w-full text-white text-sm font-semibold py-2 px-3 text-left">
+                                            {value}
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="col-span-3 border-l-3 border-data-textbox-bg">
-                                    <div className="w-full text-white text-sm font-semibold py-2 px-3 text-left">
-                                        {value}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             </div>

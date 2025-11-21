@@ -9,6 +9,13 @@ interface InputProps {
   data?: Record<string, string>[];
   rawData: string;
   lastUpdated?: number;
+  onSignalClick?: (
+    msgID: string,
+    signalName: string,
+    messageName: string,
+    unit: string,
+    event: React.MouseEvent
+  ) => void;
 }
 
 // Defining the structure of the data, can be changed later
@@ -32,7 +39,7 @@ const DataTextBox = ({
   </div>
 );
 
-function DataCard({ msgID, name, category, data, lastUpdated, rawData }: Readonly<InputProps>) {
+function DataCard({ msgID, name, category, data, lastUpdated, rawData, onSignalClick }: Readonly<InputProps>) {
 
   const [currentTime, setCurrentTime] = useState(Date.now());
 
@@ -170,16 +177,22 @@ function DataCard({ msgID, name, category, data, lastUpdated, rawData }: Readonl
       >
         {/* Data Display */}
         <div className="w-full flex flex-col gap-2 p-[10px]">
-          {rows.map(([label, value], idx) => (
-            <Dropdown
-              items={["Graph 1", "Graph 2", "br", "New Graph"]}
-              onSelect={handleMenuSelect}
-              widthClass="w-[120px]"
-            // TODO: Handle menu button events
-            >
+          {rows.map(([label, value], idx) => {
+            // Extract unit from value (e.g., "123.45 V" -> "V")
+            const parts = value.split(" ");
+            const unit = parts.length > 1 ? parts.slice(1).join(" ") : "";
+
+            return (
               <div key={`${label}-${idx}`} className="grid grid-cols-5 w-full">
                 {/* Left column (label) */}
-                <div className="col-span-3 p-[5px]">
+                <div
+                  className="col-span-3 p-[5px] cursor-pointer hover:opacity-80"
+                  onClick={(e) => {
+                    if (onSignalClick) {
+                      onSignalClick(msgID, label, name, unit, e);
+                    }
+                  }}
+                >
                   <DataTextBox align="center">{label}</DataTextBox>
                 </div>
                 {/* Right column (value) */}
@@ -187,8 +200,8 @@ function DataCard({ msgID, name, category, data, lastUpdated, rawData }: Readonl
                   <DataTextBox align="center">{value}</DataTextBox>
                 </div>
               </div>
-            </Dropdown>
-          ))}
+            );
+          })}
         </div>
 
         <div className="w-90 h-[2px] bg-white self-center rounded-xs"></div>

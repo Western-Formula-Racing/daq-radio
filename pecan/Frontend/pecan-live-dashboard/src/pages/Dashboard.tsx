@@ -1,8 +1,16 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import DataCard from "../components/DataCard";
 import DataRow from "../components/DataRow";
+import PlotManager from "../components/PlotManager";
+import type { PlotSignal } from "../components/PlotManager";
+import PlotControls from "../components/PlotControls";
 import { dataStore } from "../lib/DataStore";
 import { useAllLatestMessages, useDataStoreStats } from "../lib/useDataStore";
+
+interface Plot {
+  id: string;
+  signals: PlotSignal[];
+}
 
 function Dashboard() {
   // Sorting and View State
@@ -12,6 +20,26 @@ function Dashboard() {
   const [tickUpdate, setTickUpdate] = useState(Date.now());
   const [sortIcon, setSortIcon] = useState("../src/assets/atoz.png");
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
+
+  // Plotting State
+  // =====================================================================
+  const [plots, setPlots] = useState<Plot[]>([]);
+  const [nextPlotId, setNextPlotId] = useState(1);
+  const [plotTimeWindow, setPlotTimeWindow] = useState(60000); // Default 60s in ms
+  const [plotControls, setPlotControls] = useState<{
+    visible: boolean;
+    signalInfo: {
+      msgID: string;
+      signalName: string;
+      messageName: string;
+      unit: string;
+    } | null;
+    position: { x: number; y: number };
+  }>({
+    visible: false,
+    signalInfo: null,
+    position: { x: 0, y: 0 },
+  });
 
   const sortingFilter = useRef({
     name: 0,
@@ -199,6 +227,92 @@ function Dashboard() {
     localStorage.setItem("dash:viewMode", viewMode);
   }, [viewMode]);
 
+  // Plot Management Functions
+  // =====================================================================
+  const handleSignalClick = (
+    msgID: string,
+    signalName: string,
+    messageName: string,
+    unit: string,
+    event: React.MouseEvent
+  ) => {
+    event.stopPropagation();
+    setPlotControls({
+      visible: true,
+      signalInfo: { msgID, signalName, messageName, unit },
+      position: { x: event.clientX, y: event.clientY },
+    });
+  };
+
+  const handleNewPlot = (signalInfo: {
+    msgID: string;
+    signalName: string;
+    messageName: string;
+    unit: string;
+  }) => {
+    const newPlotId = String(nextPlotId);
+    setPlots([
+      ...plots,
+      {
+        id: newPlotId,
+        signals: [signalInfo],
+      },
+    ]);
+    setNextPlotId(nextPlotId + 1);
+  };
+
+  const handleAddToPlot = (
+    plotId: string,
+    signalInfo: {
+      msgID: string;
+      signalName: string;
+      messageName: string;
+      unit: string;
+    }
+  ) => {
+    setPlots((prevPlots) =>
+      prevPlots.map((plot) => {
+        if (plot.id === plotId) {
+          // Check if signal already exists in this plot
+          const exists = plot.signals.some(
+            (s) => s.msgID === signalInfo.msgID && s.signalName === signalInfo.signalName
+          );
+          if (!exists) {
+            return {
+              ...plot,
+              signals: [...plot.signals, signalInfo],
+            };
+          }
+        }
+        return plot;
+      })
+    );
+  };
+
+  const handleRemoveSignalFromPlot = (
+    plotId: string,
+    msgID: string,
+    signalName: string
+  ) => {
+    setPlots((prevPlots) =>
+      prevPlots.map((plot) => {
+        if (plot.id === plotId) {
+          return {
+            ...plot,
+            signals: plot.signals.filter(
+              (s) => !(s.msgID === msgID && s.signalName === signalName)
+            ),
+          };
+        }
+        return plot;
+      })
+    );
+  };
+
+  const handleClosePlot = (plotId: string) => {
+    setPlots((prevPlots) => prevPlots.filter((plot) => plot.id !== plotId));
+  };
+
   return (
     <div className="grid grid-cols-3 gap-0 w-100 h-full">
       {/* Data display section */}
@@ -306,6 +420,7 @@ function Dashboard() {
                         }
                         lastUpdated={sample.timestamp}
                         rawData={sample.rawData}
+                        onSignalClick={handleSignalClick}
                       />
                     </div>
                   );
@@ -395,6 +510,7 @@ function Dashboard() {
                     lastUpdated={sample.timestamp}
                     rawData={sample.rawData}
                     index={i}
+                    onSignalClick={handleSignalClick}
                   />
                 );
               })}
@@ -426,7 +542,63 @@ function Dashboard() {
       </div>
 
       {/* Graph display section */}
-      <div className="col-span-1 bg-sidebar">{/* WIP */}</div>
+      <div className="col-span-1 bg-sidebar p-4 overflow-y-auto">
+        {/* Time Window Control */}
+        <div className="bg-data-module-bg rounded-md p-3 mb-3">
+          <h3 className="text-white font-semibold mb-2">Plot Settings</h3>
+          <div className="flex flex-col gap-2">
+            <label className="text-gray-300 text-sm">
+              Time Window (seconds):
+            </label>
+            <input
+              type="number"
+              min="5"
+              max="300"
+              value={plotTimeWindow / 1000}
+              onChange={(e) => {
+                const seconds = Math.max(5, Math.min(300, Number(e.target.value)));
+                setPlotTimeWindow(seconds * 1000);
+              }}
+              className="bg-data-textbox-bg text-white rounded px-2 py-1 text-sm"
+            />
+          </div>
+        </div>
+
+        {/* Plots */}
+        {plots.length === 0 ? (
+          <div className="text-center text-gray-500 mt-10">
+            <p className="mb-2">No plots yet</p>
+            <p className="text-sm">Click on a sensor to create a plot</p>
+          </div>
+        ) : (
+          plots.map((plot) => (
+            <PlotManager
+              key={plot.id}
+              plotId={plot.id}
+              signals={plot.signals}
+              timeWindowMs={plotTimeWindow}
+              onRemoveSignal={(msgID, signalName) =>
+                handleRemoveSignalFromPlot(plot.id, msgID, signalName)
+              }
+              onClosePlot={() => handleClosePlot(plot.id)}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Plot Controls Modal */}
+      {plotControls.visible && plotControls.signalInfo && (
+        <PlotControls
+          signalInfo={plotControls.signalInfo}
+          existingPlots={plots.map((p) => p.id)}
+          position={plotControls.position}
+          onNewPlot={handleNewPlot}
+          onAddToPlot={handleAddToPlot}
+          onClose={() =>
+            setPlotControls({ visible: false, signalInfo: null, position: { x: 0, y: 0 } })
+          }
+        />
+      )}
     </div>
   );
 }
