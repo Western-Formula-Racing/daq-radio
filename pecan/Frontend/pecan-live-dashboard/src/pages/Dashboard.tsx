@@ -103,8 +103,11 @@ function Dashboard() {
         setSortIcon(sortingFilter.current.name == 0 ? "../src/assets/atoz.png" : "../src/assets/ztoa.png");
         break;
       case "category":
-        setSortIcon("../src/assets/sort.png");
+        if (sortingFilter.current.prev == "category") {
+          sortingFilter.current.category = 1 - sortingFilter.current.category;
+        }
         sortingFilter.current.prev = "category";
+        setSortIcon("../src/assets/sort.png");
         break;
       case "id":
         if (sortingFilter.current.prev == "id") {
@@ -127,8 +130,24 @@ function Dashboard() {
           return base.sort((a, b) => b[1].messageName.localeCompare(a[1].messageName));
         }
       case "category":
-        // Category sorting would need category data from messages
-        return base;
+        // Sort by computed category matching DataRow logic
+        const sorted = base.sort((a, b) => {
+          const getCat = (entry: any) => {
+            const [canId, sample] = entry;
+            const data = sample.data;
+            if (!data || Object.keys(data).length === 0) return "ZZZ_NO_CAT";
+            const signalNames = Object.keys(data);
+            const hasINV = signalNames.some(name => name.includes("INV"));
+            const hasBMS = signalNames.some(name => name.includes("BMS") || name.includes("TORCH")) || sample.messageName.includes("TORCH");
+            const hasVCU = signalNames.some(name => name.includes("VCU"));
+            if (hasVCU) return "VCU";
+            else if (hasBMS) return "BMS/TORCH";
+            else if (hasINV) return "INV";
+            else return "ZZZ_NO_CAT";
+          };
+          return getCat(a).localeCompare(getCat(b));
+        });
+        return sortingFilter.current.category == 0 ? sorted : sorted.reverse();
       case "id":
         if (sortingFilter.current.id == 0) {
           return base.sort((a, b) =>
