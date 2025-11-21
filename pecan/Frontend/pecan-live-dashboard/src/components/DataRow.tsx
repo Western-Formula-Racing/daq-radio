@@ -32,7 +32,7 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
 
     // Alternating row background 
     const rowBg = index % 2 === 0 ? "bg-sidebar" : "bg-data-module-bg";
-8
+
     const [open, setOpen] = useState(false);
 
     const rows = useMemo(() => {
@@ -120,6 +120,5 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
                 </div>
             </div>
         </div>
-
     );
 }

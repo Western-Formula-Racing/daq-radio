@@ -5,66 +5,67 @@
 @tailwind utilities;
 
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  font-weight: 400;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+    font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+    font-weight: 400;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 @theme {
-  --color-sidebar: #171720;
-  --color-sidebarfg: #8e8eab;
-  --color-option: #20202f;
-  --color-option-select: #3d3d4f;
+    --color-sidebar: #171720;
+    --color-sidebarfg: #8e8eab;
+    --color-option: #20202f;
+    --color-option-select: #3d3d4f;
 
-  --color-data-module-bg: #20202f;
-  --color-dropdown-menu-bg: #8E8EAB;
-  --color-data-textbox-bg: #35354c;
+    --color-data-module-bg: #20202f;
+    --color-dropdown-menu-bg: #8e8eab;
+    --color-dropdown-menu-secondary: #747492;
+    --color-data-textbox-bg: #35354c;
 
-  --font-heading: "ZipSonik", sans-serif;
-  --font-footer: "Days One", sans-serif;
+    --font-heading: "ZipSonik", sans-serif;
+    --font-footer: "Days One", sans-serif;
 }
 
 body {
-  background-color: #0d0c11;
+    background-color: #0d0c11;
 }
 
 p {
-  margin-bottom: 0 !important;
+    margin-bottom: 0 !important;
 }
 
 /* temporary local fonts */
 
 @font-face {
-  font-family: ZipSonik;
-  src: url("./assets/fonts/ZipSonik-Italic.otf") format("opentype");
-  font-style: normal;
-  font-display: swap;
+    font-family: ZipSonik;
+    src: url("./assets/fonts/ZipSonik-Italic.otf") format("opentype");
+    font-style: normal;
+    font-display: swap;
 }
 
 @font-face {
-  font-family: Days One;
-  src: url("./assets/fonts/DaysOne-Regular.ttf") format("truetype");
-  font-style: normal;
-  font-display: swap;
-  font-weight: 400;
+    font-family: Days One;
+    src: url("./assets/fonts/DaysOne-Regular.ttf") format("truetype");
+    font-style: normal;
+    font-display: swap;
+    font-weight: 400;
 }
 
 @layer utilities {
-  @keyframes tab-in {
-    from {
-      transform: scaleX(0);
+    @keyframes tab-in {
+        from {
+            transform: scaleX(0);
+        }
+        to {
+            transform: scaleX(1);
+        }
     }
-    to {
-      transform: scaleX(1);
+    .animate-tab-in {
+        animation: tab-in 300ms ease-out forwards;
+        transform-origin: left;
     }
-  }
-  .animate-tab-in {
-    animation: tab-in 300ms ease-out forwards;
-    transform-origin: left;
-  }
 }
 
 .avoid-break {
