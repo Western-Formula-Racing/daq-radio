@@ -5,7 +5,7 @@ type DropdownProps = {
   children: React.ReactNode;               // base trigger element (wrapped/enhanced)
   onSelect?: (value: string) => void;      // callback when an option is clicked, to be changed
   align?: "left" | "right" | "center";     // menu alignment under trigger
-  widthClass?: string;                     // Tailwind width ("w-56", "min-w-full")
+  widthClass?: string;                    
   closeOnSelect?: boolean;                 // close after choose item
 };
 

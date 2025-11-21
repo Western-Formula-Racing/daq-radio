@@ -67,3 +67,7 @@ p {
         transform-origin: left;
     }
 }
+
+.avoid-break {
+  break-inside: avoid;
+}
