@@ -1,0 +1,58 @@
+VERSION ""
+
+NS_ :
+    NS_DESC_
+    CM_
+    BA_DEF_
+    BA_
+    VAL_
+    CAT_DEF_
+    CAT_
+    FILTER
+    BA_DEF_DEF_
+    EV_DATA_
+    ENVVAR_DATA_
+    SGTYPE_
+    SGTYPE_VAL_
+    BA_DEF_SGTYPE_
+    BA_SGTYPE_
+    SIG_TYPE_REF_
+    VAL_TABLE_
+    SIG_GROUP_
+    SIGTYPE_VALTYPE_
+    SIGTYPE_VALTYPE_DATA_
+    BO_TX_BU_
+    BA_DEF_REL_
+    BA_REL_
+    BA_DEF_DEF_REL_
+    BU_SG_REL_
+    BU_EV_REL_
+    BU_BO_REL_
+    SG_MUL_VAL_
+
+BS_:
+
+BU_: Vector__XXX
+
+BO_ 256 ExampleDrivetrain: 8 Vector__XXX
+ SG_ EngineSpeed : 0|16@1+ (0.125,0) [0|8000] "rpm" Vector__XXX
+ SG_ ThrottlePosition : 16|8@1+ (0.5,0) [0|100] "%" Vector__XXX
+ SG_ OilPressure : 24|8@1+ (1,0) [0|255] "kPa" Vector__XXX
+ SG_ SteeringAngle : 32|16@1- (0.1,0) [-180|180] "deg" Vector__XXX
+
+BO_ 512 ExampleBattery: 8 Vector__XXX
+ SG_ PackVoltage : 0|16@1+ (0.1,0) [0|600] "V" Vector__XXX
+ SG_ PackCurrent : 16|16@1- (0.1,0) [-300|300] "A" Vector__XXX
+ SG_ StateOfCharge : 32|8@1+ (0.5,0) [0|100] "%" Vector__XXX
+ SG_ CellTemperature : 40|8@1+ (1,-40) [-40|215] "C" Vector__XXX
+
+CM_ BO_ 256 "Sample drivetrain message for development and testing";
+CM_ BO_ 512 "Sample battery telemetry message for development and testing";
+CM_ SG_ 256 EngineSpeed "Engine crankshaft speed";
+CM_ SG_ 256 ThrottlePosition "Driver throttle pedal position";
+CM_ SG_ 256 OilPressure "Lubrication system pressure";
+CM_ SG_ 256 SteeringAngle "Front wheel steering angle";
+CM_ SG_ 512 PackVoltage "High voltage pack voltage";
+CM_ SG_ 512 PackCurrent "High voltage pack current";
+CM_ SG_ 512 StateOfCharge "Estimated battery state of charge";
+CM_ SG_ 512 CellTemperature "Representative cell temperature";
