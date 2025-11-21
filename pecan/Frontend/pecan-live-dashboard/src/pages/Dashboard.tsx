@@ -5,7 +5,6 @@ import { dataStore } from "../lib/DataStore";
 import { useAllLatestMessages, useDataStoreStats } from "../lib/useDataStore";
 
 function Dashboard() {
-
   // Sorting and View State
   // =====================================================================
   const [sortingMethod, setSortingMethod] = useState("name");
@@ -29,8 +28,8 @@ function Dashboard() {
   const dataStoreStats = useDataStoreStats();
 
   const [performanceStats, setPerformanceStats] = useState({
-    memoryUsage: 'N/A' as string | number,
-    fps: 0
+    memoryUsage: "N/A" as string | number,
+    fps: 0,
   });
 
   const frameCountRef = useRef(0);
@@ -48,8 +47,10 @@ function Dashboard() {
       frameCountRef.current++;
       const now = Date.now();
       if (now - lastFpsUpdateRef.current >= 1000) {
-        const fps = Math.round((frameCountRef.current * 1000) / (now - lastFpsUpdateRef.current));
-        setPerformanceStats(prev => ({ ...prev, fps }));
+        const fps = Math.round(
+          (frameCountRef.current * 1000) / (now - lastFpsUpdateRef.current)
+        );
+        setPerformanceStats((prev) => ({ ...prev, fps }));
 
         if (fps < 30) {
           console.warn(`Low FPS: ${fps}`);
@@ -64,12 +65,12 @@ function Dashboard() {
 
     // Memory monitoring
     const updateMemory = () => {
-      if ('memory' in performance) {
+      if ("memory" in performance) {
         const memInfo = (performance as any).memory;
         const memoryMB = Math.round(memInfo.usedJSHeapSize / 1024 / 1024);
-        setPerformanceStats(prev => ({
+        setPerformanceStats((prev) => ({
           ...prev,
-          memoryUsage: memoryMB
+          memoryUsage: memoryMB,
         }));
 
         if (memoryMB > 100) {
@@ -89,18 +90,22 @@ function Dashboard() {
 
   // Sorting Logic
   // =====================================================================
-  
+
   // Update sort icon and close menu when sorting method changes
   useEffect(() => {
     setSortMenuOpen(false);
-    
+
     switch (sortingMethod) {
       case "name":
         if (sortingFilter.current.prev == "name") {
           sortingFilter.current.name = 1 - sortingFilter.current.name;
         }
         sortingFilter.current.prev = "name";
-        setSortIcon(sortingFilter.current.name == 0 ? "../src/assets/atoz.png" : "../src/assets/ztoa.png");
+        setSortIcon(
+          sortingFilter.current.name == 0
+            ? "../src/assets/atoz.png"
+            : "../src/assets/ztoa.png"
+        );
         break;
       case "category":
         if (sortingFilter.current.prev == "category") {
@@ -114,7 +119,11 @@ function Dashboard() {
           sortingFilter.current.id = 1 - sortingFilter.current.id;
         }
         sortingFilter.current.prev = "id";
-        setSortIcon(sortingFilter.current.id == 0 ? "../src/assets/id_ascending.png" : "../src/assets/id_descending.png");
+        setSortIcon(
+          sortingFilter.current.id == 0
+            ? "../src/assets/id_ascending.png"
+            : "../src/assets/id_descending.png"
+        );
         break;
     }
   }, [sortingMethod, tickUpdate]);
@@ -123,23 +132,31 @@ function Dashboard() {
   const filteredMsgs = useMemo(() => {
     const base = [...canMessagesArray];
     switch (sortingMethod) {
-      case "name":
+      case "name": {
         if (sortingFilter.current.name == 0) {
-          return base.sort((a, b) => a[1].messageName.localeCompare(b[1].messageName));
+          return base.sort((a, b) =>
+            a[1].messageName.localeCompare(b[1].messageName)
+          );
         } else {
-          return base.sort((a, b) => b[1].messageName.localeCompare(a[1].messageName));
+          return base.sort((a, b) =>
+            b[1].messageName.localeCompare(a[1].messageName)
+          );
         }
-      case "category":
+      }
+      case "category": {
         // Sort by computed category matching DataRow logic
-        const sorted = base.sort((a, b) => {
+        const sorted = [...base].sort((a, b) => {
           const getCat = (entry: any) => {
             const [canId, sample] = entry;
             const data = sample.data;
             if (!data || Object.keys(data).length === 0) return "ZZZ_NO_CAT";
             const signalNames = Object.keys(data);
-            const hasINV = signalNames.some(name => name.includes("INV"));
-            const hasBMS = signalNames.some(name => name.includes("BMS") || name.includes("TORCH")) || sample.messageName.includes("TORCH");
-            const hasVCU = signalNames.some(name => name.includes("VCU"));
+            const hasINV = signalNames.some((name) => name.includes("INV"));
+            const hasBMS =
+              signalNames.some(
+                (name) => name.includes("BMS") || name.includes("TORCH")
+              ) || sample.messageName.includes("TORCH");
+            const hasVCU = signalNames.some((name) => name.includes("VCU"));
             if (hasVCU) return "VCU";
             else if (hasBMS) return "BMS/TORCH";
             else if (hasINV) return "INV";
@@ -148,7 +165,8 @@ function Dashboard() {
           return getCat(a).localeCompare(getCat(b));
         });
         return sortingFilter.current.category == 0 ? sorted : sorted.reverse();
-      case "id":
+      }
+      case "id": {
         if (sortingFilter.current.id == 0) {
           return base.sort((a, b) =>
             a[0].localeCompare(b[0], undefined, {
@@ -162,12 +180,13 @@ function Dashboard() {
             })
           );
         }
+      }
       default:
         return base;
     }
   }, [canMessagesArray, sortingMethod, tickUpdate]);
 
-  // View Mode 
+  // View Mode
   // =====================================================================
 
   // Persisting user view mode choice
@@ -180,21 +199,15 @@ function Dashboard() {
     localStorage.setItem("dash:viewMode", viewMode);
   }, [viewMode]);
 
-
   return (
     <div className="grid grid-cols-3 gap-0 w-100 h-full">
       {/* Data display section */}
       <div className="col-span-2 relative flex flex-col h-full overflow-y-auto">
-
         <div className="flex-1 p-4 pb-16">
-
           {/* Data filter / view selection menu */}
           <div className="bg-data-module-bg w-full h-[100px] grid grid-cols-4 gap-1 rounded-md mb-[15px]">
-
             {/* Data category filters */}
-            <div className="col-span-3">
-              {/* WIP */}
-            </div>
+            <div className="col-span-3">{/* WIP */}</div>
 
             {/* View selection options */}
             <div className="col-span-1 flex items-center justify-end gap-1 p-3">
@@ -215,7 +228,9 @@ function Dashboard() {
                           setSortingMethod("name");
                           setTickUpdate(Date.now());
                         }}
-                        className={`${sortingMethod == "name" ? "font-bold" : "font-regular"}`}
+                        className={`${
+                          sortingMethod == "name" ? "font-bold" : "font-regular"
+                        }`}
                       >
                         Name
                       </button>
@@ -224,7 +239,11 @@ function Dashboard() {
                           setSortingMethod("category");
                           setTickUpdate(Date.now());
                         }}
-                        className={`${sortingMethod == "category" ? "font-bold" : "font-regular"}`}
+                        className={`${
+                          sortingMethod == "category"
+                            ? "font-bold"
+                            : "font-regular"
+                        }`}
                       >
                         Category
                       </button>
@@ -233,7 +252,9 @@ function Dashboard() {
                           setSortingMethod("id");
                           setTickUpdate(Date.now());
                         }}
-                        className={`${sortingMethod == "id" ? "font-bold" : "font-regular"}`}
+                        className={`${
+                          sortingMethod == "id" ? "font-bold" : "font-regular"
+                        }`}
                       >
                         ID
                       </button>
@@ -241,10 +262,18 @@ function Dashboard() {
                   </div>
                 )}
               </div>
-              <button onClick={() => setViewMode("list")} className="w-[50px] h-[50px] p-[10px] !rounded-lg flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 transition-colors object-contain" aria-pressed={viewMode === "list"}>
+              <button
+                onClick={() => setViewMode("list")}
+                className="w-[50px] h-[50px] p-[10px] !rounded-lg flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 transition-colors object-contain"
+                aria-pressed={viewMode === "list"}
+              >
                 <img src="../src/assets/list-view.png" />
               </button>
-              <button onClick={() => setViewMode("cards")} className="w-[50px] h-[50px] p-[10px] !rounded-lg flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 transition-colors object-contain" aria-pressed={viewMode === "cards"}>
+              <button
+                onClick={() => setViewMode("cards")}
+                className="w-[50px] h-[50px] p-[10px] !rounded-lg flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 transition-colors object-contain"
+                aria-pressed={viewMode === "cards"}
+              >
                 <img src="../src/assets/grid-view.png" />
               </button>
             </div>
@@ -254,9 +283,11 @@ function Dashboard() {
             <>
               <div className="columns-2 gap-4">
                 {filteredMsgs.map(([canId, sample]) => {
-                  const data = Object.entries(sample.data).map(([key, value]) => ({
-                    [key]: `${value.sensorReading} ${value.unit}`
-                  }));
+                  const data = Object.entries(sample.data).map(
+                    ([key, value]) => ({
+                      [key]: `${value.sensorReading} ${value.unit}`,
+                    })
+                  );
 
                   return (
                     <div key={canId} className="mb-4 avoid-break">
@@ -264,7 +295,15 @@ function Dashboard() {
                         key={canId}
                         msgID={canId}
                         name={sample.messageName}
-                        data={data.length > 0 ? data : [{ "No Data": "Waiting for messages..." }]}
+                        data={
+                          data.length > 0
+                            ? data
+                            : [
+                                {
+                                  "No Data": "Waiting for messages...",
+                                },
+                              ]
+                        }
                         lastUpdated={sample.timestamp}
                         rawData={sample.rawData}
                       />
@@ -285,7 +324,6 @@ function Dashboard() {
           ) : (
             // List view box
             <div className="w-100 h-fit rounded-sm bg-sidebar">
-
               {/* Header */}
               <div className="w-100 h-[40px] rounded-t-sm grid grid-cols-12 bg-data-module-bg text-white font-semibold text-sm shadow-md">
                 {/* Message ID column */}
@@ -334,16 +372,26 @@ function Dashboard() {
               {/* Rows */}
 
               {filteredMsgs.map(([canId, sample], i) => {
-                const data = Object.entries(sample.data).map(([key, value]) => ({
-                  [key]: `${value.sensorReading} ${value.unit}`
-                }));
+                const data = Object.entries(sample.data).map(
+                  ([key, value]) => ({
+                    [key]: `${value.sensorReading} ${value.unit}`,
+                  })
+                );
 
                 return (
                   <DataRow
                     key={canId}
                     msgID={canId}
                     name={sample.messageName}
-                    data={data.length > 0 ? data : [{ "No Data": "Waiting for messages..." }]}
+                    data={
+                      data.length > 0
+                        ? data
+                        : [
+                            {
+                              "No Data": "Waiting for messages...",
+                            },
+                          ]
+                    }
                     lastUpdated={sample.timestamp}
                     rawData={sample.rawData}
                     index={i}
@@ -359,20 +407,26 @@ function Dashboard() {
           <div className="w-full py-2 px-4 bg-data-textbox-bg/90 backdrop-blur text-gray-300 text-xs border-t border-white/10">
             <div className="flex justify-between items-center max-w-6xl mx-auto">
               <span>FPS: {performanceStats.fps}</span>
-              <span>CAN frames/sec: {dataStoreStats.totalMessages > 0 ? 'Live' : '0'}</span>
-              <span>Mem: {performanceStats.memoryUsage}{typeof performanceStats.memoryUsage === 'number' ? 'MB' : ''}</span>
-              <span>Store: {dataStoreStats.totalMessages} msgs, {dataStoreStats.totalSamples} samples</span>
+              <span>
+                CAN frames/sec:{" "}
+                {dataStoreStats.totalMessages > 0 ? "Live" : "0"}
+              </span>
+              <span>
+                Mem: {performanceStats.memoryUsage}
+                {typeof performanceStats.memoryUsage === "number" ? "MB" : ""}
+              </span>
+              <span>
+                Store: {dataStoreStats.totalMessages} msgs,{" "}
+                {dataStoreStats.totalSamples} samples
+              </span>
               <span>Store Mem: {dataStoreStats.memoryEstimateMB}MB</span>
             </div>
           </div>
         </div>
+      </div>
 
-      </div>
-      
       {/* Graph display section */}
-      <div className="col-span-1 bg-sidebar">
-        {/* WIP */}
-      </div>
+      <div className="col-span-1 bg-sidebar">{/* WIP */}</div>
     </div>
   );
 }
