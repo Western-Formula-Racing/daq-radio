@@ -223,3 +223,4 @@ ENV/
 .idea/workspace.xml
 /.idea
 node_modules/
+pecan/Frontend/pecan-live-dashboard/src/assets/local.dbc
