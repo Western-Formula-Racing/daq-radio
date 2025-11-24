@@ -44,6 +44,17 @@ const MonitorBuilder = () => {
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
   
   const allSignals = useAllSignals();
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredSignals = allSignals.filter((signal) => {
+    if (!searchQuery) return true;
+    const lowerQuery = searchQuery.toLowerCase();
+    const terms = lowerQuery.split(' ').filter((t) => t.length > 0);
+    const signalNameLower = signal.signalName.toLowerCase();
+    const msgIDLower = signal.msgID.toLowerCase();
+    const searchTarget = `${signalNameLower} ${msgIDLower}`;
+    return terms.every((term) => searchTarget.includes(term));
+  });
 
   const onConnect = useCallback(
     (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, animated: true, style: { stroke: '#fff', strokeDasharray: '5 5' } }, eds)),
@@ -99,8 +110,17 @@ const MonitorBuilder = () => {
             {/* Sidebar for Drag and Drop */}
             <div className="w-64 bg-data-module-bg p-4 flex flex-col gap-2 overflow-y-auto border-r border-gray-700">
                 <h2 className="text-xl font-bold mb-4">Available Signals</h2>
+                
+                <input
+                    type="text"
+                    placeholder="Search signals..."
+                    className="w-full p-2 mb-2 bg-data-textbox-bg rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-600 text-sm"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                />
+
                 <div className="text-xs text-gray-400 mb-2">Drag to canvas</div>
-                {allSignals.map((signal, index) => (
+                {filteredSignals.map((signal, index) => (
                     <div
                         key={`${signal.msgID}-${signal.signalName}-${index}`} // Use a unique key
                         className="p-2 bg-data-textbox-bg rounded cursor-grab hover:bg-data-textbox-bg/80 transition-colors"
@@ -110,8 +130,8 @@ const MonitorBuilder = () => {
                         <span className="font-semibold">{signal.signalName}</span> <span className="text-gray-400 text-xs">({signal.msgID})</span>
                     </div>
                 ))}
-                {allSignals.length === 0 && (
-                    <div className="text-gray-500 italic">No signals available</div>
+                {filteredSignals.length === 0 && (
+                    <div className="text-gray-500 italic">No signals found</div>
                 )}
             </div>
 
