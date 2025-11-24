@@ -89,12 +89,24 @@ class DataStore {
     
     const msgID = message.msgID;
 
+    // Round sensor readings to 3 decimal places for cleaner display
+    const roundedData = { ...message.data };
+    Object.keys(roundedData).forEach((key) => {
+      const signal = roundedData[key];
+      if (signal && typeof signal.sensorReading === 'number') {
+        roundedData[key] = {
+          ...signal,
+          sensorReading: Math.round(signal.sensorReading * 1000) / 1000,
+        };
+      }
+    });
+
     // Create the sample
     const sample: TelemetrySample = {
       timestamp,
       msgID,
       messageName: message.messageName,
-      data: message.data,
+      data: roundedData,
       rawData: message.rawData,
     };
 
