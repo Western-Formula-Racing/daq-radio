@@ -3,6 +3,13 @@ import DataCard from "../components/DataCard";
 import DataRow from "../components/DataRow";
 import { dataStore } from "../lib/DataStore";
 import { useAllLatestMessages, useDataStoreStats } from "../lib/useDataStore";
+import atozIcon from "../assets/atoz.png";
+import ztoaIcon from "../assets/ztoa.png";
+import sortIcon from "../assets/sort.png";
+import idAscendingIcon from "../assets/id_ascending.png";
+import idDescendingIcon from "../assets/id_descending.png";
+import listViewIcon from "../assets/list-view.png";
+import gridViewIcon from "../assets/grid-view.png";
 
 function Dashboard() {
   // Sorting and View State
@@ -10,7 +17,7 @@ function Dashboard() {
   const [sortingMethod, setSortingMethod] = useState("name");
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [tickUpdate, setTickUpdate] = useState(Date.now());
-  const [sortIcon, setSortIcon] = useState("../src/assets/atoz.png");
+  const [currentSortIcon, setCurrentSortIcon] = useState(atozIcon);
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
 
   const sortingFilter = useRef({
@@ -101,10 +108,10 @@ function Dashboard() {
           sortingFilter.current.name = 1 - sortingFilter.current.name;
         }
         sortingFilter.current.prev = "name";
-        setSortIcon(
+        setCurrentSortIcon(
           sortingFilter.current.name == 0
-            ? "../src/assets/atoz.png"
-            : "../src/assets/ztoa.png"
+            ? atozIcon
+            : ztoaIcon
         );
         break;
       case "category":
@@ -112,17 +119,17 @@ function Dashboard() {
           sortingFilter.current.category = 1 - sortingFilter.current.category;
         }
         sortingFilter.current.prev = "category";
-        setSortIcon("../src/assets/sort.png");
+        setCurrentSortIcon(sortIcon);
         break;
       case "id":
         if (sortingFilter.current.prev == "id") {
           sortingFilter.current.id = 1 - sortingFilter.current.id;
         }
         sortingFilter.current.prev = "id";
-        setSortIcon(
+        setCurrentSortIcon(
           sortingFilter.current.id == 0
-            ? "../src/assets/id_ascending.png"
-            : "../src/assets/id_descending.png"
+            ? idAscendingIcon
+            : idDescendingIcon
         );
         break;
     }
@@ -147,7 +154,7 @@ function Dashboard() {
         // Sort by computed category matching DataRow logic
         const sorted = [...base].sort((a, b) => {
           const getCat = (entry: any) => {
-            const [canId, sample] = entry;
+            const [, sample] = entry;
             const data = sample.data;
             if (!data || Object.keys(data).length === 0) return "ZZZ_NO_CAT";
             const signalNames = Object.keys(data);
@@ -217,7 +224,7 @@ function Dashboard() {
                   onClick={() => setSortMenuOpen((o) => !o)}
                   className="w-[50px] h-[50px] p-[10px] !rounded-lg flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 transition-colors object-contain"
                 >
-                  <img src={sortIcon} />
+                  <img src={currentSortIcon} alt="Sort" />
                 </button>
                 {sortMenuOpen && (
                   <div className="flex flex-col block fixed top-30 z-100 rounded-md bg-dropdown-menu-bg w-30 h-20 text-center text-white">
@@ -267,14 +274,14 @@ function Dashboard() {
                 className="w-[50px] h-[50px] p-[10px] !rounded-lg flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 transition-colors object-contain"
                 aria-pressed={viewMode === "list"}
               >
-                <img src="../src/assets/list-view.png" />
+                <img src={listViewIcon} alt="List view" />
               </button>
               <button
                 onClick={() => setViewMode("cards")}
                 className="w-[50px] h-[50px] p-[10px] !rounded-lg flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 transition-colors object-contain"
                 aria-pressed={viewMode === "cards"}
               >
-                <img src="../src/assets/grid-view.png" />
+                <img src={gridViewIcon} alt="Grid view" />
               </button>
             </div>
           </div>

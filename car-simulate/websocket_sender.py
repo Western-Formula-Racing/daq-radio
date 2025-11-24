@@ -9,7 +9,7 @@ import time
 WS_URL = 'ws://localhost:8080/ws'
 
 # Path to the CAN data file (CSV format: timestamp,CAN,canId,data1,data2,data3,data4,data5,data6,data7,data8)
-DATA_FILE = '2025-10-04-09-50-03.csv'  # Replace with the exact filename if different
+DATA_FILE = '2025-01-01-00-07-00.csv'  # Replace with the exact filename if different
 
 def load_can_data(file_path):
     """Load CAN data from CSV file and format as JSON objects."""
