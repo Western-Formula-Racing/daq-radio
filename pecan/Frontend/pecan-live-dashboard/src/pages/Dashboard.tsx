@@ -147,7 +147,7 @@ function Dashboard() {
         // Sort by computed category matching DataRow logic
         const sorted = [...base].sort((a, b) => {
           const getCat = (entry: any) => {
-            const [canId, sample] = entry;
+            const [, sample] = entry;
             const data = sample.data;
             if (!data || Object.keys(data).length === 0) return "ZZZ_NO_CAT";
             const signalNames = Object.keys(data);
