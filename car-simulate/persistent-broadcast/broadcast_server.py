@@ -45,16 +45,13 @@ def load_can_data(file_path: str) -> List[dict]:
     print(f"Loaded {len(data)} CAN messages")
     return data
 
-async def handle_client(websocket: WebSocketServerProtocol, path: str):
-    """Handle new WebSocket client connections."""
+async def handle_client(websocket: WebSocketServerProtocol):
     connected_clients.add(websocket)
     client_info = f"{websocket.remote_address[0]}:{websocket.remote_address[1]}"
     print(f"Client connected: {client_info} (Total clients: {len(connected_clients)})")
     
     try:
-        # Keep connection alive and handle incoming messages
         async for message in websocket:
-            # Echo or log received messages if needed
             print(f"Received from {client_info}: {message[:100]}")
     except websockets.exceptions.ConnectionClosed:
         print(f"Client disconnected: {client_info}")
