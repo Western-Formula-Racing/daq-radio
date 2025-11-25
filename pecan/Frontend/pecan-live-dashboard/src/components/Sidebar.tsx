@@ -51,6 +51,11 @@ function Sidebar({ isOpen, onClose }: Readonly<InputProps>) {
                 path="/chargecart"
                 onClose={onClose}
               />
+              <SidebarOption
+                option="Live Plot (demo)"
+                path="/live-plot"
+                onClose={onClose}
+              />
             </ul>
           </div>
           <footer className="font-footer flex flex-col space-y-8 mb-10">
