@@ -157,31 +157,22 @@ export function useAllMessageIds(): string[] {
  * @returns Array of { msgID: string, signalName: string } objects
  */
 export function useAllSignals(): { msgID: string, signalName: string }[] {
-  const [allSignals, setAllSignals] = useState<{ msgID: string, signalName: string }[]>(() => {
+  const messageIds = useAllMessageIds();
+  const allSignals = useMemo(() => {
     const signals: { msgID: string, signalName: string }[] = [];
+    const seen = new Set<string>();
     const allLatest = dataStore.getAllLatest();
     allLatest.forEach((sample) => {
       for (const signalName in sample.data) {
-        signals.push({ msgID: sample.msgID, signalName });
+        const key = `${sample.msgID}:${signalName}`;
+        if (!seen.has(key)) {
+          signals.push({ msgID: sample.msgID, signalName });
+          seen.add(key);
+        }
       }
     });
     return signals;
-  });
-
-  useEffect(() => {
-    const unsubscribe = dataStore.subscribe(() => {
-      const signals: { msgID: string, signalName: string }[] = [];
-      const allLatest = dataStore.getAllLatest();
-      allLatest.forEach((sample) => {
-        for (const signalName in sample.data) {
-          signals.push({ msgID: sample.msgID, signalName });
-        }
-      });
-      setAllSignals(signals);
-    });
-    return unsubscribe;
-  }, []);
-
+  }, [messageIds]);
   return allSignals;
 }
 
