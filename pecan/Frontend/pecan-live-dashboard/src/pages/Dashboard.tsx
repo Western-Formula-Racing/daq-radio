@@ -29,7 +29,8 @@ function Dashboard() {
   const [currentSortIcon, setCurrentSortIcon] = useState(atozIcon);
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
 
-<<<<<<< HEAD
+  const { isSidebarOpen } = useOutletContext<{ isSidebarOpen: boolean }>();
+
   // Plotting State
   // =====================================================================
   const [plots, setPlots] = useState<Plot[]>([]);
@@ -49,9 +50,6 @@ function Dashboard() {
     signalInfo: null,
     position: { x: 0, y: 0 },
   });
-=======
-  const { isSidebarOpen } = useOutletContext<{ isSidebarOpen: boolean }>();
->>>>>>> origin/dev-main
 
   const sortingFilter = useRef({
     name: 0,
