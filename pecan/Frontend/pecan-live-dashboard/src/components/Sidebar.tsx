@@ -9,7 +9,7 @@ interface InputProps {
   onClose: () => void;
 }
 
-function Sidebar({ isOpen, onClose }: Readonly<InputProps>) {
+function Sidebar({ onClose, isOpen }: Readonly<InputProps>) {
   return (
     <div>
       {/* Listener for outside of sidebar clicks */}
