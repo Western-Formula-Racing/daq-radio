@@ -3,7 +3,7 @@ import { dataStore } from '../lib/DataStore';
 // Import DBC file as raw text - Vite's ?raw suffix loads file content at build time
 // Note: Files in src/assets/ cannot be fetched via URL, they must be imported
 // Import both DBC files
-import localDbc from '../assets/local.dbc?raw';
+import localDbc from '../assets/example.dbc?raw';
 import exampleDbc from '../assets/example.dbc?raw';
 
 // Use local.dbc for development, example.dbc for production

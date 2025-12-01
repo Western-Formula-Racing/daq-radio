@@ -23,9 +23,14 @@ export class WebSocketService {
   }
 
   private connect() {
-    const wsUrl = import.meta.env.DEV
-      ? 'ws://localhost:8080/ws'
-      : 'ws://192.168.4.1:8080/ws';
+    // Automatically detect secure vs non-secure WebSocket based on page protocol
+    const isSecure = window.location.protocol === 'https:';
+    const protocol = isSecure ? 'wss:' : 'ws:';
+    const port = isSecure ? '9443' : '9080';
+    
+    const wsUrl = `${protocol}//${window.location.hostname === 'localhost' ? 'localhost' : 'ws-wfr.0001200.xyz'}:${port}`;
+    
+    console.log(`Connecting to WebSocket: ${wsUrl}`);
     
     try {
       this.ws = new WebSocket(wsUrl);

@@ -1,0 +1,12 @@
+# SSL certificates
+ssl/
+
+# CSV data files
+*.csv
+
+# Environment files
+.env
+
+# Cloudflare tunnel credentials
+tunnel-credentials.json
+cloudflared-config.yml
