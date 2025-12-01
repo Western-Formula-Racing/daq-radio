@@ -84,7 +84,7 @@ credentials-file: /path/to/credentials.json
 
 ingress:
   - hostname: ws-wfr.0001200.xyz
-    service: ws://localhost:8080
+    service: ws://localhost:9080
   - service: http_status:404
 ```
 
