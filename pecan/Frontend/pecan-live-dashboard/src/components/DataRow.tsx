@@ -57,26 +57,24 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
             >
 
                 {/* Msg ID column */}
-                <div className={`${compact ? "col-span-2" : "col-span-1"} flex justify-left items-center ps-3`}>
+                <div className={`col-span-1 flex justify-left items-center ps-3 min-w-80`}>
                     {msgID}
                 </div>
 
                 {/* Message name column */}
-                <div className={`${compact ? "col-span-6" : "col-span-4"} flex justify-left items-center px-3 truncate`}>
+                <div className={`${compact ? "" : ""} col-span-4 flex justify-left items-center px-3 truncate`}>
                     {name}
                 </div>
 
                 {/* Category column with coloured background */}
-                <div className={`${compact ? "col-span-2" : "col-span-2"} flex justify-left items-center px-3 font-bold text-xs ${categoryColor}`}>
+                <div className={`col-span-2 flex justify-left items-center px-3 font-bold text-xs ${categoryColor}`}>
                     {computedCategory}
                 </div>
 
                 {/* Data column - Hidden in compact mode */}
-                {!compact && (
                     <div className="col-span-3 flex justify-left items-center px-3 truncate">
                         {rawData}
                     </div>
-                )}
 
                 {/* Time column */}
                 <div className="col-span-2 flex justify-left items-center ps-3">

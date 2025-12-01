@@ -291,7 +291,7 @@ function Dashboard() {
 
           {viewMode === "cards" ? (
             <>
-              <div className={`${isSidebarOpen ? "columns-1" : "columns-2"} gap-4`}>
+              <div className={`columns-2 gap-4`}>
                 {filteredMsgs.map(([canId, sample]) => {
                   const data = Object.entries(sample.data).map(
                     ([key, value]) => ({
@@ -316,6 +316,7 @@ function Dashboard() {
                         }
                         lastUpdated={sample.timestamp}
                         rawData={sample.rawData}
+                        compact={isSidebarOpen}
                       />
                     </div>
                   );
@@ -337,7 +338,7 @@ function Dashboard() {
               {/* Header */}
               <div className="w-100 h-[40px] rounded-t-sm grid grid-cols-12 bg-data-module-bg text-white font-semibold text-sm shadow-md">
                 {/* Message ID column */}
-                <div className={`${isSidebarOpen ? "col-span-2" : "col-span-1"} flex justify-left items-center ps-3`}>
+                <div className={`col-span-1 flex justify-left items-center ps-3 min-w-80`}>
                   <button
                     onClick={() => {
                       setSortingMethod("id");
@@ -348,7 +349,7 @@ function Dashboard() {
                   </button>
                 </div>
                 {/* Message name column */}
-                <div className={`${isSidebarOpen ? "col-span-6" : "col-span-4"} flex justify-left items-center px-3`}>
+                <div className={`${isSidebarOpen ? "" : ""} col-span-4 flex justify-left items-center px-3`}>
                   <button
                     onClick={() => {
                       setSortingMethod("name");
@@ -359,7 +360,7 @@ function Dashboard() {
                   </button>
                 </div>
                 {/* Category column */}
-                <div className={`${isSidebarOpen ? "col-span-2" : "col-span-2"} rounded-t-sm bg-data-textbox-bg flex justify-left items-center px-3`}>
+                <div className={`col-span-2 rounded-t-sm bg-data-textbox-bg flex justify-left items-center px-3`}>
                   <button
                     onClick={() => {
                       setSortingMethod("category");
@@ -370,11 +371,9 @@ function Dashboard() {
                   </button>
                 </div>
                 {/* Data column */}
-                {!isSidebarOpen && (
-                  <div className="col-span-3 flex justify-left items-center px-3">
-                    Data
-                  </div>
-                )}
+                <div className="col-span-3 flex justify-left items-center px-3">
+                  Data
+                </div>
                 {/* Time column */}
                 <div className="col-span-2 flex justify-left items-center ps-3">
                   Time
