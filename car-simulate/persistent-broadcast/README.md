@@ -182,7 +182,7 @@ docker-compose up -d --build
 
 ### Connection Refused
 - Check if the container is running: `docker-compose ps`
-- Verify ports are exposed: `docker-compose port websocket-server 8080`
+- Verify ports are exposed: `docker-compose port websocket-server 9080`
 - Check firewall settings
 
 ### SSL Certificate Errors
