@@ -152,6 +152,31 @@ export function useAllMessageIds(): string[] {
 }
 
 /**
+ * Hook to get all unique signals (msgID, signalName pairs) currently in the buffer.
+ * 
+ * @returns Array of { msgID: string, signalName: string } objects
+ */
+export function useAllSignals(): { msgID: string, signalName: string }[] {
+  const messageIds = useAllMessageIds();
+  const allSignals = useMemo(() => {
+    const signals: { msgID: string, signalName: string }[] = [];
+    const seen = new Set<string>();
+    const allLatest = dataStore.getAllLatest();
+    allLatest.forEach((sample) => {
+      for (const signalName in sample.data) {
+        const key = `${sample.msgID}:${signalName}`;
+        if (!seen.has(key)) {
+          signals.push({ msgID: sample.msgID, signalName });
+          seen.add(key);
+        }
+      }
+    });
+    return signals;
+  }, [messageIds]);
+  return allSignals;
+}
+
+/**
  * Hook to get DataStore statistics
  * 
  * @returns DataStore stats object

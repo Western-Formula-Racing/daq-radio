@@ -6,6 +6,14 @@ import type { PlotSignal } from "../components/PlotManager";
 import PlotControls from "../components/PlotControls";
 import { dataStore } from "../lib/DataStore";
 import { useAllLatestMessages, useDataStoreStats } from "../lib/useDataStore";
+import atozIcon from "../assets/atoz.png";
+import ztoaIcon from "../assets/ztoa.png";
+import sortIcon from "../assets/sort.png";
+import idAscendingIcon from "../assets/id_ascending.png";
+import idDescendingIcon from "../assets/id_descending.png";
+import listViewIcon from "../assets/list-view.png";
+import gridViewIcon from "../assets/grid-view.png";
+import { useOutletContext } from "react-router";
 
 interface Plot {
   id: string;
@@ -18,9 +26,10 @@ function Dashboard() {
   const [sortingMethod, setSortingMethod] = useState("name");
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [tickUpdate, setTickUpdate] = useState(Date.now());
-  const [sortIcon, setSortIcon] = useState("../src/assets/atoz.png");
+  const [currentSortIcon, setCurrentSortIcon] = useState(atozIcon);
   const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
 
+<<<<<<< HEAD
   // Plotting State
   // =====================================================================
   const [plots, setPlots] = useState<Plot[]>([]);
@@ -40,6 +49,9 @@ function Dashboard() {
     signalInfo: null,
     position: { x: 0, y: 0 },
   });
+=======
+  const { isSidebarOpen } = useOutletContext<{ isSidebarOpen: boolean }>();
+>>>>>>> origin/dev-main
 
   const sortingFilter = useRef({
     name: 0,
@@ -129,10 +141,10 @@ function Dashboard() {
           sortingFilter.current.name = 1 - sortingFilter.current.name;
         }
         sortingFilter.current.prev = "name";
-        setSortIcon(
+        setCurrentSortIcon(
           sortingFilter.current.name == 0
-            ? "../src/assets/atoz.png"
-            : "../src/assets/ztoa.png"
+            ? atozIcon
+            : ztoaIcon
         );
         break;
       case "category":
@@ -140,17 +152,17 @@ function Dashboard() {
           sortingFilter.current.category = 1 - sortingFilter.current.category;
         }
         sortingFilter.current.prev = "category";
-        setSortIcon("../src/assets/sort.png");
+        setCurrentSortIcon(sortIcon);
         break;
       case "id":
         if (sortingFilter.current.prev == "id") {
           sortingFilter.current.id = 1 - sortingFilter.current.id;
         }
         sortingFilter.current.prev = "id";
-        setSortIcon(
+        setCurrentSortIcon(
           sortingFilter.current.id == 0
-            ? "../src/assets/id_ascending.png"
-            : "../src/assets/id_descending.png"
+            ? idAscendingIcon
+            : idDescendingIcon
         );
         break;
     }
@@ -331,7 +343,7 @@ function Dashboard() {
                   onClick={() => setSortMenuOpen((o) => !o)}
                   className="w-[50px] h-[50px] p-[10px] !rounded-lg flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 transition-colors object-contain"
                 >
-                  <img src={sortIcon} />
+                  <img src={currentSortIcon} alt="Sort" />
                 </button>
                 {sortMenuOpen && (
                   <div className="flex flex-col block fixed top-30 z-100 rounded-md bg-dropdown-menu-bg w-30 h-20 text-center text-white">
@@ -381,21 +393,21 @@ function Dashboard() {
                 className="w-[50px] h-[50px] p-[10px] !rounded-lg flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 transition-colors object-contain"
                 aria-pressed={viewMode === "list"}
               >
-                <img src="../src/assets/list-view.png" />
+                <img src={listViewIcon} alt="List view" />
               </button>
               <button
                 onClick={() => setViewMode("cards")}
                 className="w-[50px] h-[50px] p-[10px] !rounded-lg flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 transition-colors object-contain"
                 aria-pressed={viewMode === "cards"}
               >
-                <img src="../src/assets/grid-view.png" />
+                <img src={gridViewIcon} alt="Grid view" />
               </button>
             </div>
           </div>
 
           {viewMode === "cards" ? (
             <>
-              <div className="columns-2 gap-4">
+              <div className={`${isSidebarOpen ? "columns-1" : "columns-2"} gap-4`}>
                 {filteredMsgs.map(([canId, sample]) => {
                   const data = Object.entries(sample.data).map(
                     ([key, value]) => ({
@@ -442,7 +454,7 @@ function Dashboard() {
               {/* Header */}
               <div className="w-100 h-[40px] rounded-t-sm grid grid-cols-12 bg-data-module-bg text-white font-semibold text-sm shadow-md">
                 {/* Message ID column */}
-                <div className="col-span-1 flex justify-left items-center ps-3">
+                <div className={`${isSidebarOpen ? "col-span-2" : "col-span-1"} flex justify-left items-center ps-3`}>
                   <button
                     onClick={() => {
                       setSortingMethod("id");
@@ -453,7 +465,7 @@ function Dashboard() {
                   </button>
                 </div>
                 {/* Message name column */}
-                <div className="col-span-4 flex justify-left items-center px-3">
+                <div className={`${isSidebarOpen ? "col-span-6" : "col-span-4"} flex justify-left items-center px-3`}>
                   <button
                     onClick={() => {
                       setSortingMethod("name");
@@ -464,7 +476,7 @@ function Dashboard() {
                   </button>
                 </div>
                 {/* Category column */}
-                <div className="col-span-2 rounded-t-sm bg-data-textbox-bg flex justify-left items-center px-3">
+                <div className={`${isSidebarOpen ? "col-span-2" : "col-span-2"} rounded-t-sm bg-data-textbox-bg flex justify-left items-center px-3`}>
                   <button
                     onClick={() => {
                       setSortingMethod("category");
@@ -475,11 +487,13 @@ function Dashboard() {
                   </button>
                 </div>
                 {/* Data column */}
-                <div className="col-span-4 flex justify-left items-center px-3">
-                  Data
-                </div>
+                {!isSidebarOpen && (
+                  <div className="col-span-3 flex justify-left items-center px-3">
+                    Data
+                  </div>
+                )}
                 {/* Time column */}
-                <div className="col-span-1 flex justify-left items-center ps-3">
+                <div className="col-span-2 flex justify-left items-center ps-3">
                   Time
                 </div>
               </div>
@@ -510,6 +524,7 @@ function Dashboard() {
                     lastUpdated={sample.timestamp}
                     rawData={sample.rawData}
                     index={i}
+                    compact={isSidebarOpen}
                     onSignalClick={handleSignalClick}
                   />
                 );

@@ -224,3 +224,6 @@ ENV/
 /.idea
 node_modules/
 pecan/Frontend/pecan-live-dashboard/src/assets/local.dbc
+
+*.dbc:Zone.Identifier
+*.csv:Zone.Identifier

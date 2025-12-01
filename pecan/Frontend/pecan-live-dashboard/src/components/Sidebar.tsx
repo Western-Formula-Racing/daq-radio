@@ -9,7 +9,7 @@ interface InputProps {
   onClose: () => void;
 }
 
-function Sidebar({ isOpen, onClose }: Readonly<InputProps>) {
+function Sidebar({ onClose, isOpen }: Readonly<InputProps>) {
   return (
     <div>
       {/* Listener for outside of sidebar clicks */}
@@ -49,6 +49,11 @@ function Sidebar({ isOpen, onClose }: Readonly<InputProps>) {
               <SidebarOption
                 option="Chargecart"
                 path="/chargecart"
+                onClose={onClose}
+              />
+              <SidebarOption
+                option="Monitor Builder"
+                path="/monitor-builder"
                 onClose={onClose}
               />
             </ul>
