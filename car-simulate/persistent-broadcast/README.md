@@ -175,8 +175,8 @@ docker-compose up -d --build
 
 ## Port Configuration
 
-- **8080**: WebSocket (ws://) - unencrypted
-- **8443**: Secure WebSocket (wss://) - encrypted
+- **9080**: WebSocket (ws://) - unencrypted
+- **9443**: Secure WebSocket (wss://) - encrypted
 
 ## Troubleshooting
 
@@ -198,8 +198,8 @@ docker-compose up -d --build
 
 You can customize the following variables in `docker-compose.yml`:
 
-- `WS_PORT`: WebSocket port (default: 8080)
-- `WSS_PORT`: Secure WebSocket port (default: 8443)
+- `WS_PORT`: WebSocket port (default: 9080)
+- `WSS_PORT`: Secure WebSocket port (default: 9443)
 - `CSV_FILE`: Path to CSV data file
 - `SSL_CERT`: Path to SSL certificate
 - `SSL_KEY`: Path to SSL private key
