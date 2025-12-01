@@ -565,7 +565,7 @@ function Dashboard() {
             </label>
             <input
               type="number"
-              min="5"
+              min="0"
               max="300"
               value={plotTimeWindow / 1000}
               onChange={(e) => {
@@ -573,7 +573,7 @@ function Dashboard() {
                 if (value === '' || value === null) {
                   return;
                 }
-                const seconds = Math.max(5, Math.min(300, Number(value)));
+                const seconds = Math.max(0, Math.min(300, Number(value)));
                 setPlotTimeWindow(seconds * 1000);
               }}
               className="bg-data-textbox-bg text-white rounded px-2 py-1 text-sm"
