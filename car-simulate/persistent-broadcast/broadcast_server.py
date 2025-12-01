@@ -4,7 +4,6 @@ import json
 import csv
 import os
 import ssl
-import time
 from typing import List, Set
 from websockets.server import WebSocketServerProtocol
 
