@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useLayoutEffect } from "react";
 
 interface PlotControlsProps {
   signalInfo: {
@@ -36,7 +36,32 @@ function PlotControls({
   onClose,
 }: PlotControlsProps) {
   const [showAddToPlotMenu, setShowAddToPlotMenu] = useState(false);
+  const [adjustedPosition, setAdjustedPosition] = useState(position);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Adjust position to keep menu in viewport
+  useLayoutEffect(() => {
+    if (menuRef.current) {
+      const rect = menuRef.current.getBoundingClientRect();
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+
+      let newX = position.x;
+      let newY = position.y;
+
+      // Check right edge
+      if (newX + rect.width > viewportWidth) {
+        newX = viewportWidth - rect.width - 10;
+      }
+
+      // Check bottom edge
+      if (newY + rect.height > viewportHeight) {
+        newY = newY - rect.height;
+      }
+
+      setAdjustedPosition({ x: newX, y: newY });
+    }
+  }, [position, showAddToPlotMenu]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -57,8 +82,8 @@ function PlotControls({
       ref={menuRef}
       className="fixed z-50 bg-dropdown-menu-bg rounded-md shadow-lg border border-white/10"
       style={{
-        left: `${position.x}px`,
-        top: `${position.y}px`,
+        left: `${adjustedPosition.x}px`,
+        top: `${adjustedPosition.y}px`,
         minWidth: "180px",
       }}
     >
