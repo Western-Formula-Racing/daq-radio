@@ -3,7 +3,8 @@
 # Message IDs can be individual numbers or ranges (e.g., 100-110)
 # Lines starting with # are comments
 
-TEST MSG,bg-purple-500,256,512
-VCU,bg-sky-400,170,171,172,173
-BMS,bg-orange-400,168,176,177,192
-INV,bg-green-400,163,180-190
+VCU,bg-sky-400,192-194
+BMS,bg-orange-400,512,513
+INV,bg-green-400,256,257
+SENSORS,bg-purple-500,768,1024
+COOLING,bg-blue-600,1280
