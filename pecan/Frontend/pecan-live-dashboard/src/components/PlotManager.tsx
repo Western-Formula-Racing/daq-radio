@@ -2,6 +2,17 @@ import { useEffect, useState } from "react";
 import { ResponsiveLine } from "@nivo/line";
 import { dataStore } from "../lib/DataStore";
 
+// Standard Nivo colors (or similar palette) to ensure consistency between plot and list
+const PLOT_COLORS = [
+  "#e8c1a0",
+  "#f47560",
+  "#f1e15b",
+  "#e8a838",
+  "#61cdbb",
+  "#97e3d5",
+  "#00bbcc",
+];
+
 // Helper to calculate downsample resolution based on time window
 function calculateDownsampleResolution(windowMs: number): number {
   // Under 3s (3000ms), use 200ms resolution
@@ -178,7 +189,7 @@ function PlotManager({
                 },
             },
             }}
-            colors={{ scheme: "nivo" }}
+            colors={PLOT_COLORS}
             animate={false}
             isInteractive={true}
             legends={[
@@ -218,14 +229,22 @@ function PlotManager({
 
       {/* Signal list */}
       <div className="mt-2 space-y-1">
-        {signals.map((signal) => (
+        {signals.map((signal, index) => (
           <div
             key={`${signal.msgID}-${signal.signalName}`}
             className="flex justify-between items-center bg-data-textbox-bg px-2 py-1 rounded text-xs text-gray-300"
           >
-            <span>
-              {signal.messageName} - {signal.signalName}
-            </span>
+            <div className="flex items-center">
+              <div
+                className="w-3 h-3 rounded-full mr-2 shrink-0"
+                style={{
+                  backgroundColor: PLOT_COLORS[index % PLOT_COLORS.length],
+                }}
+              />
+              <span>
+                {signal.messageName} - {signal.signalName}
+              </span>
+            </div>
             <button
               onClick={() => onRemoveSignal(signal.msgID, signal.signalName)}
               className="text-red-400 hover:text-red-300 ml-2"
