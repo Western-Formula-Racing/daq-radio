@@ -183,46 +183,51 @@ const MonitorBuilder = () => {
     <div className="flex h-full w-full bg-sidebar text-white">
         <ReactFlowProvider>
             {/* Sidebar for Drag and Drop */}
-            <div className="w-64 bg-data-module-bg p-4 flex flex-col gap-2 overflow-y-auto border-r border-gray-700">
-                <h2 className="text-xl font-bold mb-4">Available Signals</h2>
-                
-                <div className="flex gap-2 mb-4 p-1 bg-data-textbox-bg rounded border border-gray-600">
-                    <button 
-                        className={`flex-1 py-1 text-xs rounded transition-colors ${dragMode === 'sensor' ? 'bg-blue-600 text-white font-semibold' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
-                        onClick={() => setDragMode('sensor')}
-                    >
-                        Simple
-                    </button>
-                    <button 
-                        className={`flex-1 py-1 text-xs rounded transition-colors ${dragMode === 'range' ? 'bg-blue-600 text-white font-semibold' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
-                        onClick={() => setDragMode('range')}
-                    >
-                        Range Monitor
-                    </button>
+            <div className="w-64 bg-data-module-bg flex flex-col border-r border-gray-700 h-full">
+                <div className="p-4 pb-2 flex-shrink-0">
+                    <h2 className="text-xl font-bold mb-4">Available Signals</h2>
+                    
+                    <div className="flex gap-2 mb-4 p-1 bg-data-textbox-bg rounded border border-gray-600">
+                        <button 
+                            className={`flex-1 py-1 text-xs rounded transition-colors ${dragMode === 'sensor' ? 'bg-blue-600 text-white font-semibold' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
+                            onClick={() => setDragMode('sensor')}
+                        >
+                            Simple
+                        </button>
+                        <button 
+                            className={`flex-1 py-1 text-xs rounded transition-colors ${dragMode === 'range' ? 'bg-blue-600 text-white font-semibold' : 'text-gray-400 hover:text-white hover:bg-gray-700'}`}
+                            onClick={() => setDragMode('range')}
+                        >
+                            Range Monitor
+                        </button>
+                    </div>
+
+                    <input
+                        type="text"
+                        placeholder="Search signals..."
+                        className="w-full p-2 mb-2 bg-data-textbox-bg rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-600 text-sm"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+
+                    <div className="text-xs text-gray-400 mt-2">Drag to canvas</div>
                 </div>
 
-                <input
-                    type="text"
-                    placeholder="Search signals..."
-                    className="w-full p-2 mb-2 bg-data-textbox-bg rounded text-white focus:outline-none focus:ring-1 focus:ring-blue-500 border border-gray-600 text-sm"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                />
-
-                <div className="text-xs text-gray-400 mb-2">Drag to canvas</div>
-                {filteredSignals.map((signal, index) => (
-                    <div
-                        key={`${signal.msgID}-${signal.signalName}-${index}`} // Use a unique key
-                        className="p-2 bg-data-textbox-bg rounded cursor-grab hover:bg-data-textbox-bg/80 transition-colors border border-transparent hover:border-gray-500"
-                        onDragStart={(event) => onDragStart(event, dragMode, signal.msgID, signal.signalName)}
-                        draggable
-                    >
-                        <span className="font-semibold">{signal.signalName}</span> <span className="text-gray-400 text-xs">({signal.msgID})</span>
-                    </div>
-                ))}
-                {filteredSignals.length === 0 && (
-                    <div className="text-gray-500 italic">No signals found</div>
-                )}
+                <div className="flex-1 overflow-y-auto p-4 pt-0 flex flex-col gap-2">
+                    {filteredSignals.map((signal, index) => (
+                        <div
+                            key={`${signal.msgID}-${signal.signalName}-${index}`} // Use a unique key
+                            className="p-2 bg-data-textbox-bg rounded cursor-grab hover:bg-data-textbox-bg/80 transition-colors border border-transparent hover:border-gray-500"
+                            onDragStart={(event) => onDragStart(event, dragMode, signal.msgID, signal.signalName)}
+                            draggable
+                        >
+                            <span className="font-semibold">{signal.signalName}</span> <span className="text-gray-400 text-xs">({signal.msgID})</span>
+                        </div>
+                    ))}
+                    {filteredSignals.length === 0 && (
+                        <div className="text-gray-500 italic">No signals found</div>
+                    )}
+                </div>
             </div>
 
             {/* Main Canvas */}
