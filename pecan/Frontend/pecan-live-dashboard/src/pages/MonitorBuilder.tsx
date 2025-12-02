@@ -8,6 +8,7 @@ import ReactFlow, {
   Background,
   Handle,
   Position,
+  ConnectionMode,
   type Connection,
   type Edge,
   type NodeTypes,
@@ -22,13 +23,16 @@ const SensorNode = ({ data }: { data: { msgID: string; signalName: string } }) =
 
   return (
     <div className="relative p-4 rounded-md shadow-lg bg-data-module-bg border border-gray-600 text-white min-w-[180px] max-w-[250px]">
-      <Handle type="target" position={Position.Top} className="!bg-white w-4 h-4" />
+      <Handle type="source" position={Position.Top} id="top" className="!bg-white w-4 h-4" />
+      <Handle type="source" position={Position.Right} id="right" className="!bg-white w-4 h-4" />
+      <Handle type="source" position={Position.Bottom} id="bottom" className="!bg-white w-4 h-4" />
+      <Handle type="source" position={Position.Left} id="left" className="!bg-white w-4 h-4" />
+      
       <div className="text-sm font-semibold truncate">{data.signalName}</div>
       <div className="text-xs text-gray-400">{data.msgID}</div>
       <div className="mt-2 text-lg font-bold text-green-400">
         {signalData ? `${signalData.sensorReading} ${signalData.unit}` : 'N/A'}
       </div>
-      <Handle type="source" position={Position.Bottom} className="!bg-white w-4 h-4" />
     </div>
   );
 };
@@ -57,7 +61,7 @@ const MonitorBuilder = () => {
   });
 
   const onConnect = useCallback(
-    (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, animated: true, style: { stroke: '#fff', strokeDasharray: '5 5' } }, eds)),
+    (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, type: 'smoothstep', pathOptions: { borderRadius: 10 }, animated: true, style: { stroke: '#fff', strokeDasharray: '5 5' } }, eds)),
     [setEdges]
   );
 
@@ -147,6 +151,7 @@ const MonitorBuilder = () => {
                     onDrop={onDrop}
                     onDragOver={onDragOver}
                     nodeTypes={nodeTypes}
+                    connectionMode={ConnectionMode.Loose}
                     fitView
                     className="bg-sidebar"
                 >
