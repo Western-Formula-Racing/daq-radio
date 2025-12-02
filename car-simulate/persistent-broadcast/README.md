@@ -84,7 +84,7 @@ credentials-file: /path/to/credentials.json
 
 ingress:
   - hostname: ws-wfr.0001200.xyz
-    service: ws://localhost:8080
+    service: ws://localhost:9080
   - service: http_status:404
 ```
 
@@ -182,7 +182,7 @@ docker-compose up -d --build
 
 ### Connection Refused
 - Check if the container is running: `docker-compose ps`
-- Verify ports are exposed: `docker-compose port websocket-server 8080`
+- Verify ports are exposed: `docker-compose port websocket-server 9080`
 - Check firewall settings
 
 ### SSL Certificate Errors

@@ -9,6 +9,7 @@ interface InputProps {
   data?: Record<string, string>[];
   rawData: string;
   lastUpdated?: number;
+  compact?: boolean;
 }
 
 // Defining the structure of the data, can be changed later
@@ -32,7 +33,7 @@ const DataTextBox = ({
   </div>
 );
 
-function DataCard({ msgID, name, category, data, lastUpdated, rawData }: Readonly<InputProps>) {
+function DataCard({ msgID, name, category, data, lastUpdated, rawData, compact }: Readonly<InputProps>) {
 
   const [currentTime, setCurrentTime] = useState(Date.now());
 
@@ -124,7 +125,7 @@ function DataCard({ msgID, name, category, data, lastUpdated, rawData }: Readonl
 
   return (
     //  Data Card 
-    <div className="min-w-[400px] max-w-[440px] w-100">
+    <div className={`${compact ? "min-w-[250px] max-w-[350px]" : "min-w-[400px] max-w-[440px]"} w-100`}>
 
       {/* DM Header */}
       <div className={`${collapsed ? "gap-0.5" : "gap-1.5"} grid grid-cols-6 box-border mx-[3px]`}>
@@ -191,12 +192,12 @@ function DataCard({ msgID, name, category, data, lastUpdated, rawData }: Readonl
           ))}
         </div>
 
-        <div className="w-90 h-[2px] bg-white self-center rounded-xs"></div>
+        <div className={`${compact ? "w-76" : "w-90"} h-[2px] bg-white self-center rounded-xs`}></div>
 
         {/* Raw Data Display */}
-        <div className="h-[50px] grid grid-cols-6 text-white text-xs items-center justify-start">
-          <p id="raw-data" className="col-span-4 font-semibold">&nbsp;&nbsp;&nbsp;{rawData || "00 01 02 03 04 05 06 07"}</p>
-          <p id="raw-data-received" className="col-span-2 text-end font-semibold">Last Update:&nbsp;&nbsp;&nbsp;{timeDiff}ms</p>
+        <div className={`${ compact ? "text-[11px] grid-cols-7" : "text-xs grid-cols-6" } h-[50px] grid text-white  items-center justify-start`}>
+          <p id="raw-data" className={`${ compact ? "col-span-4" : "col-span-3"} font-semibold`}>&nbsp;&nbsp;&nbsp;{rawData || "00 01 02 03 04 05 06 07"}</p>
+          <p id="raw-data-received" className={`${ compact ? "col-span-3" : "col-span-3"} text-end font-semibold`}>Last Update:&nbsp;&nbsp;&nbsp;{timeDiff}ms</p>
         </div>
       </div>
     </div>

@@ -9,9 +9,10 @@ interface DataRowProps {
     rawData: string;
     lastUpdated: number;
     index: number; // for alternating row colors
+    compact?: boolean;
 }
 
-export default function DataRow({ msgID, name, category, data, rawData, lastUpdated, index }: Readonly<DataRowProps>) {
+export default function DataRow({ msgID, name, category, data, rawData, lastUpdated, index, compact = false }: Readonly<DataRowProps>) {
 
     const [currentTime, setCurrentTime] = useState(Date.now());
 
@@ -56,12 +57,12 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
             >
 
                 {/* Msg ID column */}
-                <div className="col-span-1 flex justify-left items-center ps-3">
+                <div className={`col-span-1 flex justify-left items-center ps-3 min-w-80`}>
                     {msgID}
                 </div>
 
                 {/* Message name column */}
-                <div className="col-span-4 flex justify-left items-center px-3 truncate">
+                <div className={`${compact ? "" : ""} col-span-4 flex justify-left items-center px-3 truncate`}>
                     {name}
                 </div>
 
@@ -70,13 +71,13 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
                     {computedCategory}
                 </div>
 
-                {/* Data column */}
-                <div className="col-span-4 flex justify-left items-center px-3 truncate">
-                    {rawData}
-                </div>
+                {/* Data column - Hidden in compact mode */}
+                    <div className="col-span-3 flex justify-left items-center px-3 truncate">
+                        {rawData}
+                    </div>
 
                 {/* Time column */}
-                <div className="col-span-1 flex justify-left items-center pe-3">
+                <div className="col-span-2 flex justify-left items-center ps-3">
                     {timeDiff}ms
                 </div>
             </div>
