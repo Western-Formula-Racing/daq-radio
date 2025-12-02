@@ -2,6 +2,18 @@ import { useEffect, useState } from "react";
 import { ResponsiveLine } from "@nivo/line";
 import { dataStore } from "../lib/DataStore";
 
+// Helper to calculate downsample resolution based on time window
+function calculateDownsampleResolution(windowMs: number): number {
+  // Under 3s (3000ms), use 200ms resolution
+  if (windowMs <= 3000) return 200;
+  // Above 20s (20000ms), use 1000ms resolution
+  if (windowMs >= 20000) return 1000;
+
+  // Linear interpolation between 3000ms and 20000ms
+  // Range: 17000ms. Value range: 800ms.
+  return 200 + ((windowMs - 3000) / 17000) * 800;
+}
+
 export interface PlotSignal {
   msgID: string;
   signalName: string;
@@ -36,20 +48,51 @@ function PlotManager({
 
     const updateInterval = setInterval(() => {
       const now = Date.now();
+      const resolution = calculateDownsampleResolution(timeWindowMs);
+
       const newChartData = signals.map((signal) => {
         const history = dataStore.getHistory(signal.msgID, timeWindowMs);
+        const dataPoints: { x: number; y: number }[] = [];
 
-        const dataPoints = history
-          .map((sample) => {
+        if (history.length > 0) {
+          let currentBinStart =
+            Math.floor(history[0].timestamp / resolution) * resolution;
+          let currentSum = 0;
+          let currentCount = 0;
+
+          for (const sample of history) {
             const signalData = sample.data[signal.signalName];
-            if (signalData !== undefined) {
-              // Convert timestamp to seconds relative to now (negative for past)
-              const x = (sample.timestamp - now) / 1000;
-              return { x, y: signalData.sensorReading };
+            if (signalData === undefined) continue;
+
+            const sampleBin =
+              Math.floor(sample.timestamp / resolution) * resolution;
+
+            if (sampleBin === currentBinStart) {
+              currentSum += signalData.sensorReading;
+              currentCount++;
+            } else {
+              // Finalize previous bin
+              if (currentCount > 0) {
+                const avg = currentSum / currentCount;
+                const x = (currentBinStart - now) / 1000;
+                dataPoints.push({ x, y: avg });
+              }
+
+              // Move to new bin
+              // If there's a gap, we just jump to the new bin start
+              currentBinStart = sampleBin;
+              currentSum = signalData.sensorReading;
+              currentCount = 1;
             }
-            return null;
-          })
-          .filter((p): p is { x: number; y: number } => p !== null);
+          }
+
+          // Finalize last bin
+          if (currentCount > 0) {
+            const avg = currentSum / currentCount;
+            const x = (currentBinStart - now) / 1000;
+            dataPoints.push({ x, y: avg });
+          }
+        }
 
         return {
           id: `${signal.messageName} - ${signal.signalName}`,
@@ -98,7 +141,7 @@ function PlotManager({
               legend: "Time (s)",
               legendOffset: 36,
               legendPosition: "middle",
-              format: (v) => `${Math.round(Number(v))}`,
+              format: (v: any) => `${Math.round(Number(v))}`,
             }}
             axisLeft={{
               tickSize: 5,
