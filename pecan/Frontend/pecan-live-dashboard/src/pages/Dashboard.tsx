@@ -591,6 +591,20 @@ function Dashboard() {
                   })
                 );
 
+                // Tour Targeting Logic:
+                // Try to find message 1024 for AccelX signal (dynamic plot).
+                // If not found, default to the first message (index 0).
+                const targetId = "1024";
+                const targetSignal = "AccelX";
+                const foundIndex = filteredMsgs.findIndex(([id]) => id === targetId);
+                
+                // If found, target that index. If not, target 0.
+                const tourTargetIndex = foundIndex !== -1 ? foundIndex : 0;
+                const tourSignalName = foundIndex !== -1 ? targetSignal : undefined;
+
+                // Check if THIS row is the target
+                const isTarget = i === tourTargetIndex;
+
                 return (
                   <DataRow
                     key={canId}
@@ -610,7 +624,9 @@ function Dashboard() {
                     index={i}
                     compact={isSidebarOpen}
                     onSignalClick={handleSignalClick}
-                    initialOpen={i === 0 && tourOpen} // Auto-expand first row if tour is active
+                    isTourRow={tourOpen && isTarget}
+                    tourSignal={tourSignalName}
+                    initialOpen={tourOpen && isTarget} 
                   />
                 );
               })}

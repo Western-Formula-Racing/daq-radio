@@ -11,6 +11,8 @@ interface DataRowProps {
     index: number; // for alternating row colors
     compact?: boolean;
     initialOpen?: boolean;
+    isTourRow?: boolean;
+    tourSignal?: string;
     onSignalClick?: (
         msgID: string,
         signalName: string,
@@ -20,7 +22,7 @@ interface DataRowProps {
     ) => void;
 }
 
-export default function DataRow({ msgID, name, category, data, rawData, lastUpdated, index, compact = false, initialOpen = false, onSignalClick }: Readonly<DataRowProps>) {
+export default function DataRow({ msgID, name, category, data, rawData, lastUpdated, index, compact = false, initialOpen = false, isTourRow = false, tourSignal, onSignalClick }: Readonly<DataRowProps>) {
 
     const [currentTime, setCurrentTime] = useState(Date.now());
 
@@ -45,8 +47,11 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
     const [open, setOpen] = useState(initialOpen);
 
     useEffect(() => {
-        setOpen(initialOpen || false);
-    }, [initialOpen]);
+        // Only auto-open if it's the tour row
+        if (isTourRow && initialOpen) {
+            setOpen(true);
+        }
+    }, [initialOpen, isTourRow]);
 
     const rows = useMemo(() => {
         if (!data || !data.length) return [] as [string, string][];
@@ -65,7 +70,7 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
                 tabIndex={0}
                 aria-expanded={open}
                 onClick={toggle}
-                id={index === 0 ? "tour-row-header" : undefined}
+                id={isTourRow ? "tour-row-header" : undefined}
                 className={`grid grid-cols-12 text-white text-sm h-[50px] ${rowBg} cursor-pointer transition hover:bg-data-textbox-bg/50`}
             >
 
@@ -134,7 +139,7 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
                                         }}
                                     >
                                         <div 
-                                            id={index === 0 && idx === 0 ? "tour-signal-label" : undefined}
+                                            id={isTourRow && (tourSignal ? label === tourSignal : idx === 0) ? "tour-signal-label" : undefined}
                                             className="w-full text-white text-sm font-semibold py-2 px-3 text-left"
                                         >
                                             {label}
