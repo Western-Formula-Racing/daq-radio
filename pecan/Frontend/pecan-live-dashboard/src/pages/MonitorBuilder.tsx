@@ -65,6 +65,14 @@ const MonitorBuilder = () => {
     [setEdges]
   );
 
+  const onEdgeDoubleClick = useCallback(
+    (event: React.MouseEvent, edge: Edge) => {
+      event.stopPropagation();
+      setEdges((eds) => eds.filter((e) => e.id !== edge.id));
+    },
+    [setEdges]
+  );
+
   const onDragStart = (event: React.DragEvent, nodeType: string, msgID: string, signalName: string) => {
     event.dataTransfer.setData('application/reactflow', nodeType);
     event.dataTransfer.setData('application/msgID', msgID);
@@ -147,6 +155,7 @@ const MonitorBuilder = () => {
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
+                    onEdgeDoubleClick={onEdgeDoubleClick}
                     onInit={setReactFlowInstance}
                     onDrop={onDrop}
                     onDragOver={onDragOver}
