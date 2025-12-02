@@ -99,6 +99,7 @@ function PlotControls({
       <div className="py-1">
         {/* New Plot option */}
         <button
+          id="tour-new-plot-btn"
           onClick={() => {
             onNewPlot(signalInfo);
             onClose();

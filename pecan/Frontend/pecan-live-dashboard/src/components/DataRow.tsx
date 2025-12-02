@@ -10,6 +10,7 @@ interface DataRowProps {
     lastUpdated: number;
     index: number; // for alternating row colors
     compact?: boolean;
+    initialOpen?: boolean;
     onSignalClick?: (
         msgID: string,
         signalName: string,
@@ -19,7 +20,7 @@ interface DataRowProps {
     ) => void;
 }
 
-export default function DataRow({ msgID, name, category, data, rawData, lastUpdated, index, compact = false, onSignalClick }: Readonly<DataRowProps>) {
+export default function DataRow({ msgID, name, category, data, rawData, lastUpdated, index, compact = false, initialOpen = false, onSignalClick }: Readonly<DataRowProps>) {
 
     const [currentTime, setCurrentTime] = useState(Date.now());
 
@@ -41,7 +42,11 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
     // Alternating row background 
     const rowBg = index % 2 === 0 ? "bg-sidebar" : "bg-data-module-bg";
 
-    const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(initialOpen);
+
+    useEffect(() => {
+        setOpen(initialOpen || false);
+    }, [initialOpen]);
 
     const rows = useMemo(() => {
         if (!data || !data.length) return [] as [string, string][];
@@ -60,6 +65,7 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
                 tabIndex={0}
                 aria-expanded={open}
                 onClick={toggle}
+                id={index === 0 ? "tour-row-header" : undefined}
                 className={`grid grid-cols-12 text-white text-sm h-[50px] ${rowBg} cursor-pointer transition hover:bg-data-textbox-bg/50`}
             >
 
@@ -127,7 +133,10 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
                                             }
                                         }}
                                     >
-                                        <div className="w-full text-white text-sm font-semibold py-2 px-3 text-left">
+                                        <div 
+                                            id={index === 0 && idx === 0 ? "tour-signal-label" : undefined}
+                                            className="w-full text-white text-sm font-semibold py-2 px-3 text-left"
+                                        >
                                             {label}
                                         </div>
                                     </div>
