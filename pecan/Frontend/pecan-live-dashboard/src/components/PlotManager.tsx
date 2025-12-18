@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { ResponsiveLine } from "@nivo/line";
+import { useEffect, useRef, useState } from "react";
+import Plotly from "plotly.js-dist-min";
 import { dataStore } from "../lib/DataStore";
 
 // Standard Nivo colors (or similar palette) to ensure consistency between plot and list
@@ -47,23 +47,69 @@ function PlotManager({
   onRemoveSignal,
   onClosePlot,
 }: PlotManagerProps) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [chartData, setChartData] = useState<any[]>([]);
+  const plotRef = useRef<HTMLDivElement>(null);
+  const [isInitialized, setIsInitialized] = useState(false);
+
+  // Initialize the plot
+  useEffect(() => {
+    if (!plotRef.current || isInitialized) return;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const layout: any = {
+      title: `Plot ${plotId}`,
+      xaxis: {
+        title: "Time (s)",
+        autorange: true,
+      },
+      yaxis: {
+        title: "Value",
+        autorange: true,
+      },
+      margin: { t: 40, r: 20, b: 40, l: 60 },
+      paper_bgcolor: "#1a1a1a",
+      plot_bgcolor: "#2a2a2a",
+      font: { color: "#ffffff" },
+      showlegend: true,
+      legend: {
+        x: 1,
+        xanchor: "right",
+        y: 1,
+      },
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const config: any = {
+      responsive: true,
+      displayModeBar: true,
+      displaylogo: false,
+      modeBarButtonsToRemove: ["lasso2d", "select2d"],
+    };
+
+    Plotly.newPlot(plotRef.current, [], layout, config);
+    setIsInitialized(true);
+  }, [plotId, isInitialized]);
 
   // Update plot data
   useEffect(() => {
-    if (signals.length === 0) {
-      setChartData([]);
-      return;
+    if (!plotRef.current || !isInitialized || signals.length === 0) {
+        // Clear plot if no signals
+        if (plotRef.current && isInitialized && signals.length === 0) {
+             Plotly.purge(plotRef.current);
+             setIsInitialized(false); // Reset init state to allow re-creation
+        }
+        return;
     }
 
     const updateInterval = setInterval(() => {
       const now = Date.now();
       const resolution = calculateDownsampleResolution(timeWindowMs);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const traces: any[] = [];
 
-      const newChartData = signals.map((signal) => {
+      signals.forEach((signal, index) => {
         const history = dataStore.getHistory(signal.msgID, timeWindowMs);
-        const dataPoints: { x: number; y: number }[] = [];
+        const xData: number[] = [];
+        const yData: number[] = [];
 
         if (history.length > 0) {
           let currentBinStart =
@@ -86,11 +132,11 @@ function PlotManager({
               if (currentCount > 0) {
                 const avg = currentSum / currentCount;
                 const x = (currentBinStart - now) / 1000;
-                dataPoints.push({ x, y: avg });
+                xData.push(x);
+                yData.push(avg);
               }
 
               // Move to new bin
-              // If there's a gap, we just jump to the new bin start
               currentBinStart = sampleBin;
               currentSum = signalData.sensorReading;
               currentCount = 1;
@@ -101,21 +147,56 @@ function PlotManager({
           if (currentCount > 0) {
             const avg = currentSum / currentCount;
             const x = (currentBinStart - now) / 1000;
-            dataPoints.push({ x, y: avg });
+            xData.push(x);
+            yData.push(avg);
           }
         }
 
-        return {
-          id: `${signal.messageName} - ${signal.signalName}`,
-          data: dataPoints,
-        };
+        if (xData.length > 0) {
+          traces.push({
+            x: xData,
+            y: yData,
+            type: "scatter", // Can switch to scattergl for performance if needed
+            mode: "lines",
+            name: `${signal.messageName} - ${signal.signalName}`,
+            line: { 
+                width: 2,
+                color: PLOT_COLORS[index % PLOT_COLORS.length] // Sync color
+            },
+          });
+        }
       });
 
-      setChartData(newChartData);
+      if (traces.length > 0 && plotRef.current) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const updatedLayout: any = {
+          title: `Plot ${plotId}`,
+          xaxis: {
+            title: "Time (s)",
+            range: [-(timeWindowMs / 1000), 0],
+          },
+          yaxis: {
+            title: "Value",
+            autorange: true,
+          },
+          margin: { t: 40, r: 20, b: 40, l: 60 },
+          paper_bgcolor: "#1a1a1a",
+          plot_bgcolor: "#2a2a2a",
+          font: { color: "#ffffff" },
+          showlegend: true,
+          legend: {
+            x: 1,
+            xanchor: "right",
+            y: 1,
+          },
+        };
+        
+        Plotly.react(plotRef.current, traces, updatedLayout);
+      }
     }, 100); // Update every 100ms
 
     return () => clearInterval(updateInterval);
-  }, [signals, timeWindowMs]);
+  }, [signals, timeWindowMs, isInitialized, plotId]);
 
   return (
     <div className="bg-data-module-bg rounded-md p-3 mb-3">
@@ -130,102 +211,7 @@ function PlotManager({
       </div>
 
       {/* Plot container */}
-      <div className="w-full h-[300px] rounded bg-[#1a1a1a]">
-        {chartData.length > 0 ? (
-          <ResponsiveLine
-            data={chartData}
-            margin={{ top: 20, right: 110, bottom: 50, left: 60 }}
-            xScale={{ type: "linear", min: -(timeWindowMs / 1000), max: 0 }}
-            yScale={{
-              type: "linear",
-              min: "auto",
-              max: "auto",
-              stacked: false,
-              reverse: false,
-            }}
-            axisTop={null}
-            axisRight={null}
-            axisBottom={{
-              tickSize: 5,
-              tickPadding: 5,
-              tickRotation: 0,
-              legend: "Time (s)",
-              legendOffset: 36,
-              legendPosition: "middle",
-              format: (v: any) => `${Math.round(Number(v))}`,
-            }}
-            axisLeft={{
-              tickSize: 5,
-              tickPadding: 5,
-              tickRotation: 0,
-              legend: "Value",
-              legendOffset: -40,
-              legendPosition: "middle",
-            }}
-            pointSize={0}
-            useMesh={true}
-            enableGridX={true}
-            enableGridY={true}
-            theme={{
-              axis: {
-                ticks: {
-                  text: { fill: "#ffffff" },
-                },
-                legend: {
-                  text: { fill: "#ffffff" },
-                },
-              },
-              grid: {
-                line: { stroke: "#444444" },
-              },
-              text: {
-                fill: "#ffffff",
-              },
-              crosshair: {
-                line: {
-                    stroke: '#ffffff',
-                    strokeWidth: 1,
-                    strokeOpacity: 0.35,
-                },
-            },
-            }}
-            colors={PLOT_COLORS}
-            animate={false}
-            isInteractive={true}
-            legends={[
-                {
-                    anchor: 'bottom-right',
-                    direction: 'column',
-                    justify: false,
-                    translateX: 100,
-                    translateY: 0,
-                    itemsSpacing: 0,
-                    itemDirection: 'left-to-right',
-                    itemWidth: 80,
-                    itemHeight: 20,
-                    itemOpacity: 0.75,
-                    symbolSize: 12,
-                    symbolShape: 'circle',
-                    symbolBorderColor: 'rgba(0, 0, 0, .5)',
-                    effects: [
-                        {
-                            on: 'hover',
-                            style: {
-                                itemBackground: 'rgba(0, 0, 0, .03)',
-                                itemOpacity: 1
-                            }
-                        }
-                    ],
-                    itemTextColor: '#ffffff'
-                }
-            ]}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-gray-500">
-            {signals.length > 0 ? "Waiting for data..." : "No data available"}
-          </div>
-        )}
-      </div>
+      <div ref={plotRef} className="w-full h-[300px] rounded" />
 
       {/* Signal list */}
       <div className="mt-2 space-y-1">
