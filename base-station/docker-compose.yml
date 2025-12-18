@@ -13,14 +13,5 @@ services:
     volumes:
       - redis_data:/data
 
-  murmur:
-    image: mumblevoip/murmur:latest
-    network_mode: host
-    restart: unless-stopped
-    volumes:
-      - ./murmur.ini:/etc/murmur/murmur.ini:ro
-    environment:
-      - MURMUR_SUPERUSER_PASSWORD=superuser_password
-
 volumes:
   redis_data:
