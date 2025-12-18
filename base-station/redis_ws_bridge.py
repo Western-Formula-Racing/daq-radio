@@ -49,8 +49,8 @@ async def ws_handler(websocket):
     
     try:
         await websocket.wait_closed()
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[!] Error while waiting for websocket {client_info} to close: {e}")
     finally:
         connected_clients.remove(websocket)
         print(f"[-] Client disconnected: {client_info}. Total: {len(connected_clients)}")
