@@ -10,9 +10,19 @@ interface DataRowProps {
     lastUpdated: number;
     index: number; // for alternating row colors
     compact?: boolean;
+    initialOpen?: boolean;
+    isTourRow?: boolean;
+    tourSignal?: string;
+    onSignalClick?: (
+        msgID: string,
+        signalName: string,
+        messageName: string,
+        unit: string,
+        event: React.MouseEvent
+    ) => void;
 }
 
-export default function DataRow({ msgID, name, category, data, rawData, lastUpdated, index, compact = false }: Readonly<DataRowProps>) {
+export default function DataRow({ msgID, name, category, data, rawData, lastUpdated, index, compact = false, initialOpen = false, isTourRow = false, tourSignal, onSignalClick }: Readonly<DataRowProps>) {
 
     const [currentTime, setCurrentTime] = useState(Date.now());
 
@@ -34,7 +44,14 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
     // Alternating row background 
     const rowBg = index % 2 === 0 ? "bg-sidebar" : "bg-data-module-bg";
 
-    const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(initialOpen);
+
+    useEffect(() => {
+        // Only auto-open if it's the tour row
+        if (isTourRow && initialOpen) {
+            setOpen(true);
+        }
+    }, [initialOpen, isTourRow]);
 
     const rows = useMemo(() => {
         if (!data || !data.length) return [] as [string, string][];
@@ -53,6 +70,7 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
                 tabIndex={0}
                 aria-expanded={open}
                 onClick={toggle}
+                id={isTourRow ? "tour-row-header" : undefined}
                 className={`grid grid-cols-12 text-white text-sm h-[50px] ${rowBg} cursor-pointer transition hover:bg-data-textbox-bg/50`}
             >
 
@@ -103,20 +121,36 @@ export default function DataRow({ msgID, name, category, data, rawData, lastUpda
                                 Value
                             </div>
                         </div>
-                        {rows.map(([label, value], idx) => (
-                            <div key={`${label}-${idx}`} className="col-span-5 grid grid-cols-5">
-                                <div className="col-span-2">
-                                    <div className="w-full text-white text-sm font-semibold py-2 px-3 text-left">
-                                        {label}
+                        {rows.map(([label, value], idx) => {
+                            // Extract unit from value (e.g., "123.45 V" -> "V")
+                            const parts = value.split(" ");
+                            const unit = parts.length > 1 ? parts.slice(1).join(" ") : "";
+
+                            return (
+                                <div key={`${label}-${idx}`} className="col-span-5 grid grid-cols-5">
+                                    <div
+                                        className="col-span-2 cursor-pointer hover:bg-data-textbox-bg/30"
+                                        onClick={(e) => {
+                                            if (onSignalClick) {
+                                                onSignalClick(msgID, label, name, unit, e);
+                                            }
+                                        }}
+                                    >
+                                        <div 
+                                            id={isTourRow && (tourSignal ? label === tourSignal : idx === 0) ? "tour-signal-label" : undefined}
+                                            className="w-full text-white text-sm font-semibold py-2 px-3 text-left"
+                                        >
+                                            {label}
+                                        </div>
+                                    </div>
+                                    <div className="col-span-3 border-l-3 border-data-textbox-bg">
+                                        <div className="w-full text-white text-sm font-semibold py-2 px-3 text-left">
+                                            {value}
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="col-span-3 border-l-3 border-data-textbox-bg">
-                                    <div className="w-full text-white text-sm font-semibold py-2 px-3 text-left">
-                                        {value}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
             </div>

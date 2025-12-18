@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import DataCard from "../components/DataCard";
 import DataRow from "../components/DataRow";
+import PlotManager from "../components/PlotManager";
+import type { PlotSignal } from "../components/PlotManager";
+import PlotControls from "../components/PlotControls";
 import { dataStore } from "../lib/DataStore";
 import { useAllLatestMessages, useDataStoreStats } from "../lib/useDataStore";
 import atozIcon from "../assets/atoz.png";
@@ -11,6 +14,48 @@ import idDescendingIcon from "../assets/id_descending.png";
 import listViewIcon from "../assets/list-view.png";
 import gridViewIcon from "../assets/grid-view.png";
 import { useOutletContext } from "react-router";
+import TourGuide from "../components/TourGuide";
+import type { TourStep } from "../components/TourGuide";
+
+interface Plot {
+  id: string;
+  signals: PlotSignal[];
+}
+
+const TOUR_STEPS: TourStep[] = [
+  {
+    targetId: "dash-view-toggle",
+    title: "View Modes",
+    content: "Switch between 'Grid View' (Cards) and 'List View' (Compact Rows) here.",
+    position: "bottom"
+  },
+  {
+    targetId: "dash-sort-btn",
+    title: "Sorting",
+    content: "Click here to sort messages by Name, ID, or Category.",
+    position: "bottom"
+  },
+  {
+    targetId: "tour-signal-label",
+    title: "Interactive Signals",
+    content: "Click this signal name to open the Plot Controls menu.",
+    position: "right",
+    waitForInteraction: true
+  },
+  {
+    targetId: "tour-new-plot-btn",
+    title: "Create Plot",
+    content: "Click 'New Plot' to start visualizing this data.",
+    position: "right",
+    waitForInteraction: true
+  },
+  {
+    targetId: "dash-plot-sidebar",
+    title: "Plot Area",
+    content: "Your active time-series plot has appeared here! You can add more signals to it or close it.",
+    position: "left"
+  }
+];
 
 function Dashboard() {
   // Sorting and View State
@@ -19,9 +64,32 @@ function Dashboard() {
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [tickUpdate, setTickUpdate] = useState(Date.now());
   const [currentSortIcon, setCurrentSortIcon] = useState(atozIcon);
-  const [viewMode, setViewMode] = useState<"cards" | "list">("cards");
+  const [viewMode, setViewMode] = useState<"cards" | "list">("list");
+  
+  const [tourOpen, setTourOpen] = useState(false);
+  const [currentTourStep, setCurrentTourStep] = useState(0);
 
   const { isSidebarOpen } = useOutletContext<{ isSidebarOpen: boolean }>();
+
+  // Plotting State
+  // =====================================================================
+  const [plots, setPlots] = useState<Plot[]>([]);
+  const [nextPlotId, setNextPlotId] = useState(1);
+  const [plotTimeWindow, setPlotTimeWindow] = useState(30000); // Default 30s in ms
+  const [plotControls, setPlotControls] = useState<{
+    visible: boolean;
+    signalInfo: {
+      msgID: string;
+      signalName: string;
+      messageName: string;
+      unit: string;
+    } | null;
+    position: { x: number; y: number };
+  }>({
+    visible: false,
+    signalInfo: null,
+    position: { x: 0, y: 0 },
+  });
 
   const sortingFilter = useRef({
     name: 0,
@@ -196,21 +264,147 @@ function Dashboard() {
     }
   }, [canMessagesArray, sortingMethod, tickUpdate]);
 
-  // View Mode
+  // View Mode & Tutorial Logic
   // =====================================================================
 
-  // Persisting user view mode choice
+  // Persisting user view mode choice and tutorial check
   useEffect(() => {
-    const saved = localStorage.getItem("dash:viewMode");
-    if (saved == "cards" || saved == "list") setViewMode(saved);
+    const savedView = localStorage.getItem("dash:viewMode");
+    if (savedView == "cards" || savedView == "list") {
+      setViewMode(savedView);
+    }
+
+    const hasSeenTutorial = localStorage.getItem("dash:tutorialSeen");
+    if (!hasSeenTutorial) {
+      // Small delay to let UI settle
+      setTimeout(() => {
+        setTourOpen(true);
+        setCurrentTourStep(0);
+      }, 500);
+    }
   }, []);
 
   useEffect(() => {
     localStorage.setItem("dash:viewMode", viewMode);
   }, [viewMode]);
 
+  const handleCloseTour = () => {
+    setTourOpen(false);
+    localStorage.setItem("dash:tutorialSeen", "true");
+  };
+
+  const handleStartTour = () => {
+    setTourOpen(true);
+    setCurrentTourStep(0);
+  };
+
+  // Plot Management Functions
+  // =====================================================================
+  const handleSignalClick = (
+    msgID: string,
+    signalName: string,
+    messageName: string,
+    unit: string,
+    event: React.MouseEvent
+  ) => {
+    event.stopPropagation();
+    setPlotControls({
+      visible: true,
+      signalInfo: { msgID, signalName, messageName, unit },
+      position: { x: event.clientX, y: event.clientY },
+    });
+
+    // Advance tour if waiting for signal click
+    if (tourOpen && currentTourStep === 2) {
+      setCurrentTourStep(3);
+    }
+  };
+
+  const handleNewPlot = (signalInfo: {
+    msgID: string;
+    signalName: string;
+    messageName: string;
+    unit: string;
+  }) => {
+    const newPlotId = String(nextPlotId);
+    setPlots([
+      ...plots,
+      {
+        id: newPlotId,
+        signals: [signalInfo],
+      },
+    ]);
+    setNextPlotId(nextPlotId + 1);
+
+    // Advance tour if waiting for new plot creation
+    if (tourOpen && currentTourStep === 3) {
+      setCurrentTourStep(4);
+    }
+  };
+
+  const handleAddToPlot = (
+    plotId: string,
+    signalInfo: {
+      msgID: string;
+      signalName: string;
+      messageName: string;
+      unit: string;
+    }
+  ) => {
+    setPlots((prevPlots) =>
+      prevPlots.map((plot) => {
+        if (plot.id === plotId) {
+          // Check if signal already exists in this plot
+          const exists = plot.signals.some(
+            (s) => s.msgID === signalInfo.msgID && s.signalName === signalInfo.signalName
+          );
+          if (!exists) {
+            return {
+              ...plot,
+              signals: [...plot.signals, signalInfo],
+            };
+          }
+        }
+        return plot;
+      })
+    );
+  };
+
+  const handleRemoveSignalFromPlot = (
+    plotId: string,
+    msgID: string,
+    signalName: string
+  ) => {
+    setPlots((prevPlots) =>
+      prevPlots.map((plot) => {
+        if (plot.id === plotId) {
+          return {
+            ...plot,
+            signals: plot.signals.filter(
+              (s) => !(s.msgID === msgID && s.signalName === signalName)
+            ),
+          };
+        }
+        return plot;
+      })
+    );
+  };
+
+  const handleClosePlot = (plotId: string) => {
+    setPlots((prevPlots) => prevPlots.filter((plot) => plot.id !== plotId));
+  };
+
   return (
     <div className="grid grid-cols-3 gap-0 w-100 h-full">
+      {/* Tour Guide Overlay */}
+      <TourGuide 
+        steps={TOUR_STEPS} 
+        isOpen={tourOpen} 
+        onClose={handleCloseTour}
+        currentStepIndex={currentTourStep}
+        onStepChange={setCurrentTourStep}
+      />
+      
       {/* Data display section */}
       <div className="col-span-2 relative flex flex-col h-full overflow-y-auto">
         <div className="flex-1 p-4 pb-16">
@@ -222,73 +416,88 @@ function Dashboard() {
             {/* View selection options */}
             <div className="col-span-1 flex items-center justify-end gap-1 p-3">
               <div className="flex flex-row">
-                {/* Filter button and dropdown  */}
+                {/* Help Button */}
                 <button
-                  onClick={() => setSortMenuOpen((o) => !o)}
-                  className="w-[50px] h-[50px] p-[10px] !rounded-lg flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 transition-colors object-contain"
+                  onClick={handleStartTour}
+                  className="w-[50px] h-[50px] flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 rounded-full transition-colors text-gray-400 hover:text-white font-bold text-lg"
+                  title="Start Tour"
                 >
-                  <img src={currentSortIcon} alt="Sort" />
+                  ?
                 </button>
-                {sortMenuOpen && (
-                  <div className="flex flex-col block fixed top-30 z-100 rounded-md bg-dropdown-menu-bg w-30 h-20 text-center text-white">
-                    <span className="font-bold">Sort By</span>
-                    <div className="bg-dropdown-menu-secondary flex flex-col space-between w-full h-full rounded-b-md">
-                      <button
-                        onClick={() => {
-                          setSortingMethod("name");
-                          setTickUpdate(Date.now());
-                        }}
-                        className={`${
-                          sortingMethod == "name" ? "font-bold" : "font-regular"
-                        }`}
-                      >
-                        Name
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSortingMethod("category");
-                          setTickUpdate(Date.now());
-                        }}
-                        className={`${
-                          sortingMethod == "category"
-                            ? "font-bold"
-                            : "font-regular"
-                        }`}
-                      >
-                        Category
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSortingMethod("id");
-                          setTickUpdate(Date.now());
-                        }}
-                        className={`${
-                          sortingMethod == "id" ? "font-bold" : "font-regular"
-                        }`}
-                      >
-                        ID
-                      </button>
+
+                {/* Filter button and dropdown  */}
+                <div id="dash-sort-btn" className="relative">
+                  <button
+                    onClick={() => setSortMenuOpen((o) => !o)}
+                    className="w-[50px] h-[50px] p-[10px] !rounded-lg flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 transition-colors object-contain"
+                  >
+                    <img src={currentSortIcon} alt="Sort" />
+                  </button>
+                  {sortMenuOpen && (
+                    <div className="flex flex-col block fixed top-30 z-100 rounded-md bg-dropdown-menu-bg w-30 h-20 text-center text-white">
+                      <span className="font-bold">Sort By</span>
+                      <div className="bg-dropdown-menu-secondary flex flex-col space-between w-full h-full rounded-b-md">
+                        <button
+                          onClick={() => {
+                            setSortingMethod("name");
+                            setTickUpdate(Date.now());
+                          }}
+                          className={`${
+                            sortingMethod == "name" ? "font-bold" : "font-regular"
+                          }`}
+                        >
+                          Name
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSortingMethod("category");
+                            setTickUpdate(Date.now());
+                          }}
+                          className={`${
+                            sortingMethod == "category"
+                              ? "font-bold"
+                              : "font-regular"
+                          }`}
+                        >
+                          Category
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSortingMethod("id");
+                            setTickUpdate(Date.now());
+                          }}
+                          className={`${
+                            sortingMethod == "id" ? "font-bold" : "font-regular"
+                          }`}
+                        >
+                          ID
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-              <button
-                onClick={() => setViewMode("list")}
-                className="w-[50px] h-[50px] p-[10px] !rounded-lg flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 transition-colors object-contain"
-                aria-pressed={viewMode === "list"}
-              >
-                <img src={listViewIcon} alt="List view" />
-              </button>
-              <button
-                onClick={() => setViewMode("cards")}
-                className="w-[50px] h-[50px] p-[10px] !rounded-lg flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 transition-colors object-contain"
-                aria-pressed={viewMode === "cards"}
-              >
-                <img src={gridViewIcon} alt="Grid view" />
-              </button>
+              
+              <div id="dash-view-toggle" className="flex">
+                <button
+                  onClick={() => setViewMode("list")}
+                  className="w-[50px] h-[50px] p-[10px] !rounded-lg flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 transition-colors object-contain"
+                  aria-pressed={viewMode === "list"}
+                >
+                  <img src={listViewIcon} alt="List view" />
+                </button>
+                <button
+                  onClick={() => setViewMode("cards")}
+                  className="w-[50px] h-[50px] p-[10px] !rounded-lg flex justify-center items-center cursor-pointer hover:bg-data-textbox-bg/50 transition-colors object-contain"
+                  aria-pressed={viewMode === "cards"}
+                >
+                  <img src={gridViewIcon} alt="Grid view" />
+                </button>
+              </div>
             </div>
           </div>
 
+          <div id="dash-data-list">
           {viewMode === "cards" ? (
             <>
               <div className={`columns-2 gap-4`}>
@@ -317,19 +526,11 @@ function Dashboard() {
                         lastUpdated={sample.timestamp}
                         rawData={sample.rawData}
                         compact={isSidebarOpen}
+                        onSignalClick={handleSignalClick}
                       />
                     </div>
                   );
                 })}
-
-                {/* Static card for comparison */}
-                {/* <DataCard
-                  msgID="1006"
-                  name="TORCH_M1_V1"
-                  category="BMS/TORCH"
-                  lastUpdated={Date.now()}
-                  rawData="00 01 02 03 04 05 06 07"
-                /> */}
               </div>
             </>
           ) : (
@@ -389,6 +590,20 @@ function Dashboard() {
                   })
                 );
 
+                // Tour Targeting Logic:
+                // Try to find message 1024 for AccelX signal (dynamic plot).
+                // If not found, default to the first message (index 0).
+                const targetId = "1024";
+                const targetSignal = "AccelX";
+                const foundIndex = filteredMsgs.findIndex(([id]) => id === targetId);
+                
+                // If found, target that index. If not, target 0.
+                const tourTargetIndex = foundIndex !== -1 ? foundIndex : 0;
+                const tourSignalName = foundIndex !== -1 ? targetSignal : undefined;
+
+                // Check if THIS row is the target
+                const isTarget = i === tourTargetIndex;
+
                 return (
                   <DataRow
                     key={canId}
@@ -407,14 +622,20 @@ function Dashboard() {
                     rawData={sample.rawData}
                     index={i}
                     compact={isSidebarOpen}
+                    onSignalClick={handleSignalClick}
+                    isTourRow={tourOpen && isTarget}
+                    tourSignal={tourSignalName}
+                    initialOpen={tourOpen && isTarget} 
                   />
                 );
               })}
             </div>
           )}
+          </div>
         </div>
 
         {/* Sticky Performance Tab */}
+
         <div className="sticky bottom-0 inset-x-0">
           <div className="w-full py-2 px-4 bg-data-textbox-bg/90 backdrop-blur text-gray-300 text-xs border-t border-white/10">
             <div className="flex justify-between items-center max-w-6xl mx-auto">
@@ -438,7 +659,67 @@ function Dashboard() {
       </div>
 
       {/* Graph display section */}
-      <div className="col-span-1 bg-sidebar">{/* WIP */}</div>
+      <div id="dash-plot-sidebar" className="col-span-1 bg-sidebar p-4 overflow-y-auto">
+        {/* Time Window Control */}
+        <div className="bg-data-module-bg rounded-md p-3 mb-3">
+          <h3 className="text-white font-semibold mb-2">Plot Settings</h3>
+          <div className="flex flex-col gap-2">
+            <label className="text-gray-300 text-sm">
+              Time Window (seconds):
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="300"
+              value={plotTimeWindow / 1000}
+              onChange={(e) => {
+                const value = e.target.value;
+                if (value === '' || value === null) {
+                  return;
+                }
+                const seconds = Math.max(0, Math.min(300, Number(value)));
+                setPlotTimeWindow(seconds * 1000);
+              }}
+              className="bg-data-textbox-bg text-white rounded px-2 py-1 text-sm"
+            />
+          </div>
+        </div>
+
+        {/* Plots */}
+        {plots.length === 0 ? (
+          <div className="text-center text-gray-500 mt-10">
+            <p className="mb-2">No plots yet</p>
+            <p className="text-sm">Click on a sensor to create a plot</p>
+          </div>
+        ) : (
+          plots.map((plot) => (
+            <PlotManager
+              key={plot.id}
+              plotId={plot.id}
+              signals={plot.signals}
+              timeWindowMs={plotTimeWindow}
+              onRemoveSignal={(msgID, signalName) =>
+                handleRemoveSignalFromPlot(plot.id, msgID, signalName)
+              }
+              onClosePlot={() => handleClosePlot(plot.id)}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Plot Controls Modal */}
+      {plotControls.visible && plotControls.signalInfo && (
+        <PlotControls
+          signalInfo={plotControls.signalInfo}
+          existingPlots={plots.map((p) => p.id)}
+          position={plotControls.position}
+          onNewPlot={handleNewPlot}
+          onAddToPlot={handleAddToPlot}
+          onClose={() =>
+            setPlotControls({ visible: false, signalInfo: null, position: { x: 0, y: 0 } })
+          }
+        />
+      )}
     </div>
   );
 }
