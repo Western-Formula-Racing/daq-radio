@@ -1,4 +1,5 @@
-redis
-cantools
-requests
 psutil
+requests
+redis
+websockets
+cantools
