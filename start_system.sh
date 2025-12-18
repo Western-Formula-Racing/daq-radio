@@ -45,7 +45,7 @@ python3 base-station/redis_ws_bridge.py &
 # Check if we should start the frontend (optional, maybe user runs it separately)
 # Assuming user wants to run it here for convenience
 echo -e "${BLUE}[Frontend] Starting Dashboard (Vite)...${NC}"
-cd pecan/Frontend/pecan-live-dashboard
+cd pecan
 npm run dev &
 
 # Wait for all background processes
