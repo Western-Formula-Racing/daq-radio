@@ -1,3 +1,8 @@
 python-can
 redis
 websockets
+PyGObject
+Flask
+Flask-SocketIO
+eventlet
+opencv-python-headless

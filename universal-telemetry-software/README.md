@@ -12,17 +12,43 @@ This is a unified firmware/software for both the Car (Source) and Base Station (
   - **Sequence Tracking** on the base station.
   - **TCP Retransmission**: Every 10s, the base station requests missing packets from the car.
 - **Frontend Integration**: Publishes JSON messages to Redis for the `redis_ws_bridge`.
+- **Bidirectional Audio**: Low-latency voice comms using OPUS/UDP.
 
-## RPi Setup (CAN)
-Ensure your CAN hat (e.g., MCP2515) is configured in `/boot/config.txt`:
+## Hardware Setup (RPi 5)
+
+### 1. CAN Bus
+Ensure your CAN hat (e.g., MCP2515) is configured in `/boot/config.txt`. Note that RPi 5 uses a different SPI controller sometimes, but standard overlays usually work:
 ```text
 dtparam=spi=on
 dtoverlay=mcp2515-can0,oscillator=16000000,interrupt=25
 ```
-Then initialize the interface:
+Initialize:
 ```bash
 sudo ip link set can0 up type can bitrate 500000
 ```
+
+### 2. Audio (No 3.5mm Jack)
+The RPi 5 has no analog audio. You must use a digital interface.
+
+#### Option A: I2S Audio HAT (Recommended for FSAE)
+Use a HAT like the **WM8960** or **HiFiBerry**. These use the GPIO header, are mechanically secure, and have low latency.
+1. Install drivers (see HAT vendor docs).
+2. Check device index: `aplay -l` and `arecord -l`.
+3. Configure Env Vars:
+   ```bash
+   export AUDIO_SOURCE="alsasrc device=hw:0,0"
+   export AUDIO_SINK="alsasink device=hw:0,0"
+   ```
+
+#### Option B: USB Audio Adapter
+Easiest to test, but **vibration risk** in car. Use hot glue or strain relief!
+1. Plug in USB Sound Card.
+2. Check device index: `aplay -l` (usually card 1).
+3. Configure Env Vars:
+   ```bash
+   export AUDIO_SOURCE="alsasrc device=hw:1,0"
+   export AUDIO_SINK="alsasink device=hw:1,0"
+   ```
 
 ## Deployment
 1. Set the `REMOTE_IP` in `docker-compose.yml` to the IP of the other side.
@@ -37,3 +63,6 @@ docker-compose up -d
 - `UDP_PORT`: Default `5005`.
 - `TCP_PORT`: Default `5006`.
 - `REDIS_URL`: Default `redis://localhost:6379/0`.
+- `ENABLE_AUDIO`: `true` (default).
+- `AUDIO_SOURCE`: GStreamer source element (default `autoaudiosrc`).
+- `AUDIO_SINK`: GStreamer sink element (default `autoaudiosink`).
