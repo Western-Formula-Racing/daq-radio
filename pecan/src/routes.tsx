@@ -6,6 +6,7 @@ import Account from "./pages/Account";
 import Settings from "./pages/Settings";
 import ChargeCart from "./pages/ChargeCart";
 import MonitorBuilder from "./pages/MonitorBuilder";
+import SystemLink from "./pages/SystemLink";
 
 export const router = createBrowserRouter([
   {
@@ -19,6 +20,7 @@ export const router = createBrowserRouter([
       { path: "settings", element: <Settings /> },
       { path: "chargecart", element: <ChargeCart /> },
       { path: "monitor-builder", element: <MonitorBuilder /> },
+      { path: "system-link", element: <SystemLink /> },
     ],
   },
 ]);
