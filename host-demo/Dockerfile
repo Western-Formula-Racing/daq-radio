@@ -4,13 +4,13 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Copy package files
-COPY pecan/Frontend/pecan-live-dashboard/package*.json ./
+COPY pecan/package*.json ./
 
 # Install dependencies
 RUN npm ci
 
 # Copy source code
-COPY pecan/Frontend/pecan-live-dashboard/ ./
+COPY pecan/ ./
 
 # Build the application
 RUN npm run build
