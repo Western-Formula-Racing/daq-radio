@@ -15,7 +15,7 @@ downloads/
 eggs/
 .eggs/
 lib/
-!pecan/Frontend/pecan-live-dashboard/src/lib/
+!pecan/src/lib/
 lib64/
 parts/
 sdist/
@@ -223,7 +223,7 @@ ENV/
 .idea/workspace.xml
 /.idea
 node_modules/
-pecan/Frontend/pecan-live-dashboard/src/assets/local.dbc
+pecan/src/assets/local.dbc
 
 *.dbc:Zone.Identifier
 *.csv:Zone.Identifier
