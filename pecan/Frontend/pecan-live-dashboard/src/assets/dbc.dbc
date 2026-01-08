@@ -1,7 +1,7 @@
 VERSION ""
 
 
-NS_ : 
+NS_ :
 	NS_DESC_
 	CM_
 	BA_DEF_
@@ -997,12 +997,12 @@ CM_ SG_ 173 INV_Modulation_Index "This is the modulation index. The scale factor
 CM_ SG_ 172 INV_Power_On_Timer "Updated every 3 msec. This will roll over in approximately 150 days!";
 CM_ SG_ 172 INV_Torque_Feedback "Estimated motor torque feedback";
 CM_ SG_ 172 INV_Commanded_Torque "The commanded Torque";
-CM_ BO_ 194 "To write a parameter use message 0x0C1 with byte #2 set to 1 (write). 
+CM_ BO_ 194 "To write a parameter use message 0x0C1 with byte #2 set to 1 (write).
 To read a parameter use message 0x0C1 with byte #2 to set 0 (read). ";
 CM_ SG_ 194 INV_Parameter_Response_Write_OK "0=Write failure, 1=Success";
 CM_ SG_ 194 INV_Parameter_Response_Data "Data from parameter message.  All data is 16 bits and is contained in bytes 4 and 5. Bytes 6 and 7 should be ignored.";
 CM_ SG_ 194 INV_Parameter_Response_Addr "Address of parameter response message data.";
-CM_ BO_ 193 "To write a parameter use message 0x0C1 with byte #2 set to 1 (write). 
+CM_ BO_ 193 "To write a parameter use message 0x0C1 with byte #2 set to 1 (write).
 To read a parameter use message 0x0C1 with byte #2 to set 0 (read). ";
 CM_ SG_ 193 VCU_INV_Parameter_Data "Data to be written.  All data is 16 bits and is contained in bytes 4 and 5.";
 CM_ SG_ 193 VCU_INV_Parameter_RW_Command "0=Read, 1=Write";
@@ -1021,7 +1021,7 @@ CM_ SG_ 171 INV_Run_Fault_Lo "Each bit represents a fault. Please refer to PM100
 CM_ SG_ 171 INV_Post_Fault_Lo "Each bit represents a fault. Please refer to PM100 Users Manual for details.";
 CM_ SG_ 170 INV_Direction_Command "1 = Forward
 0 = 'Reverse' if inverter enabled  & 'Stopped' if inverter is disabled";
-CM_ SG_ 170 INV_Inverter_Enable_State "0=Inverter Disabled, 
+CM_ SG_ 170 INV_Inverter_Enable_State "0=Inverter Disabled,
 1=Inverter Enabled";
 CM_ SG_ 170 INV_Relay_3_Status "0=OFF, 1=ON";
 CM_ SG_ 170 INV_Relay_4_Status "0=OFF, 1=ON";
