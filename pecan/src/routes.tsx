@@ -7,6 +7,9 @@ import Settings from "./pages/Settings";
 import ChargeCart from "./pages/ChargeCart";
 import MonitorBuilder from "./pages/MonitorBuilder";
 
+// Get base path for GitHub Pages deployment
+const basename = import.meta.env.BASE_URL || '/';
+
 export const router = createBrowserRouter([
   {
     path: "/",
@@ -21,4 +24,4 @@ export const router = createBrowserRouter([
       { path: "monitor-builder", element: <MonitorBuilder /> },
     ],
   },
-]);
+], { basename });
