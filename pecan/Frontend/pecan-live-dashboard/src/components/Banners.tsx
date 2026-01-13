@@ -1,6 +1,6 @@
 import { forceCache } from "../utils/canProcessor";
 
-export { ESPBanner, CacheBanner };
+export { DefaultBanner, CacheBanner };
 
 interface InputProps {
   open: boolean;
@@ -14,14 +14,14 @@ const handleRevert = async () => {
   globalThis.location.reload();
 };
 
-function ESPBanner({ open, onClose }: Readonly<InputProps>) {
+function DefaultBanner({ open, onClose }: Readonly<InputProps>) {
   if (!open) return null;
   return (
     <div className="flex flex-row w-full z-200 bg-dropdown-menu-bg justify-between items-center box-border px-4 py-1">
       <div className="w-[20%]"></div>
       <div className="w-[60%] flex justify-center">
         <span className="text-white text-[16pt] font-semibold">
-          Using ESP-provided DBC file. You can upload a custom DBC from
+          Using preconfigured DBC file. You can upload a custom DBC from
           Settings.
         </span>
       </div>
@@ -58,7 +58,7 @@ function CacheBanner({ open, onClose }: Readonly<InputProps>) {
           onClick={handleRevert}
           className="bg-banner-button w-[120px] h-auto whitespace-normal break-words text-center text-[18pt] leading-tight font-semibold text-white rounded"
         >
-          Revert to<br></br> ESP DBC
+          Revert to<br></br> Preconfigured
         </button>
         <button
           onClick={onClose}

@@ -19,11 +19,11 @@ function Settings() {
   const banners = useOutletContext<BannerApi>();
 
   type BannerApi = {
-    showESP: () => void;
+    showDefault: () => void;
     showCache: () => void;
-    hideESP: () => void;
+    hideDefault: () => void;
     hideCache: () => void;
-    toggleESP: () => void;
+    toggleDefault: () => void;
     toggleCache: () => void;
   };
 
@@ -32,7 +32,7 @@ function Settings() {
     if (!file) return;
     await uploadFileToCache(file);
     banners.showCache();
-    banners.hideESP();
+    banners.hideDefault();
     globalThis.location.reload();
   };
 

@@ -9,20 +9,21 @@ import {
 } from "./utils/canProcessor";
 import { Outlet } from "react-router";
 import { webSocketService } from "./services/WebSocketService";
-import { ESPBanner, CacheBanner } from "./components/Banners";
+import { DefaultBanner, CacheBanner } from "./components/Banners";
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
 
   const [displayCacheBanner, setDisplayCacheBanner] = useState<boolean>(false);
-  const [displayESPBanner, setDisplayESPBanner] = useState<boolean>(true);
+  const [displayDefaultBanner, setDisplayDefaultBanner] =
+    useState<boolean>(true);
 
   const bannerApi = {
-    showESP: () => setDisplayESPBanner(true),
+    showDefault: () => setDisplayDefaultBanner(true),
     showCache: () => setDisplayCacheBanner(true),
-    hideESP: () => setDisplayESPBanner(false),
+    hideDefault: () => setDisplayDefaultBanner(false),
     hideCache: () => setDisplayCacheBanner(false),
-    toggleESP: () => setDisplayESPBanner((o) => !o),
+    toggleDefault: () => setDisplayDefaultBanner((o) => !o),
     toggleCache: () => setDisplayCacheBanner((o) => !o),
   };
 
@@ -30,7 +31,7 @@ function App() {
     (async () => {
       await loadDBCFromCache();
       if (usingCachedDBC()) {
-        setDisplayESPBanner(false);
+        setDisplayDefaultBanner(false);
         setDisplayCacheBanner(true);
       }
     })();
@@ -58,9 +59,9 @@ function App() {
 
       {/* Main content area, Outlet element is needed to display the rendered child pages received from the routes */}
       <main id="main-content" className=" w-100 h-full">
-        <ESPBanner
-          open={displayESPBanner}
-          onClose={() => setDisplayESPBanner(false)}
+        <DefaultBanner
+          open={displayDefaultBanner}
+          onClose={() => setDisplayDefaultBanner(false)}
         />
         <CacheBanner
           open={displayCacheBanner}
