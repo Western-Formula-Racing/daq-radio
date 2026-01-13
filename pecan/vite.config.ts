@@ -3,6 +3,10 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import type { Plugin } from "vite";
 
+// GitHub Pages deployment - repository name (change if different)
+const isGitHubPages = process.env.GITHUB_ACTIONS === 'true';
+const repoName = 'daq-radio';
+
 // WebSocket server plugin - runs in both development and production
 const websocketPlugin = (): Plugin => ({
   name: 'websocket-server',
@@ -71,6 +75,7 @@ function startWebSocketServer() {
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: isGitHubPages ? `/${repoName}/` : '/',
   plugins: [
     react(), 
     tailwindcss(),
