@@ -29,10 +29,23 @@ function App() {
 
   useEffect(() => {
     (async () => {
+      console.log("[App] Loading DBC from cache...");
       await loadDBCFromCache();
-      if (usingCachedDBC()) {
+      const isUsingCache = usingCachedDBC();
+      console.log("[App] Using cached DBC:", isUsingCache);
+      
+      if (isUsingCache) {
         setDisplayDefaultBanner(false);
         setDisplayCacheBanner(true);
+        // Persist the state
+        localStorage.setItem('dbc-cache-active', 'true');
+      } else {
+        // Check if we previously had cache active
+        const wasCacheActive = localStorage.getItem('dbc-cache-active') === 'true';
+        if (wasCacheActive) {
+          console.log("[App] Cache was previously active but not found now");
+        }
+        localStorage.removeItem('dbc-cache-active');
       }
     })();
   }, []);

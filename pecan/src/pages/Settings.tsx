@@ -3,16 +3,36 @@ import { useOutletContext } from "react-router";
 async function uploadFileToCache(file: File) {
   if (!file) return;
 
-  if (!("caches" in window)) return;
+  const fileContent = await file.text();
+  
+  // Try Cache API first (requires secure context)
+  try {
+    const cache = await caches.open("dbc-files");
+    const cacheKey = "cache.dbc";
 
-  const cache = await caches.open("dbc-files");
-
-  await cache.delete("/dbc-files/cache.dbc");
-  const request = new Request(`/dbc-files/cache.dbc`);
-  const res = new Response(await file.text(), {
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
-  });
-  await cache.put(request, res);
+    console.log("[uploadFileToCache] Uploading DBC file to cache...");
+    await cache.delete(cacheKey);
+    const request = new Request(cacheKey);
+    const res = new Response(fileContent, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+    await cache.put(request, res);
+    console.log("[uploadFileToCache] Successfully cached DBC file");
+    
+    // Verify it was cached
+    const verify = await cache.match(cacheKey);
+    console.log("[uploadFileToCache] Verification - cached file exists:", !!verify);
+  } catch (error) {
+    console.warn("[uploadFileToCache] Cache API not available, using localStorage fallback:", error.message);
+  }
+  
+  // Always save to localStorage as fallback (works in non-secure contexts)
+  try {
+    localStorage.setItem('dbc-file-content', fileContent);
+    console.log("[uploadFileToCache] Successfully saved DBC to localStorage");
+  } catch (error) {
+    console.error("[uploadFileToCache] Error saving to localStorage:", error);
+  }
 }
 
 function Settings() {
@@ -31,6 +51,10 @@ function Settings() {
     const file = e.target.files?.[0];
     if (!file) return;
     await uploadFileToCache(file);
+    
+    // Set localStorage flag to indicate cache is active
+    localStorage.setItem('dbc-cache-active', 'true');
+    
     banners.showCache();
     banners.hideDefault();
     globalThis.location.reload();

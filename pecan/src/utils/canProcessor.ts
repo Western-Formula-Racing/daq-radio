@@ -106,12 +106,42 @@ const testMessages = testMessagesRaw.map((line) => {
  */
 
 export async function loadDBCFromCache() {
-  const cache = await caches.open("dbc-files");
-  const res = await cache.match("/dbc-files/cache.dbc");
-  if (res) {
-    usingCache = true;
-    dbcFile = await res.text();
-  } else if (import.meta.env.DEV) {
+  try {
+    // Try Cache API first (requires secure context: HTTPS or localhost)
+    const cache = await caches.open("dbc-files");
+    const cacheKey = "cache.dbc";
+    console.log("[loadDBCFromCache] Looking for cached DBC file...");
+    
+    const res = await cache.match(cacheKey);
+    console.log("[loadDBCFromCache] Cache match result:", res);
+    
+    if (res) {
+      usingCache = true;
+      dbcFile = await res.text();
+      console.log("[loadDBCFromCache] Successfully loaded DBC from cache, size:", dbcFile.length);
+      return;
+    }
+  } catch (error) {
+    console.warn("[loadDBCFromCache] Cache API not available (requires HTTPS or localhost):", error.message);
+  }
+  
+  // Fallback to localStorage (works in non-secure contexts)
+  try {
+    const cachedDBC = localStorage.getItem('dbc-file-content');
+    if (cachedDBC) {
+      usingCache = true;
+      dbcFile = cachedDBC;
+      console.log("[loadDBCFromCache] Successfully loaded DBC from localStorage, size:", dbcFile.length);
+      return;
+    }
+  } catch (error) {
+    console.error("[loadDBCFromCache] Error accessing localStorage:", error);
+  }
+  
+  // No cached DBC found, use default
+  console.log("[loadDBCFromCache] No cached DBC found, using default");
+  usingCache = false;
+  if (import.meta.env.DEV) {
     dbcFile = localDbc;
   } else {
     dbcFile = exampleDbc;

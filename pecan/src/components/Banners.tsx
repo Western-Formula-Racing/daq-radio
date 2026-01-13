@@ -8,8 +8,24 @@ interface InputProps {
 }
 
 const handleRevert = async () => {
-  const cache = await caches.open("dbc-files");
-  await cache.delete("dbc-files/cache.dbc");
+  // Clear Cache API if available
+  try {
+    const cache = await caches.open("dbc-files");
+    await cache.delete("cache.dbc");
+    console.log("[handleRevert] Cleared cache");
+  } catch (error) {
+    console.warn("[handleRevert] Cache API not available:", error.message);
+  }
+  
+  // Clear localStorage
+  try {
+    localStorage.removeItem('dbc-file-content');
+    localStorage.removeItem('dbc-cache-active');
+    console.log("[handleRevert] Cleared localStorage");
+  } catch (error) {
+    console.error("[handleRevert] Error clearing localStorage:", error);
+  }
+  
   forceCache(false);
   globalThis.location.reload();
 };
