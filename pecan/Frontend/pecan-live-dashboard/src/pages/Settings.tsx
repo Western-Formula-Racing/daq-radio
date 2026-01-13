@@ -45,7 +45,13 @@ function Settings() {
         <div className="flex flex-row w-[95%] h-[8vh] rounded-md text-white font-semibold bg-option justify-between items-center px-4">
           <h3>Upload custom dbc file:</h3>
           <div>
-            <label htmlFor="dbc-upload">Upload DBC</label>
+            <label
+              htmlFor="dbc-upload"
+              className="bg-banner-button hover:bg-banner-button-hover px-6 py-2 cursor-pointer text-center text-[14pt] font-semibold text-white rounded-md transition-colors shadow-sm"
+              style={{ borderRadius: '0.375rem' }}
+            >
+              Upload DBC
+            </label>
             <input
               className="sr-only"
               id="dbc-upload"
