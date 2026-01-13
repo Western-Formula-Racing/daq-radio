@@ -23,7 +23,7 @@ async function uploadFileToCache(file: File) {
     const verify = await cache.match(cacheKey);
     console.log("[uploadFileToCache] Verification - cached file exists:", !!verify);
   } catch (error) {
-    console.warn("[uploadFileToCache] Cache API not available, using localStorage fallback:", error.message);
+    console.warn("[uploadFileToCache] Cache API not available, using localStorage fallback:", error instanceof Error ? error.message : String(error));
   }
   
   // Always save to localStorage as fallback (works in non-secure contexts)

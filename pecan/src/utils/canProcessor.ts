@@ -122,7 +122,7 @@ export async function loadDBCFromCache() {
       return;
     }
   } catch (error) {
-    console.warn("[loadDBCFromCache] Cache API not available (requires HTTPS or localhost):", error.message);
+    console.warn("[loadDBCFromCache] Cache API not available (requires HTTPS or localhost):", error instanceof Error ? error.message : String(error));
   }
   
   // Fallback to localStorage (works in non-secure contexts)

@@ -14,7 +14,7 @@ const handleRevert = async () => {
     await cache.delete("cache.dbc");
     console.log("[handleRevert] Cleared cache");
   } catch (error) {
-    console.warn("[handleRevert] Cache API not available:", error.message);
+    console.warn("[handleRevert] Cache API not available:", error instanceof Error ? error.message : String(error));
   }
   
   // Clear localStorage
