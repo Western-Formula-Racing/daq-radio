@@ -27,7 +27,7 @@ function startWebSocketServer() {
     
     wss.on('connection', (ws) => {
       // eslint-disable-next-line no-console
-      console.log('Client connected (Dashboard or ESP32/Data Sender)');
+      console.log('Client connected (Dashboard or Data Sender)');
       
       ws.on('message', (message) => {
         try {
@@ -62,7 +62,7 @@ function startWebSocketServer() {
     // eslint-disable-next-line no-console
     console.log('WebSocket server is running on port 8080');
     // eslint-disable-next-line no-console
-    console.log('ESP32 and Dashboard can connect to ws://localhost:8080');
+    console.log('Data Sender and Dashboard can connect to ws://localhost:8080');
   }).catch((error) => {
     // eslint-disable-next-line no-console
     console.error('Failed to start WebSocket server:', error);

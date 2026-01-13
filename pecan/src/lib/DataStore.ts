@@ -1,7 +1,7 @@
 /**
  * Telemetry DataStore
  * 
- * A singleton in-browser data buffer for live telemetry from ESP32 WebSocket.
+ * A singleton in-browser data buffer for live telemetry from WebSocket.
  * Provides a single source of truth for "what's the latest value?" and 
  * "what happened in the last X seconds?" for each CAN message ID.
  */
