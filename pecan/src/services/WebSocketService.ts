@@ -42,18 +42,18 @@ export class WebSocketService {
       
       this.ws.onmessage = (event) => {
         try {
-          console.log('Received WebSocket message:', event.data);
+          // Muted verbose logging: console.log('Received WebSocket message:', event.data);
           
           const messageData = JSON.parse(event.data);
           const decoded = this.processor.processWebSocketMessage(messageData);
-          console.log('Decoded message(s):', decoded);
+          // Muted verbose logging: console.log('Decoded message(s):', decoded);
           
           const messages = Array.isArray(decoded) ? decoded : [decoded];
           
           messages.forEach(msg => {
             if (msg?.signals) {
               const canId = msg.canId.toString();
-              console.log(`Processing CAN ID ${canId}:`, msg.signals);
+              // Muted verbose logging: console.log(`Processing CAN ID ${canId}:`, msg.signals);
               
               dataStore.ingestMessage({
                 msgID: canId,
