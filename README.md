@@ -203,9 +203,8 @@ This project is maintained by Western Formula Racing. Please contact the team fo
 
 ## 🔗 Related Resources
 
-- **Live Demo**: [pecan-demo.0001200.xyz](http://pecan-demo.0001200.xyz)
+- **Live Demo**: [pecan-demo.0001200.xyz](https://pecan-demo.0001200.xyz)
 - **WebSocket Server**: ws-wfr.0001200.xyz
-- **Western Formula Racing**: [Team Website]
 
 ## 📞 Support
 
