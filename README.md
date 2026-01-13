@@ -1,6 +1,10 @@
 # Western Formula Racing - DAQ Radio System
 
-A comprehensive telemetry and data acquisition system for real-time monitoring of formula racing vehicle performance. This system captures CAN bus data from the vehicle, transmits it to a base station, and visualizes it through an interactive web dashboard.
+> A Western Formula Racing Open Source Project
+
+[![Website](https://img.shields.io/badge/Website-westernformularacing.com-D6AB39?style=for-the-badge)](https://www.westernformularacing.com)
+
+Comprehensive telemetry and data acquisition system for real-time monitoring of formula racing vehicle performance. This system captures CAN bus data from the vehicle, transmits it to a base station, and visualizes it through an interactive web dashboard.
 
 ## 🏎️ Overview
 
@@ -96,20 +100,7 @@ Production deployment configuration for hosting the PECAN dashboard.
    git clone https://github.com/Western-Formula-Racing/daq-radio.git
    cd daq-radio
    ```
-
-2. **Start the complete system:**
-   ```bash
-   ./start_system.sh test
-   ```
-
-   This script will:
-   - Start Redis server
-   - Launch the base station receiver (in test mode)
-   - Start the WebSocket bridge
-   - Run the PECAN dashboard in development mode
-
-3. **Access the dashboard:**
-   Open your browser to `http://localhost:5173`
+Documentation WIP.
 
 ### Manual Setup (Individual Components)
 
@@ -201,18 +192,19 @@ Contributions are welcome! This project is maintained by the Western Formula Rac
 5. Submit a pull request
 
 ## 📝 License
-
-This project is maintained by Western Formula Racing. Please contact the team for licensing information.
+This project is licensed under the AGPL-3.0 License. See the [LICENSE](./LICENSE) file for details.
 
 ## 🔗 Related Resources
 
 - **Live Demo**: [pecan-demo.0001200.xyz](https://pecan-demo.0001200.xyz)
-- **WebSocket Server**: ws-wfr.0001200.xyz
+- **Testing WebSocket Server**: ws-wfr.0001200.xyz
 
-## 📞 Support
+## ❓ Support
 
-For questions or issues, please contact the Western Formula Racing software team or open an issue on GitHub.
+For questions or issues, please open an issue on GitHub.
 
 ---
 
 **Built with ❤️ by Western Formula Racing**
+
+London, Ontario, Canada 🇨🇦 
