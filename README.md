@@ -40,7 +40,7 @@ A modern React + TypeScript web application for real-time telemetry visualizatio
 - Interactive charts and graphs using Plotly.js
 - Built with Vite, React 19, and Tailwind CSS
 
-**Tech Stack:** React, TypeScript, Vite, Tailwind CSS, Plotly.js, React Bootstrap
+**Tech Stack:** React 19, TypeScript, Vite, Tailwind CSS, React Bootstrap, Plotly.js
 
 [📖 Detailed Documentation](./pecan/README.md)
 
@@ -181,10 +181,13 @@ daq-radio/
 
 ### Technology Stack
 
-- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS
+- **Frontend**: React 19, TypeScript, Tailwind CSS, React Bootstrap
+- **Visualization**: Plotly.js for interactive charts and graphs
+- **Build Tools**: Vite
 - **Backend**: Python, asyncio, WebSockets
-- **Data**: Redis (message broker), CAN bus data (DBC format)
-- **Deployment**: Docker, Nginx
+- **Message Broker**: Redis
+- **Data Format**: CAN bus (DBC files)
+- **Deployment**: Docker, Docker Compose, Nginx
 
 ## 🤝 Contributing
 
