@@ -1,0 +1,24 @@
+services:
+  telemetry:
+    build: .
+    network_mode: host
+    privileged: true
+    restart: always
+    environment:
+      - ROLE=${ROLE:-auto}
+      - REMOTE_IP=${REMOTE_IP:-192.168.1.100}
+      - UDP_PORT=5005
+      - TCP_PORT=5006
+      - REDIS_URL=redis://localhost:6379/0
+    volumes:
+      - /lib/modules:/lib/modules # In case CAN drivers are needed
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:alpine
+    network_mode: host # Simpler for discovery
+    restart: always
