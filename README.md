@@ -196,8 +196,9 @@ This project is licensed under the AGPL-3.0 License. See the [LICENSE](./LICENSE
 
 ## 🔗 Related Resources
 
-- **Live Demo**: [pecan-demo.0001200.xyz](https://pecan-demo.0001200.xyz)
-- **Testing WebSocket Server**: ws-wfr.0001200.xyz
+- **PECAN Project Page**: [Project PECAN](https://western-formula-racing.github.io/project-pecan-website/)
+- **Live Demo**: [Demo](https://western-formula-racing.github.io/daq-radio/dashboard)
+
 
 ## ❓ Support
 
