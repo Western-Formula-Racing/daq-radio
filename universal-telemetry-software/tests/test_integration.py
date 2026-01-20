@@ -106,7 +106,7 @@ class TestUDPDataFlow:
         time.sleep(3)
         logs = docker.get_container_logs(CAR_CONTAINER, tail=50)
         # Car should have CAN reader and UDP sender running
-        assert "CAN Reader started" in logs or "Simulation mode" in logs, \
+        assert "CAN Reader started" in logs or "Starting simulation mode" in logs, \
             "Car CAN reader/simulator not started"
         logger.info("✓ Car is generating CAN data")
     

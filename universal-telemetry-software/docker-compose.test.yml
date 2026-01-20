@@ -51,7 +51,6 @@ services:
       - "5006:5006/tcp" # TCP retransmission
       - "8080:8080/tcp" # Status HTTP server
       - "9080:9080/tcp" # WebSocket for PECAN
-      - "6379:6379/tcp" # Redis (for external access)
     environment:
       - ROLE=base # Force base mode
       - REMOTE_IP=car # Receive from car container
@@ -79,6 +78,8 @@ services:
     image: redis:8.2
     container_name: daq-base-redis
     restart: unless-stopped
+    ports:
+      - "6379:6379/tcp" # Expose Redis for test connectivity
     volumes:
       - base_redis_data:/data
     networks:
