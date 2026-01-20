@@ -227,3 +227,7 @@ pecan/src/assets/local.dbc
 
 *.dbc:Zone.Identifier
 *.csv:Zone.Identifier
+
+# Test artifacts
+test-logs/
+.pytest_cache/

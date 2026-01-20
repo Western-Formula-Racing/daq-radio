@@ -31,9 +31,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
-COPY src/ ./src/
-COPY web-tester/ ./web-tester/
-COPY main.py .
+COPY src/ /app/src/
+COPY status/ /app/status/
+COPY web-tester/ /app/web-tester/
+COPY main.py /app/.
 
 # Use environment variables for configuration
 ENV ROLE=auto

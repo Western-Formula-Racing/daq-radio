@@ -5,6 +5,8 @@ import logging
 from src.data import TelemetryNode
 from src.video import run_video
 from src.audio import run_audio
+from src.websocket_bridge import run_websocket_bridge
+from src.status_server import run_status_server
 import asyncio
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -39,6 +41,16 @@ def start_audio(role, remote_ip):
         logger.warning("Could not set Audio priority")
     run_audio(role, remote_ip)
 
+def start_websocket_bridge():
+    # WebSocket bridge for PECAN dashboard
+    logger.info("Starting WebSocket bridge for PECAN")
+    asyncio.run(run_websocket_bridge())
+
+def start_status_server():
+    # HTTP server for status monitoring page
+    logger.info("Starting status monitoring HTTP server")
+    run_status_server()
+
 if __name__ == "__main__":
     logger.info("Universal Telemetry Software Starting...")
     
@@ -69,13 +81,27 @@ if __name__ == "__main__":
     p_telemetry.start()
     processes.append(p_telemetry)
 
-    # 2. Video (Optional)
+    # 2. WebSocket Bridge (Base Station Only - for PECAN)
+    if role == "base":
+        p_websocket = multiprocessing.Process(target=start_websocket_bridge, name="WebSocket")
+        p_websocket.start()
+        processes.append(p_websocket)
+        logger.info("WebSocket bridge started for PECAN dashboard")
+
+    # 3. Status Server (Base Station Only - for monitoring)
+    if role == "base":
+        p_status = multiprocessing.Process(target=start_status_server, name="StatusServer")
+        p_status.start()
+        processes.append(p_status)
+        logger.info("Status monitoring server started on port 8080")
+
+    # 4. Video (Optional)
     if enable_video:
         p_video = multiprocessing.Process(target=start_video, args=(role, remote_ip), name="Video")
         p_video.start()
         processes.append(p_video)
 
-    # 3. Audio (Optional)
+    # 5. Audio (Optional)
     if enable_audio:
         p_audio = multiprocessing.Process(target=start_audio, args=(role, remote_ip), name="Audio")
         p_audio.start()

@@ -1,15 +1,24 @@
 services:
   telemetry:
     build: .
-    network_mode: host
     privileged: true
-    restart: always
+    restart: unless-stopped
+    ports:
+      - "5005:5005/udp" # UDP CAN data
+      - "5006:5006/tcp" # TCP retransmission
+      - "8080:8080/tcp" # Status HTTP server
+      - "9080:9080/tcp" # WebSocket for PECAN
     environment:
-      - ROLE=${ROLE:-auto}
-      - REMOTE_IP=${REMOTE_IP:-192.168.1.100}
+      - ROLE=auto # auto, car, or base
+      - REMOTE_IP=192.168.1.100 # IP of the other RPi
       - UDP_PORT=5005
       - TCP_PORT=5006
-      - REDIS_URL=redis://localhost:6379/0
+      - REDIS_URL=redis://redis:6379/0 # Use service name
+      - WS_PORT=9080 # WebSocket for PECAN dashboard
+      - STATUS_PORT=8080 # HTTP server for status page
+      - SIMULATE=true # Set to true for simulation mode
+      - ENABLE_VIDEO=false # Enable video streaming
+      - ENABLE_AUDIO=false # Enable audio streaming
     volumes:
       - /lib/modules:/lib/modules # In case CAN drivers are needed
     logging:
@@ -17,8 +26,23 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    depends_on:
+      - redis
 
   redis:
-    image: redis:alpine
-    network_mode: host # Simpler for discovery
-    restart: always
+    image: redis:8.2
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:
+
+    # Ports exposed (via network_mode: host):
+    # 5005 - UDP (CAN data streaming)
+    # 5006 - TCP (packet retransmission)
+    # 6379 - Redis
+    # 8080 - Status monitoring HTTP server
+    # 9080 - WebSocket for PECAN dashboard

@@ -1,0 +1,111 @@
+services:
+  # Car simulation (sends CAN data via UDP)
+  car:
+    build: .
+    container_name: daq-car
+    privileged: true
+    restart: unless-stopped
+    environment:
+      - ROLE=car # Force car mode
+      - REMOTE_IP=base # Send to base container
+      - UDP_PORT=5005
+      - TCP_PORT=5006
+      - REDIS_URL=redis://car-redis:6379/0
+      - SIMULATE=true # Simulation mode (no CAN hardware)
+      - ENABLE_VIDEO=false
+      - ENABLE_AUDIO=false
+    depends_on:
+      car-redis:
+        condition: service_healthy
+    networks:
+      - daq-network
+    healthcheck:
+      test: [ "CMD", "pgrep", "-f", "python3 main.py" ]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  car-redis:
+    image: redis:8.2
+    container_name: daq-car-redis
+    restart: unless-stopped
+    volumes:
+      - car_redis_data:/data
+    networks:
+      - daq-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  # Base station (receives data, serves WebSocket and status page)
+  base:
+    build: .
+    container_name: daq-base
+    privileged: true
+    restart: unless-stopped
+    ports:
+      - "5005:5005/udp" # UDP CAN data (for external access)
+      - "5006:5006/tcp" # TCP retransmission
+      - "8080:8080/tcp" # Status HTTP server
+      - "9080:9080/tcp" # WebSocket for PECAN
+      - "6379:6379/tcp" # Redis (for external access)
+    environment:
+      - ROLE=base # Force base mode
+      - REMOTE_IP=car # Receive from car container
+      - UDP_PORT=5005
+      - TCP_PORT=5006
+      - REDIS_URL=redis://base-redis:6379/0
+      - WS_PORT=9080
+      - STATUS_PORT=8080
+      - SIMULATE=false # Base doesn't simulate
+      - ENABLE_VIDEO=false
+      - ENABLE_AUDIO=false
+    depends_on:
+      base-redis:
+        condition: service_healthy
+    networks:
+      - daq-network
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8080 || exit 1" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  base-redis:
+    image: redis:8.2
+    container_name: daq-base-redis
+    restart: unless-stopped
+    volumes:
+      - base_redis_data:/data
+    networks:
+      - daq-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  car_redis_data:
+  base_redis_data:
+
+
+networks:
+  daq-network:
+    driver: bridge
+
+# This configuration runs both car and base station on the same machine
+# for testing the full communication flow.
+#
+# Access points:
+# - Status page: http://localhost:8080
+# - WebSocket (PECAN): ws://localhost:9080
+# - Redis: localhost:6379
+#
+# The car container will generate simulated CAN data and send it via UDP
+# to the base container, which will publish it to Redis and make it available
+# via WebSocket.

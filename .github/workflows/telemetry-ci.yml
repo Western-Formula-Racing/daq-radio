@@ -1,0 +1,77 @@
+name: Telemetry System CI/CD
+
+on:
+  push:
+    branches: [ main, telemetry-software ]
+    paths:
+      - 'universal-telemetry-software/**'
+      - '.github/workflows/telemetry-ci.yml'
+  pull_request:
+    branches: [ main, telemetry-software ]
+    paths:
+      - 'universal-telemetry-software/**'
+      - '.github/workflows/telemetry-ci.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build telemetry Docker image
+      working-directory: ./universal-telemetry-software
+      run: |
+        docker build -t universal-telemetry:test .
+    
+    - name: Start test environment
+      working-directory: ./universal-telemetry-software
+      run: |
+        docker compose -f docker-compose.test.yml up -d
+        echo "Waiting for services to be ready..."
+        sleep 10
+    
+    - name: Check container health
+      working-directory: ./universal-telemetry-software
+      run: |
+        docker compose -f docker-compose.test.yml ps
+        docker compose -f docker-compose.test.yml logs
+    
+    - name: Install test dependencies
+      run: |
+        pip install pytest pytest-asyncio websockets redis requests
+    
+    - name: Run integration tests
+      working-directory: ./universal-telemetry-software
+      run: |
+        chmod +x run_ci_tests.sh
+        ./run_ci_tests.sh
+    
+    - name: Collect logs on failure
+      if: failure()
+      working-directory: ./universal-telemetry-software
+      run: |
+        mkdir -p test-logs
+        docker compose -f docker-compose.test.yml logs --no-color > test-logs/docker-compose.log
+        docker logs daq-car > test-logs/car.log 2>&1 || true
+        docker logs daq-base > test-logs/base.log 2>&1 || true
+        docker logs daq-car-redis > test-logs/car-redis.log 2>&1 || true
+        docker logs daq-base-redis > test-logs/base-redis.log 2>&1 || true
+    
+    - name: Upload test logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-logs
+        path: universal-telemetry-software/test-logs/
+        retention-days: 7
+    
+    - name: Cleanup
+      if: always()
+      working-directory: ./universal-telemetry-software
+      run: |
+        docker compose -f docker-compose.test.yml down -v
