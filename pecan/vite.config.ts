@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import type { Plugin } from "vite";
@@ -25,21 +25,21 @@ function startWebSocketServer() {
   // Dynamic import to avoid build-time dependency issues
   import('ws').then(({ WebSocketServer }) => {
     const wss = new WebSocketServer({ port: 8080 });
-    
+
     // eslint-disable-next-line no-console
     console.log('WebSocket server started on ws://localhost:8080');
-    
+
     wss.on('connection', (ws) => {
       // eslint-disable-next-line no-console
       console.log('Client connected (Dashboard or Data Sender)');
-      
+
       ws.on('message', (message) => {
         try {
           const data = JSON.parse(message.toString());
           const messageCount = Array.isArray(data) ? data.length : 1;
           // eslint-disable-next-line no-console
           console.log(`Received ${messageCount} message(s) to broadcast:`, data);
-          
+
           // Broadcast to all OTHER connected WebSocket clients (not sender)
           wss.clients.forEach(client => {
             if (client !== ws && client.readyState === 1) { // WebSocket.OPEN
@@ -51,18 +51,18 @@ function startWebSocketServer() {
           console.error('Error parsing WebSocket message:', error);
         }
       });
-      
+
       ws.on('close', () => {
         // eslint-disable-next-line no-console
         console.log('Client disconnected');
       });
-      
+
       ws.on('error', (error) => {
         // eslint-disable-next-line no-console
         console.error('WebSocket error:', error);
       });
     });
-    
+
     // eslint-disable-next-line no-console
     console.log('WebSocket server is running on port 8080');
     // eslint-disable-next-line no-console
@@ -77,8 +77,23 @@ function startWebSocketServer() {
 export default defineConfig({
   base: isGitHubPages ? `/${repoName}/` : '/',
   plugins: [
-    react(), 
+    react(),
     tailwindcss(),
     websocketPlugin()
   ],
+  test: {
+    globals: true,
+    environment: 'node',
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      exclude: [
+        'node_modules/',
+        'dist/',
+        '**/*.config.{js,ts}',
+        '**/test-*.{js,ts}',
+        '**/*.d.ts'
+      ]
+    }
+  }
 });

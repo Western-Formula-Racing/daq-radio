@@ -38,6 +38,10 @@ jobs:
         working-directory: ./pecan
         run: npm ci
       
+      - name: Run tests
+        working-directory: ./pecan
+        run: npm run test:ci
+      
       - name: Build
         working-directory: ./pecan
         run: npm run build
