@@ -14,7 +14,7 @@ import asyncio
 import time
 import json
 import logging
-from test_helpers import (
+from .test_helpers import (
     RedisHelper,
     WebSocketHelper,
     DockerHelper,
