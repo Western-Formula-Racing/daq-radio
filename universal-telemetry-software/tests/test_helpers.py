@@ -34,20 +34,25 @@ class RedisHelper:
         """Subscribe to a Redis channel."""
         self.pubsub = self.client.pubsub()
         self.pubsub.subscribe(channel)
-        # Skip the subscription confirmation message
-        self.pubsub.get_message()
+        # Wait for subscription confirmation message
+        time.sleep(0.1)  # Give subscription time to establish
+        self.pubsub.get_message()  # Skip the subscription confirmation
     
     def get_message(self, timeout: float = 5.0) -> Optional[Dict[str, Any]]:
         """Get a message from subscribed channel."""
         if not self.pubsub:
             return None
         
-        msg = self.pubsub.get_message(timeout=timeout)
-        if msg and msg['type'] == 'message':
-            try:
-                return json.loads(msg['data'])
-            except json.JSONDecodeError:
-                return msg['data']
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            msg = self.pubsub.get_message(timeout=0.1)
+            if msg and msg['type'] == 'message':
+                try:
+                    return json.loads(msg['data'])
+                except json.JSONDecodeError:
+                    return msg['data']
+            # Continue waiting if we got a non-message type (subscribe, pong, etc.)
+            time.sleep(0.1)
         return None
     
     def close(self):
