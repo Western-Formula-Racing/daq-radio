@@ -142,7 +142,11 @@ class TelemetryNode:
                     for m in batch:
                         payload += m.pack()
                     
-                    sock.sendto(payload, (UDP_IP, UDP_PORT))
+                    try:
+                        sock.sendto(payload, (UDP_IP, UDP_PORT))
+                    except (PermissionError, OSError) as e:
+                        # This can happen if iptables is blocking the packet
+                        logger.debug(f"UDP send failed: {e}")
                     
                     # Store in ring buffer (1 min)
                     self.buffer.append((self.seq_num, batch, time.time()))
