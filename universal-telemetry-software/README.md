@@ -36,13 +36,15 @@ This unified software runs on both the car and base station Raspberry Pis, autom
 │         ↓                       │         │         ↓                       │
 │  UDP Sender (batch 20/50ms) ────┼────────→│  Redis Publisher                │
 │         ↓                       │         │         ↓                       │
-│  Ring Buffer (60 sec)           │         │  WebSocket Bridge (9080) ──────→│ PECAN
-│         ↓                       │         │         ↓                       │
-│  TCP Resend Server (5006)   ←───┼─────────┤  TCP Client (recovery)          │
-│                                 │         │         ↓                       │
+│  Ring Buffer (60 sec)           │         │  WebSocket Bridge (9080) ───┬──→│ PECAN (3000)
+│         ↓                       │         │         ↓                   │   │
+│  TCP Resend Server (5006)   ←───┼─────────┤  TCP Client (recovery)      │   │
+│         ↓                       │         │         ↓                   │   │
+│  WebSocket Bridge (9080) ───────┼─────────┼─→ Status HTTP Server (8080) │   │
+│         ↓                       │         │         ↓                   │   │
+│  PECAN Dashboard (3000)     ←───┼─────────┼─────────────────────────────┘   │
+│         ↓                       │         │                                 │
 │  Audio/Video TX (optional)  ────┼────────→│  Audio/Video RX (optional)      │
-│                                 │         │         ↓                       │
-│                                 │         │  Status HTTP Server (8080)      │
 └─────────────────────────────────┘         └─────────────────────────────────┘
 ```
 
@@ -101,8 +103,9 @@ docker-compose logs -f
 ```
 
 **5. Access interfaces:**
-- **Status page**: `http://<base-ip>:8080`
-- **PECAN dashboard**: Configure to connect to `ws://<base-ip>:9080`
+- **Status page**: `http://<base-ip>:8080` (or `http://<car-ip>:8080`)
+- **PECAN dashboard**: `http://<base-ip>:3000` (or `http://<car-ip>:3000`)
+- **WebSocket**: `ws://<base-ip>:9080` (or `ws://<car-ip>:9080`)
 
 ---
 
@@ -123,17 +126,19 @@ Access from any device on the network: `http://<base-station-ip>:8080`
 - Quick health checks during testing
 - Race day connection verification
 
-### PECAN Dashboard (Port 9080)
+### PECAN Dashboard (Port 3000)
 
-The WebSocket bridge on port 9080 serves the PECAN dashboard with:
-- CAN message data (from `can_messages` Redis channel)
-- System statistics (from `system_stats` Redis channel)
+The PECAN dashboard runs on **both car and base station** at port 3000, providing:
+- Live CAN message visualization
+- Real-time telemetry data display
+- Automatic WebSocket connection to port 9080
 
-**PECAN Configuration:**
-Update `pecan/src/services/WebSocketService.ts`:
-```typescript
-const wsUrl = `ws://<base-station-ip>:9080`;
-```
+**Access:**
+- Car's dashboard: `http://<car-ip>:3000` (connects to car's hotspot)
+- Base station's dashboard: `http://<base-ip>:3000`
+
+**WebSocket Connection:**
+Pecan automatically connects to the WebSocket bridge on the same host at port 9080. No configuration needed - it uses the browser's hostname.
 
 ---
 
@@ -162,7 +167,8 @@ const wsUrl = `ws://<base-station-ip>:9080`;
 | 5006 | TCP | Packet retransmission requests |
 | 6379 | TCP | Redis (internal) |
 | 8080 | HTTP | Status monitoring page |
-| 9080 | WebSocket | PECAN dashboard connection |
+| 9080 | WebSocket | PECAN dashboard WebSocket connection |
+| 3000 | HTTP | PECAN dashboard UI |
 
 
 ---

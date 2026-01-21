@@ -7,6 +7,7 @@ export class WebSocketService {
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 2000; // Start with 2 seconds
+  private messageCount = 0; // Track message count for logging
 
   async initialize() {
     // Initialize CAN processor
@@ -17,7 +18,7 @@ export class WebSocketService {
       console.error('Failed to initialize CAN processor:', error);
       return;
     }
-    
+
     // Connect WebSocket
     this.connect();
   }
@@ -27,34 +28,70 @@ export class WebSocketService {
     const isSecure = window.location.protocol === 'https:';
     const protocol = isSecure ? 'wss:' : 'ws:';
     const port = isSecure ? '9443' : '9080';
-    
-    const wsUrl = `${protocol}//${window.location.hostname === 'localhost' ? 'localhost' : 'ws-wfr.0001200.xyz'}:${port}`;
-    
+
+    // Determine WebSocket URL based on deployment scenario
+    let wsUrl: string;
+
+    // Check if this is a GitHub Pages deployment (or other external hosting)
+    const hostname = window.location.hostname;
+    const isGitHubPages = hostname.includes('github.io');
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const isPrivateIP = /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(hostname);
+
+    if (isGitHubPages) {
+      // GitHub Pages demo: use the production backend
+      wsUrl = `${protocol}://ws-wfr.0001200.xyz:${port}`;
+    } else if (isLocalhost || isPrivateIP) {
+      // Docker deployment or local development: use same hostname
+      // - Car hotspot: http://192.168.x.x:3000 → ws://192.168.x.x:9080
+      // - Base station: http://192.168.y.y:3000 → ws://192.168.y.y:9080
+      // - Development: http://localhost:3000 → ws://localhost:9080
+      wsUrl = `${protocol}//${hostname}:${port}`;
+    } else {
+      // Custom domain or other deployment: use same hostname
+      wsUrl = `${protocol}//${hostname}:${port}`;
+    }
+
     console.log(`Connecting to WebSocket: ${wsUrl}`);
-    
+
     try {
       this.ws = new WebSocket(wsUrl);
-      
+
       this.ws.onopen = () => {
         console.log('WebSocket connected');
         this.reconnectAttempts = 0; // Reset reconnect counter on successful connection
+        this.messageCount = 0; // Reset message count on new connection
       };
-      
+
       this.ws.onmessage = (event) => {
         try {
-          console.log('Received WebSocket message:', event.data);
-          
+          // Only log first 3 messages to avoid console spam
+          if (this.messageCount < 3) {
+            console.log(`Received WebSocket message #${this.messageCount + 1}:`, event.data);
+          }
+
           const messageData = JSON.parse(event.data);
           const decoded = this.processor.processWebSocketMessage(messageData);
-          console.log('Decoded message(s):', decoded);
-          
+
+          // Only log first 3 decoded messages
+          if (this.messageCount < 3) {
+            console.log(`Decoded message(s) #${this.messageCount + 1}:`, decoded);
+          }
+
+          this.messageCount++;
+
+          // Log milestone message counts
+          if (this.messageCount === 10 || this.messageCount === 100 || this.messageCount % 1000 === 0) {
+            console.log(`WebSocket: Received ${this.messageCount} messages`);
+          }
+
           const messages = Array.isArray(decoded) ? decoded : [decoded];
-          
+
           messages.forEach(msg => {
             if (msg?.signals) {
               const canId = msg.canId.toString();
               console.log(`Processing CAN ID ${canId}:`, msg.signals);
-              
+
               dataStore.ingestMessage({
                 msgID: canId,
                 messageName: msg.messageName || `CAN_${canId}`,
@@ -75,12 +112,12 @@ export class WebSocketService {
 
       this.ws.onclose = (event) => {
         console.log('WebSocket disconnected');
-        
+
         // Attempt to reconnect if not closed intentionally
         if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
           this.reconnectAttempts++;
           const delay = this.reconnectDelay * this.reconnectAttempts;
-          
+
           setTimeout(() => {
             this.connect();
           }, delay);

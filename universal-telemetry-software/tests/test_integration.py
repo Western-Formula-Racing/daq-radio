@@ -31,12 +31,14 @@ CAR_CONTAINER = "daq-car"
 BASE_CONTAINER = "daq-base"
 CAR_REDIS_CONTAINER = "daq-car-redis"
 BASE_REDIS_CONTAINER = "daq-base-redis"
+PECAN_CONTAINER = "daq-pecan-test"
 
 # Service endpoints
 REDIS_HOST = "localhost"
 REDIS_PORT = 6379
 WS_URL = "ws://localhost:9080"
 STATUS_URL = "http://localhost:8080"
+PECAN_URL = "http://localhost:3000"
 
 
 @pytest.fixture(scope="module")
@@ -224,6 +226,83 @@ class TestStatusHTTPServer:
         assert "DAQ Base Station Status" in content or "Status" in content, \
             "Status page missing expected title"
         logger.info("✓ Status page has valid content")
+
+
+class TestPecanDashboard:
+    """Test the PECAN dashboard accessibility."""
+    
+    def test_pecan_container_running(self, docker):
+        """Verify Pecan container is running."""
+        assert docker.is_container_running(PECAN_CONTAINER), \
+            f"{PECAN_CONTAINER} is not running"
+        logger.info(f"✓ {PECAN_CONTAINER} is running")
+    
+    def test_pecan_dashboard_accessible(self):
+        """Verify Pecan dashboard loads."""
+        assert wait_for_service(
+            lambda: check_http_endpoint(PECAN_URL),
+            timeout=15  # Give Pecan more time to build and start
+        ), "Pecan dashboard is not accessible"
+        logger.info("✓ Pecan dashboard is accessible")
+    
+    def test_pecan_dashboard_content(self):
+        """Verify Pecan dashboard has expected content."""
+        import requests
+        response = requests.get(PECAN_URL, timeout=10)
+        assert response.status_code == 200
+        
+        content = response.text
+        # Check for HTML content (Pecan is a React SPA)
+        assert "<!DOCTYPE html>" in content or "<!doctype html>" in content, \
+            "Pecan dashboard missing HTML doctype"
+        assert "<div id=\"root\">" in content or "pecan" in content.lower(), \
+            "Pecan dashboard missing expected content"
+        logger.info("✓ Pecan dashboard has valid content")
+    
+    @pytest.mark.asyncio
+    async def test_pecan_receives_websocket_data(self):
+        """Verify Pecan receives WebSocket messages via browser console."""
+        try:
+            from playwright.async_api import async_playwright
+        except ImportError:
+            pytest.skip("Playwright not installed")
+        
+        async with async_playwright() as p:
+            # Launch headless browser
+            browser = await p.chromium.launch(headless=True)
+            page = await browser.new_page()
+            
+            # Collect console messages
+            console_messages = []
+            page.on("console", lambda msg: console_messages.append(msg.text))
+            
+            try:
+                # Navigate to Pecan dashboard
+                await page.goto(PECAN_URL, timeout=15000)
+                
+                # Wait for WebSocket connection and data (first 3 messages should appear quickly)
+                await asyncio.sleep(8)
+                
+                # Check for WebSocket connection
+                connection_logs = [msg for msg in console_messages if "WebSocket connected" in msg]
+                assert len(connection_logs) > 0, \
+                    f"WebSocket connection not established. Console: {console_messages[:10]}"
+                logger.info("✓ Pecan established WebSocket connection")
+                
+                # Check for data reception (should see at least first message)
+                data_logs = [msg for msg in console_messages if "Received WebSocket message #" in msg]
+                assert len(data_logs) > 0, \
+                    f"No WebSocket messages received. Console: {console_messages[:10]}"
+                logger.info(f"✓ Pecan received {len(data_logs)} WebSocket messages")
+                
+                # Check for decoded messages
+                decoded_logs = [msg for msg in console_messages if "Decoded message(s) #" in msg]
+                assert len(decoded_logs) > 0, \
+                    "No decoded messages found"
+                logger.info(f"✓ Pecan decoded {len(decoded_logs)} messages")
+                
+            finally:
+                await browser.close()
 
 
 class TestPacketDropAndRecovery:

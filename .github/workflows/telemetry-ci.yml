@@ -5,11 +5,13 @@ on:
     branches: [ main, telemetry-software ]
     paths:
       - 'universal-telemetry-software/**'
+      - 'pecan/**'
       - '.github/workflows/telemetry-ci.yml'
   pull_request:
     branches: [ main, telemetry-software ]
     paths:
       - 'universal-telemetry-software/**'
+      - 'pecan/**'
       - '.github/workflows/telemetry-ci.yml'
 
 jobs:
@@ -43,7 +45,8 @@ jobs:
     
     - name: Install test dependencies
       run: |
-        pip install pytest pytest-asyncio websockets redis requests
+        pip install pytest pytest-asyncio websockets redis requests playwright
+        playwright install chromium --with-deps
     
     - name: Run integration tests
       working-directory: ./universal-telemetry-software
@@ -61,6 +64,7 @@ jobs:
         docker logs daq-base > test-logs/base.log 2>&1 || true
         docker logs daq-car-redis > test-logs/car-redis.log 2>&1 || true
         docker logs daq-base-redis > test-logs/base-redis.log 2>&1 || true
+        docker logs daq-pecan-test > test-logs/pecan.log 2>&1 || true
     
     - name: Upload test logs
       if: failure()

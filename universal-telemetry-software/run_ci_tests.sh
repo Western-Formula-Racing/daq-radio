@@ -47,7 +47,7 @@ docker compose -f docker-compose.test.yml ps
 
 # Step 4: Verify containers are running
 echo -e "\n${YELLOW}Step 4: Verifying containers...${NC}"
-for container in daq-car daq-base daq-car-redis daq-base-redis; do
+for container in daq-car daq-base daq-car-redis daq-base-redis daq-pecan-test; do
     if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
         echo -e "${GREEN}✓ ${container} is running${NC}"
     else
@@ -79,6 +79,7 @@ python3 -m pytest tests/test_integration.py -v -s || {
     docker logs daq-base > test-logs/base.log 2>&1 || true
     docker logs daq-car-redis > test-logs/car-redis.log 2>&1 || true
     docker logs daq-base-redis > test-logs/base-redis.log 2>&1 || true
+    docker logs daq-pecan-test > test-logs/pecan.log 2>&1 || true
     
     echo -e "${YELLOW}Logs saved to test-logs/ directory${NC}"
     exit $TEST_EXIT_CODE

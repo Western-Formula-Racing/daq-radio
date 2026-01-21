@@ -90,6 +90,24 @@ services:
       timeout: 3s
       retries: 3
 
+  pecan:
+    build: ../pecan
+    container_name: daq-pecan-test
+    restart: unless-stopped
+    ports:
+      - "3000:80" # Pecan dashboard UI
+    networks:
+      - daq-network
+    depends_on:
+      base:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80" ]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
 volumes:
   car_redis_data:
   base_redis_data:
@@ -105,6 +123,7 @@ networks:
 # Access points:
 # - Status page: http://localhost:8080
 # - WebSocket (PECAN): ws://localhost:9080
+# - PECAN Dashboard: http://localhost:3000
 # - Redis: localhost:6379
 #
 # The car container will generate simulated CAN data and send it via UDP
