@@ -26,7 +26,7 @@ export class WebSocketService {
   private connect() {
     // Automatically detect secure vs non-secure WebSocket based on page protocol
     const isSecure = window.location.protocol === 'https:';
-    const protocol = isSecure ? 'wss:' : 'ws:';
+    const protocol = isSecure ? 'wss' : 'ws';
     const port = isSecure ? '9443' : '9080';
 
     // Determine WebSocket URL based on deployment scenario
