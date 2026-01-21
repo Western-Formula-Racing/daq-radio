@@ -60,10 +60,12 @@ p {
         from {
             transform: scaleX(0);
         }
+
         to {
             transform: scaleX(1);
         }
     }
+
     .animate-tab-in {
         animation: tab-in 300ms ease-out forwards;
         transform-origin: left;
@@ -71,5 +73,5 @@ p {
 }
 
 .avoid-break {
-  break-inside: avoid;
+    break-inside: avoid;
 }

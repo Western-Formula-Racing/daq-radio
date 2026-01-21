@@ -21,11 +21,10 @@ function Sidebar({ onClose, isOpen }: Readonly<InputProps>) {
       )}
 
       <div
-        className={`fixed top-0 left-0 h-full lg:w-2/9 md:w-2/5 sm:w-3/5 w-full flex flex-col z-50 transform transition-all duration-450 overflow-y-auto overscroll-contain ${
-          isOpen
+        className={`fixed top-0 left-0 h-full lg:w-2/9 md:w-2/5 sm:w-3/5 w-full flex flex-col z-50 transform transition-all duration-450 overflow-y-auto overscroll-contain ${isOpen
             ? "translate-x-0 opacity-100"
             : "-translate-x-full opacity-0 pointer-events-none"
-        }`}
+          }`}
       >
         <div className="bg-sidebar z-100 w-[98%] h-full flex flex-col justify-between">
           <div>
@@ -37,27 +36,29 @@ function Sidebar({ onClose, isOpen }: Readonly<InputProps>) {
             {/* Could create a global function to close the sidebar and use it in the component rather than passing onClose in every time */}
             <ul className="p-0">
               <SidebarOption
-                option="Dashboard"
+                option="DASHBOARD"
                 path="/dashboard"
                 onClose={onClose}
               />
               <SidebarOption
-                option="Accumulator"
+                option="ACCUMULATOR"
                 path="/accumulator"
                 onClose={onClose}
+                isPending={true}
               />
               <SidebarOption
-                option="Chargecart"
+                option="CHARGECART"
                 path="/chargecart"
                 onClose={onClose}
+                isPending={true}
               />
               <SidebarOption
-                option="Monitor Builder"
+                option="MONITOR BUILDER"
                 path="/monitor-builder"
                 onClose={onClose}
               />
               <SidebarOption
-                option="System Link"
+                option="SYSTEM LINK"
                 path="/system-link"
                 onClose={onClose}
               />

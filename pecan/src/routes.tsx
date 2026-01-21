@@ -1,4 +1,4 @@
-import { createBrowserRouter } from "react-router";
+import { createBrowserRouter, Navigate } from "react-router";
 import App from "./App";
 import Dashboard from "./pages/Dashboard";
 import Accumulator from "./pages/Accumulator";
@@ -17,6 +17,7 @@ export const router = createBrowserRouter([
     element: <App />,
     //Pages are separate components, to add a route that is related to '/' just add a child, path is the relative path
     children: [
+      { index: true, element: <Navigate to="dashboard" replace /> },
       { path: "dashboard", element: <Dashboard /> },
       { path: "accumulator", element: <Accumulator /> },
       { path: "account", element: <Account /> },

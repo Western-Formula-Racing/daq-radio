@@ -4,7 +4,6 @@ import Sidebar from "./components/Sidebar";
 import Hamburger from "./components/HamburgerMenu";
 import {
   loadDBCFromCache,
-  processTestMessages,
   usingCachedDBC,
 } from "./utils/canProcessor";
 import { Outlet } from "react-router";
@@ -33,7 +32,7 @@ function App() {
       await loadDBCFromCache();
       const isUsingCache = usingCachedDBC();
       console.log("[App] Using cached DBC:", isUsingCache);
-      
+
       if (isUsingCache) {
         setDisplayDefaultBanner(false);
         setDisplayCacheBanner(true);
@@ -80,29 +79,7 @@ function App() {
         <Outlet context={{ isSidebarOpen, ...bannerApi }} />
       </main>
 
-      <div
-        style={{
-          position: "absolute",
-          top: 0,
-          right: 0,
-          width: 200,
-          height: 60,
-          background: "#f0f0f0",
-          borderRadius: 8,
-          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 0,
-        }}
-      ></div>
 
-      <button
-        onClick={processTestMessages}
-        style={{ position: "absolute", top: 10, right: 10, zIndex: 1 }}
-      >
-        Process Test Messages
-      </button>
     </div>
   );
 }
