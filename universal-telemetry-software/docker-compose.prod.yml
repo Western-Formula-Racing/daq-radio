@@ -48,5 +48,33 @@ services:
     depends_on:
       - telemetry
 
+  # Voice Communication Services
+  murmur:
+    image: mumblevoip/mumble-server:latest
+    container_name: daq-murmur
+    restart: unless-stopped
+    ports:
+      - "64738:64738/tcp" # Mumble TCP
+      - "64738:64738/udp" # Mumble UDP
+    environment:
+      - MUMBLE_SUPERUSER_PASSWORD=wfr2025
+      - MUMBLE_CONFIG_WELCOMETEXT=Welcome to WFR Comms!
+      - MUMBLE_CONFIG_REGISTERPASSWORD=
+      - MUMBLE_CONFIG_ALLOWPING=true
+    volumes:
+      - murmur_data:/data
+
+  mumble-web:
+    image: rankenstein/mumble-web:latest
+    container_name: daq-mumble-web
+    restart: unless-stopped
+    ports:
+      - "8088:8080" # Web client with websockify (internal 8080)
+    environment:
+      - MUMBLE_SERVER=murmur:64738
+    depends_on:
+      - murmur
+
 volumes:
   redis_data:
+  murmur_data:
