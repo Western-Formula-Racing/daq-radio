@@ -109,6 +109,33 @@ docker-compose logs -f
 
 ---
 
+## Deploying with Pre-built Images (GHCR)
+
+For Raspberry Pi or other deployments, you can use the pre-built Docker images from GitHub Container Registry instead of building them locally. This is much faster and ensures you're running the exact same code as CI.
+
+1. **Login to GHCR** (required for private packages, or to avoid rate limits):
+   ```bash
+   # Create a Classic PAT with 'read:packages' scope on GitHub
+   echo $CR_PAT | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+   ```
+
+2. **Run using production compose file**:
+   ```bash
+   # Pull the latest images
+   docker compose -f docker-compose.prod.yml pull
+
+   # Start the services
+   docker compose -f docker-compose.prod.yml up -d
+   ```
+
+   The production compose file (`docker-compose.prod.yml`) is configured to pull:
+   - `ghcr.io/western-formula-racing/universal-telemetry:latest`
+   - `ghcr.io/western-formula-racing/pecan:latest`
+
+   These images are built for both `linux/amd64` (laptops) and `linux/arm64` (Raspberry Pi).
+
+---
+
 ## 📊 Monitoring
 
 ### Status Monitoring Page (Port 8080)

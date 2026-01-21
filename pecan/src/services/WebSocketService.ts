@@ -46,10 +46,10 @@ export class WebSocketService {
       // - Car hotspot: http://192.168.x.x:3000 → ws://192.168.x.x:9080
       // - Base station: http://192.168.y.y:3000 → ws://192.168.y.y:9080
       // - Development: http://localhost:3000 → ws://localhost:9080
-      wsUrl = `${protocol}//${hostname}:${port}`;
+      wsUrl = `${protocol}://${hostname}:${port}`;
     } else {
       // Custom domain or other deployment: use same hostname
-      wsUrl = `${protocol}//${hostname}:${port}`;
+      wsUrl = `${protocol}://${hostname}:${port}`;
     }
 
     console.log(`Connecting to WebSocket: ${wsUrl}`);
@@ -90,7 +90,6 @@ export class WebSocketService {
           messages.forEach(msg => {
             if (msg?.signals) {
               const canId = msg.canId.toString();
-              console.log(`Processing CAN ID ${canId}:`, msg.signals);
 
               dataStore.ingestMessage({
                 msgID: canId,

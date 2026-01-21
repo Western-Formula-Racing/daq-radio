@@ -31,7 +31,7 @@ echo -e "${GREEN}✓ Docker image built successfully${NC}"
 
 # Step 2: Start test environment
 echo -e "\n${YELLOW}Step 2: Starting test environment...${NC}"
-docker compose -f docker-compose.test.yml up -d || {
+docker compose -f docker-compose.test.yml up -d --build || {
     echo -e "${RED}✗ Failed to start containers${NC}"
     exit 1
 }
