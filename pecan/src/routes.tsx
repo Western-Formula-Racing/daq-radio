@@ -8,6 +8,9 @@ import ChargeCart from "./pages/ChargeCart";
 import MonitorBuilder from "./pages/MonitorBuilder";
 import SystemLink from "./pages/SystemLink";
 
+// Get base path for GitHub Pages deployment
+const basename = import.meta.env.BASE_URL || '/';
+
 export const router = createBrowserRouter([
   {
     path: "/",
@@ -23,4 +26,4 @@ export const router = createBrowserRouter([
       { path: "system-link", element: <SystemLink /> },
     ],
   },
-]);
+], { basename });
