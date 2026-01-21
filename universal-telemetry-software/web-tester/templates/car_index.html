@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DAQ Radio - Car Frontend</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #222; color: #eee; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        .controls { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+        button { padding: 15px 30px; font-size: 1.2em; cursor: pointer; background: #4caf50; color: white; border: none; border-radius: 50%; width: 150px; height: 150px; }
+        button:active, button.active { background: #66bb6a; box-shadow: 0 0 20px #66bb6a; }
+        button.talking { background: #f44336; box-shadow: 0 0 20px #f44336; }
+        h1 { margin-bottom: 50px; }
+    </style>
+</head>
+<body>
+    <h1>Car Audio Interface</h1>
+    
+    <div class="controls">
+        <button id="pttBtn">PTT</button>
+        <div id="status">Hold to Talk</div>
+    </div>
+
+    <script>
+        const socket = io();
+        let audioContext;
+        let processor;
+        let input;
+        let isTalking = false;
+
+        // Audio Playback
+        let nextStartTime = 0;
+        
+        async function initAudio() {
+            audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+            await audioContext.resume();
+        }
+
+        socket.on('audio_out', (arrayBuffer) => {
+            if (!audioContext) initAudio();
+            
+            // Raw PCM S16LE -> Float32
+            const int16 = new Int16Array(arrayBuffer);
+            const float32 = new Float32Array(int16.length);
+            for (let i = 0; i < int16.length; i++) {
+                float32[i] = int16[i] / 32768;
+            }
+
+            const buffer = audioContext.createBuffer(1, float32.length, 48000);
+            buffer.getChannelData(0).set(float32);
+
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            
+            // Scheduling to avoid gaps/overlap
+            const now = audioContext.currentTime;
+            const startTime = Math.max(now, nextStartTime);
+            source.start(startTime);
+            nextStartTime = startTime + buffer.duration;
+        });
+
+        const btn = document.getElementById('pttBtn');
+        const status = document.getElementById('status');
+
+        btn.addEventListener('mousedown', startTalking);
+        btn.addEventListener('mouseup', stopTalking);
+        btn.addEventListener('touchstart', (e) => { e.preventDefault(); startTalking(); });
+        btn.addEventListener('touchend', (e) => { e.preventDefault(); stopTalking(); });
+
+        async function startTalking() {
+            if (isTalking) return;
+            if (!audioContext) await initAudio();
+            
+            isTalking = true;
+            btn.classList.add('talking');
+            status.innerText = "Transmitting...";
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                input = audioContext.createMediaStreamSource(stream);
+                
+                // Worklet or ScriptProcessor
+                processor = audioContext.createScriptProcessor(4096, 1, 1);
+                
+                processor.onaudioprocess = (e) => {
+                    if (!isTalking) return;
+                    const inputData = e.inputBuffer.getChannelData(0);
+                    
+                    // Float32 -> Int16
+                    const pcmData = new Int16Array(inputData.length);
+                    for (let i = 0; i < inputData.length; i++) {
+                        let s = Math.max(-1, Math.min(1, inputData[i]));
+                        pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                    }
+                    socket.emit('audio_chunk', pcmData.buffer);
+                };
+                
+                input.connect(processor);
+                processor.connect(audioContext.destination); // Needed for Chrome to run the processor
+            } catch (err) {
+                console.error("Mic Error:", err);
+                status.innerText = "Mic Error!";
+            }
+        }
+
+        function stopTalking() {
+            if (!isTalking) return;
+            isTalking = false;
+            btn.classList.remove('talking');
+            status.innerText = "Hold to Talk";
+
+            if (input) input.disconnect();
+            if (processor) processor.disconnect();
+            // Keep Context alive for playback
+        }
+    </script>
+</body>
+</html>

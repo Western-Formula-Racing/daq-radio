@@ -1,0 +1,16 @@
+python-can==4.4.2
+redis==5.2.1
+websockets==14.1
+aiohttp==3.11.11
+redis[hiredis]
+
+# Test dependencies
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+requests>=2.31.0
+
+PyGObject
+Flask
+Flask-SocketIO
+eventlet
+opencv-python-headless

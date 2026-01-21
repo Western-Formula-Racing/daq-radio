@@ -1,5 +1,0 @@
-psutil
-requests
-redis
-websockets
-cantools

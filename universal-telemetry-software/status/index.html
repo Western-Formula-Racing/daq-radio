@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DAQ Base Station Status</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+            background: #0d0c11;
+            color: #fff;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 5px;
+            color: #fff;
+        }
+
+        .subtitle {
+            font-size: 1rem;
+            color: #8e8eab;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: #20202f;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .card-title {
+            font-size: 0.85rem;
+            margin-bottom: 15px;
+            color: #8e8eab;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+            padding: 12px;
+            background: #35354c;
+            border-radius: 6px;
+        }
+
+        .metric-label {
+            font-size: 0.9rem;
+            color: #8e8eab;
+        }
+
+        .metric-value {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-connected {
+            background: #4ade80;
+            box-shadow: 0 0 8px #4ade80;
+        }
+
+        .status-warning {
+            background: #fbbf24;
+            box-shadow: 0 0 8px #fbbf24;
+        }
+
+        .status-disconnected {
+            background: #ef4444;
+            box-shadow: 0 0 8px #ef4444;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.6;
+            }
+        }
+
+        .connection-status {
+            font-size: 1.5rem;
+            font-weight: 600;
+            text-align: center;
+            padding: 20px;
+            margin-bottom: 20px;
+            background: #20202f;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .chart-container {
+            background: #20202f;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            margin-top: 15px;
+        }
+
+        .sparkline {
+            width: 100%;
+            height: 100px;
+            margin-top: 15px;
+        }
+
+        .timestamp {
+            text-align: center;
+            color: #8e8eab;
+            margin-top: 20px;
+            font-size: 0.85rem;
+        }
+
+        .error-message {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid #ef4444;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            text-align: center;
+            color: #fca5a5;
+        }
+
+        .performance-footer {
+            position: sticky;
+            bottom: 0;
+            width: 100%;
+            padding: 12px 20px;
+            background: rgba(53, 53, 76, 0.9);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            margin-top: 20px;
+        }
+
+        .performance-stats {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 0 auto;
+            font-size: 0.75rem;
+            color: #8e8eab;
+        }
+
+        .performance-stats span {
+            margin: 0 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>🏎️ DAQ Base Station</h1>
+            <p class="subtitle">Real-Time Connection Monitor</p>
+        </header>
+
+        <div class="connection-status" id="connectionStatus">
+            <span class="status-indicator status-disconnected"></span>
+            Connecting...
+        </div>
+
+        <div class="status-grid">
+            <div class="card">
+                <div class="card-title">📡 Connection</div>
+                <div class="metric">
+                    <span class="metric-label">Status</span>
+                    <span class="metric-value" id="connStatus">--</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Uptime</span>
+                    <span class="metric-value" id="uptime">--</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Last Message</span>
+                    <span class="metric-value" id="lastMsg">--</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">📊 Packet Statistics</div>
+                <div class="metric">
+                    <span class="metric-label">Received/sec</span>
+                    <span class="metric-value" id="rxRate">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Missing/sec</span>
+                    <span class="metric-value" id="missRate">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Recovered/sec</span>
+                    <span class="metric-value" id="recRate">0</span>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">⚡ Performance</div>
+                <div class="metric">
+                    <span class="metric-label">Packet Loss</span>
+                    <span class="metric-value" id="lossPercent">0%</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Total Received</span>
+                    <span class="metric-value" id="totalRx">0</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Total Missing</span>
+                    <span class="metric-value" id="totalMiss">0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="card-title">📈 Packet Rate (Last 60s)</div>
+            <canvas id="rateChart" class="sparkline"></canvas>
+        </div>
+
+        <div class="timestamp" id="timestamp">--</div>
+
+        <div class="error-message" id="errorMsg" style="display: none;"></div>
+    </div>
+
+    <div class="performance-footer">
+        <div class="performance-stats">
+            <span>WebSocket: <span id="wsStatus">Disconnected</span></span>
+            <span>Messages/sec: <span id="msgRate">0</span></span>
+            <span>Uptime: <span id="footerUptime">00:00:00</span></span>
+        </div>
+    </div>
+
+    <script>
+        const REDIS_WS_URL = 'ws://' + window.location.hostname + ':9080';
+        const STATS_TIMEOUT = 5000;
+
+        let ws = null;
+        let startTime = Date.now();
+        let lastMessageTime = null;
+        let totalReceived = 0;
+        let totalMissing = 0;
+        let totalRecovered = 0;
+        let rateHistory = [];
+        const MAX_HISTORY = 60;
+
+        const canvas = document.getElementById('rateChart');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        function connect() {
+            try {
+                ws = new WebSocket(REDIS_WS_URL);
+
+                ws.onopen = () => {
+                    console.log('Connected to base station');
+                    updateConnectionStatus('connected');
+                    document.getElementById('wsStatus').textContent = 'Connected';
+                };
+
+                ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+
+                        if (data.received !== undefined) {
+                            updateStats(data);
+                        }
+
+                        lastMessageTime = Date.now();
+                    } catch (error) {
+                        console.error('Error parsing message:', error);
+                    }
+                };
+
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    showError('WebSocket connection error');
+                    document.getElementById('wsStatus').textContent = 'Error';
+                };
+
+                ws.onclose = () => {
+                    console.log('Disconnected from base station');
+                    updateConnectionStatus('disconnected');
+                    document.getElementById('wsStatus').textContent = 'Disconnected';
+                    setTimeout(connect, 2000);
+                };
+            } catch (error) {
+                console.error('Failed to connect:', error);
+                showError('Failed to connect to base station');
+                setTimeout(connect, 2000);
+            }
+        }
+
+        function updateStats(stats) {
+            const { received, missing, recovered } = stats;
+
+            document.getElementById('rxRate').textContent = received || 0;
+            document.getElementById('missRate').textContent = missing || 0;
+            document.getElementById('recRate').textContent = recovered || 0;
+            document.getElementById('msgRate').textContent = received || 0;
+
+            totalReceived += received || 0;
+            totalMissing += missing || 0;
+            totalRecovered += recovered || 0;
+
+            document.getElementById('totalRx').textContent = totalReceived.toLocaleString();
+            document.getElementById('totalMiss').textContent = totalMissing.toLocaleString();
+
+            const lossPercent = totalReceived > 0
+                ? ((totalMissing / (totalReceived + totalMissing)) * 100).toFixed(2)
+                : 0;
+            document.getElementById('lossPercent').textContent = lossPercent + '%';
+
+            rateHistory.push(received || 0);
+            if (rateHistory.length > MAX_HISTORY) {
+                rateHistory.shift();
+            }
+
+            drawChart();
+        }
+
+        function updateConnectionStatus(status) {
+            const statusEl = document.getElementById('connectionStatus');
+            const connStatusEl = document.getElementById('connStatus');
+
+            if (status === 'connected') {
+                statusEl.innerHTML = '<span class="status-indicator status-connected"></span>Connected to Car';
+                connStatusEl.textContent = 'Active';
+                hideError();
+            } else if (status === 'warning') {
+                statusEl.innerHTML = '<span class="status-indicator status-warning"></span>No Data Received';
+                connStatusEl.textContent = 'Idle';
+            } else {
+                statusEl.innerHTML = '<span class="status-indicator status-disconnected"></span>Disconnected';
+                connStatusEl.textContent = 'Offline';
+            }
+        }
+
+        function drawChart() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (rateHistory.length === 0) return;
+
+            const max = Math.max(...rateHistory, 10);
+            const width = canvas.width;
+            const height = canvas.height;
+            const barWidth = width / MAX_HISTORY;
+
+            ctx.fillStyle = '#4ade80';
+            rateHistory.forEach((value, index) => {
+                const barHeight = (value / max) * height;
+                const x = index * barWidth;
+                const y = height - barHeight;
+                ctx.fillRect(x, y, barWidth - 2, barHeight);
+            });
+
+            ctx.strokeStyle = 'rgba(142, 142, 171, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, height);
+            ctx.lineTo(width, height);
+            ctx.stroke();
+        }
+
+        function updateUI() {
+            const uptime = Math.floor((Date.now() - startTime) / 1000);
+            const hours = Math.floor(uptime / 3600);
+            const minutes = Math.floor((uptime % 3600) / 60);
+            const seconds = uptime % 60;
+            const uptimeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+            document.getElementById('uptime').textContent = uptimeStr;
+            document.getElementById('footerUptime').textContent = uptimeStr;
+
+            if (lastMessageTime) {
+                const elapsed = Math.floor((Date.now() - lastMessageTime) / 1000);
+                if (elapsed < 60) {
+                    document.getElementById('lastMsg').textContent = elapsed + 's ago';
+                } else {
+                    document.getElementById('lastMsg').textContent = Math.floor(elapsed / 60) + 'm ago';
+                }
+
+                if (elapsed > STATS_TIMEOUT / 1000) {
+                    updateConnectionStatus('warning');
+                }
+            } else {
+                document.getElementById('lastMsg').textContent = 'Never';
+            }
+
+            document.getElementById('timestamp').textContent =
+                'Last updated: ' + new Date().toLocaleTimeString();
+        }
+
+        function showError(message) {
+            const errorEl = document.getElementById('errorMsg');
+            errorEl.textContent = '⚠️ ' + message;
+            errorEl.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('errorMsg').style.display = 'none';
+        }
+
+        connect();
+        setInterval(updateUI, 1000);
+    </script>
+</body>
+
+</html>

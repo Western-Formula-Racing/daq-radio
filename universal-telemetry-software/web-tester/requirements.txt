@@ -1,0 +1,1 @@
+Flask\nFlask-SocketIO\neventlet\nredis\nPyGObject\n

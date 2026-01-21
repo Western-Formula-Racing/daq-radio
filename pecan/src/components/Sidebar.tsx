@@ -56,6 +56,11 @@ function Sidebar({ onClose, isOpen }: Readonly<InputProps>) {
                 path="/monitor-builder"
                 onClose={onClose}
               />
+              <SidebarOption
+                option="System Link"
+                path="/system-link"
+                onClose={onClose}
+              />
             </ul>
           </div>
           <footer className="font-footer flex flex-col space-y-8 mb-10">
