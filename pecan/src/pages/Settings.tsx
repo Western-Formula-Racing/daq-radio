@@ -4,7 +4,7 @@ async function uploadFileToCache(file: File) {
   if (!file) return;
 
   const fileContent = await file.text();
-  
+
   // Try Cache API first (requires secure context)
   try {
     const cache = await caches.open("dbc-files");
@@ -18,17 +18,23 @@ async function uploadFileToCache(file: File) {
     });
     await cache.put(request, res);
     console.log("[uploadFileToCache] Successfully cached DBC file");
-    
+
     // Verify it was cached
     const verify = await cache.match(cacheKey);
-    console.log("[uploadFileToCache] Verification - cached file exists:", !!verify);
+    console.log(
+      "[uploadFileToCache] Verification - cached file exists:",
+      !!verify,
+    );
   } catch (error) {
-    console.warn("[uploadFileToCache] Cache API not available, using localStorage fallback:", error instanceof Error ? error.message : String(error));
+    console.warn(
+      "[uploadFileToCache] Cache API not available, using localStorage fallback:",
+      error instanceof Error ? error.message : String(error),
+    );
   }
-  
+
   // Always save to localStorage as fallback (works in non-secure contexts)
   try {
-    localStorage.setItem('dbc-file-content', fileContent);
+    localStorage.setItem("dbc-file-content", fileContent);
     console.log("[uploadFileToCache] Successfully saved DBC to localStorage");
   } catch (error) {
     console.error("[uploadFileToCache] Error saving to localStorage:", error);
@@ -51,13 +57,13 @@ function Settings() {
     const file = e.target.files?.[0];
     if (!file) return;
     await uploadFileToCache(file);
-    
+
     // Set localStorage flag to indicate cache is active
-    localStorage.setItem('dbc-cache-active', 'true');
-    
+    localStorage.setItem("dbc-cache-active", "true");
+
     banners.showCache();
     banners.hideDefault();
-    globalThis.location.reload();
+    globalThis.location.href = "/dashboard";
   };
 
   return (
@@ -72,7 +78,7 @@ function Settings() {
             <label
               htmlFor="dbc-upload"
               className="bg-banner-button hover:bg-banner-button-hover px-6 py-2 cursor-pointer text-center text-[14pt] font-semibold text-white rounded-md transition-colors shadow-sm"
-              style={{ borderRadius: '0.375rem' }}
+              style={{ borderRadius: "0.375rem" }}
             >
               Upload DBC
             </label>
