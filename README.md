@@ -130,9 +130,9 @@ Development and testing tools for simulating vehicle telemetry without physical 
 - Example DBC (CAN database) file for message definitions
 - Docker Compose setups for isolated testing environments, including a dev/demo server configuration in `car-simulate/persistent-broadcast`
 
-### CAN Adapter Bridges (`/kvaser-bridge`, `/pecan-bridge`)
+### CAN Adapter Bridge (`/kvaser-bridge`)
 
-GUI adapters for Kvaser and PECAN CAN hardware interfaces. Used during bench testing when physical vehicle hardware is unavailable.
+GUI adapter for the Kvaser CAN hardware interface. Used during bench testing when physical vehicle hardware is unavailable.
 
 ### Flight Recorder (`/flight-recorder`)
 
@@ -316,7 +316,6 @@ data-acquisition/
 │       └── slackbot/       # Slack bot
 ├── secret-dbc/        # Git submodule: private DBC files (restricted)
 ├── kvaser-bridge/     # Kvaser CAN adapter GUI
-├── pecan-bridge/      # PECAN CAN adapter
 └── grafana-worker/    # Cloudflare Workers proxy for Grafana
 ```
 

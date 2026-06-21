@@ -98,6 +98,8 @@ Click **Start Streaming**.
 
 ## 5. Public viewer page
 
+> **Note:** `Public.html` is not yet included in this repository. The section below documents the intended configuration when it is added. For now, direct your audience to the YouTube or Twitch channel directly.
+
 Open `Public.html` and set your channel IDs at the top of the `<script>` block:
 
 ```js
@@ -135,5 +137,5 @@ Deploy `Public.html` anywhere — it's a single file with no build step. Netlify
 ## File map
 
 - `Streaming Overlay.html` — the local page OBS captures
-- `Public.html` — the lightweight page your audience visits
+- `Public.html` — the lightweight page your audience visits *(not yet in repo — see section 5)*
 - `OBS-SETUP.md` — this file
