@@ -240,6 +240,7 @@ Images are built for both `linux/amd64` and `linux/arm64` (Raspberry Pi).
 |------|----------|---------|
 | 5005 | UDP | CAN data streaming |
 | 5006 | TCP | Packet retransmission |
+| 5007 | UDP | Throughput diagnostics (configurable via `THROUGHPUT_PORT`) |
 | 6379 | TCP | Redis (internal) |
 | 8080 | HTTP | Status monitoring page |
 | 9080 | WebSocket | PECAN dashboard feed |
@@ -393,9 +394,9 @@ Published by base station, consumed by PECAN.
 ```
 
 ### `system_stats`
-Published by base station every second.
+Published by base station every second. Full schema documented in [`WEBSOCKET_PROTOCOL.md` section 4.2](../WEBSOCKET_PROTOCOL.md). Key fields:
 ```json
-{ "received": 45, "missing": 1, "recovered": 0 }
+{ "type": "system_stats", "received": 45, "missing": 1, "recovered": 0, "car_alive": true, "ecu_synced": true, "own_git_hash": "abc1234", "car_git_hash": "abc1234", ... }
 ```
 
 ---

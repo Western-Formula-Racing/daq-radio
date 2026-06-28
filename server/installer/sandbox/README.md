@@ -1,6 +1,6 @@
 # AI-Powered Code Generation & Sandbox Execution
 
-Generate and execute Python code for telemetry analysis using Cohere AI and a custom sandboxed execution environment. Integrated with the Slackbot for natural language queries.
+Generate and execute Python code for telemetry analysis using an Anthropic-compatible API (MiniMax-M3 via MiniMax) and a custom sandboxed execution environment. Integrated with the Slackbot for natural language queries.
 
 ## Architecture
 
@@ -14,7 +14,7 @@ flowchart TD
         direction TB
         Receive[Receive prompt]
         LoadGuide["Load system prompt (prompt-guide.txt)"]
-        CohereAI["Cohere AI (command-r-plus)"]
+        CohereAI["MiniMax-M3 (Anthropic-compatible API)"]
         RetryNode["Append error to prompt and retry"]
         Check{"Execution successful?"}
 
@@ -44,7 +44,7 @@ flowchart TD
 
 1. **Code Generator** (`code_generator.py`)
    - Receives natural language prompts
-   - Uses Cohere AI to generate Python code
+   - Uses an Anthropic-compatible API (MiniMax-M3 via MiniMax) to generate Python code
    - Implements automatic retry logic (up to 2 retries)
    - Appends error messages to prompts on retry for self-correction
 
@@ -65,11 +65,14 @@ The sandbox services are automatically started with the main docker-compose stac
 Add to your `.env` file:
 
 ```bash
-# Required: Cohere API key
-COHERE_API_KEY=your-cohere-api-key-here
+# Required: API key for code generation (MiniMax via Anthropic-compatible endpoint)
+ANTHROPIC_API_KEY=your-api-key-here
 
-# Optional: Cohere model (default in docker-compose: command-r-plus; code default: command-a-reasoning-08-2025)
-COHERE_MODEL=command-r-plus
+# Optional: API base URL (defaults to MiniMax's Anthropic-compatible endpoint)
+ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic
+
+# Optional: Model to use (default: MiniMax-M3)
+ANTHROPIC_MODEL=MiniMax-M3
 
 # Optional: Max retry attempts (default: 2)
 MAX_RETRIES=2
@@ -129,7 +132,7 @@ Use the `!agent` command in Slack:
 2. Slackbot forwards prompt to Code Generator service
 3. Code Generator:
    - Loads system prompt with TimescaleDB connection details
-   - Calls Cohere AI to generate Python code
+   - Calls MiniMax-M3 (via Anthropic-compatible API) to generate Python code
    - Submits code directly to Custom Sandbox for execution
 4. Custom Sandbox:
    - Executes Python code with full internet access
@@ -137,7 +140,7 @@ Use the `!agent` command in Slack:
    - Returns stdout, stderr, and output files
 5. If code fails:
    - Error message is appended to the prompt
-   - Cohere generates fixed code
+   - The AI model generates fixed code
    - Process repeats up to MAX_RETRIES times
 6. Results sent back to Slack:
    - Text output shown in message
@@ -181,7 +184,7 @@ The code generator uses a system prompt (`prompt-guide.txt`) to guide Cohere's c
 2. Edit `prompt-guide.txt` with your custom prompt engineering
 3. File is gitignored - your custom prompts stay private
 
-**The system prompt should include:**
+****The system prompt should include:**
 - Available libraries and the `slicks` package API
 - Example usage of `slicks.fetch_telemetry()`, `slicks.discover_sensors()`, etc.
 - Visualization best practices
@@ -283,9 +286,9 @@ docker compose logs -f sandbox
 
 ## Troubleshooting
 
-**Code Generator can't connect to Cohere:**
-- Check `COHERE_API_KEY` is set correctly in `.env`
-- Verify API key has sufficient credits
+**Code Generator can't connect to the AI API:**
+- Check `ANTHROPIC_API_KEY` is set correctly in `.env`
+- Verify `ANTHROPIC_BASE_URL` points to the correct endpoint
 
 **Sandbox execution fails:**
 - Check sandbox container is running: `docker ps | grep sandbox`
@@ -319,7 +322,7 @@ docker compose up -d --build code-generator
 
 ## Files
 
-- `code_generator.py` - Main Cohere integration and retry logic
+- `code_generator.py` - Main AI API integration (Anthropic-compatible) and retry logic
 - `sandbox_server.py` - Custom Python sandbox execution server
 - `prompt-guide.txt.example` - Template for system prompt (copy to `prompt-guide.txt`)
 - `prompt-guide.txt` - Your custom system prompt (gitignored)

@@ -26,7 +26,7 @@ Python service that periodically collects Docker container and application metri
 | `POSTGRES_DSN`                          | `postgresql://wfr:wfr_password@timescaledb:5432/wfr` | TimescaleDB DSN.                                                      |
 | `POSTGRES_PASSWORD`                     | (from env)                        | Database password for writes.                                         |
 | `TIMESCALE_HEALTH_TABLE`                | `monitoring`                      | Table name for monitoring metrics.                                    |
-| `HEALTH_MONITOR_TIMESCALE_CONTAINER`    | `timescaledb`                     | Container name for TimescaleDB.                                       |
+| `HEALTH_MONITOR_TIMESCALEDB_CONTAINER`  | `timescaledb`                     | Container name for TimescaleDB.                                       |
 | `HEALTH_MONITOR_SCANNER_CONTAINER`      | `data-downloader-scanner`         | Container name for the scanner.                                      |
 | `HEALTH_MONITOR_SCANNER_API_URL`        | `http://data-downloader-api:8000` | Base URL of the data-downloader API (for scanner metrics).           |
 | `HEALTH_MONITOR_TIMESCALE_VOLUME_SUFFIX` | `timescaledb-data`                | Volume suffix used to find the TimescaleDB data volume for disk usage. |

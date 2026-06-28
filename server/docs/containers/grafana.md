@@ -10,8 +10,8 @@ Grafana provides dashboards for visualising the telemetry stored in TimescaleDB.
 
 | Variable | Description | Default |
 | --- | --- | --- |
-| `GRAFANA_ADMIN_PASSWORD` | Password for the `admin` Grafana user. | `dev-grafana-password` |
-| `POSTGRES_PASSWORD` | Injected automatically from `.env` via provisioning. | `dev-timescaledb-password` |
+| `GRAFANA_ADMIN_PASSWORD` | Password for the `admin` Grafana user. | `admin` (compose fallback); `.env.example` sets `password` |
+| `POSTGRES_PASSWORD` | Injected automatically from `.env` via provisioning. | `wfr_password` |
 
 Provisioning files live under `installer/grafana/provisioning/`. They configure the TimescaleDB datasource and automatically import dashboards from `installer/grafana/dashboards/`.
 

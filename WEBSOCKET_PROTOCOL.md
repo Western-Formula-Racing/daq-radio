@@ -181,19 +181,45 @@ Published once per second by the base station.
   "type": "system_stats",
   "received": 45,
   "missing": 1,
-  "recovered": 0
+  "recovered": 0,
+  "messages": 900,
+  "ecu_synced": true,
+  "ecu_sync_source": "udp",
+  "timescale": { "status": "ok", "lag_s": 0.12 },
+  "dbc_file": "example.dbc",
+  "car_time_synced": true,
+  "base_clock_bad": false,
+  "last_udp_time": 1708012800.123,
+  "car_alive": true,
+  "second_buffer": [1, 1, 0, 1, ...],   // 60-element array, one entry per second
+  "own_git_hash": "abc1234",
+  "car_git_hash": "abc1234",
+  "remote_ip": "10.71.1.10"
 }
 
-// Legacy (v1) — still supported
+// Legacy (v1) — still supported (subset of fields only)
 { "received": 45, "missing": 1, "recovered": 0 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | `"system_stats"` | Yes (v2) | Message discriminator |
-| `received` | `number` | Yes | UDP packets received this second |
-| `missing` | `number` | Yes | UDP packets detected missing this second |
-| `recovered` | `number` | Yes | Packets recovered via TCP this second |
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `"system_stats"` | Message discriminator |
+| `received` | `number` | UDP packets received this second |
+| `missing` | `number` | UDP packets detected missing this second |
+| `recovered` | `number` | Packets recovered via TCP this second |
+| `messages` | `number` | Total CAN frames decoded this second |
+| `ecu_synced` | `boolean` | Whether the car ECU time is synchronised |
+| `ecu_sync_source` | `string\|null` | Sync source identifier (`"udp"`, `"tcp"`, etc.) |
+| `timescale` | `object\|null` | Last known TimescaleDB bridge status (from Redis key `timescale:status`) |
+| `dbc_file` | `string` | DBC file name in use (from `DBC_DISPLAY_NAME` or `DBC_FILE_PATH` env var) |
+| `car_time_synced` | `boolean` | Whether car-side clock has been synchronised to base |
+| `base_clock_bad` | `boolean` | True if the base station clock is detected as unreliable |
+| `last_udp_time` | `number\|null` | Unix timestamp of last received UDP packet from car |
+| `car_alive` | `boolean` | True if a UDP packet was received within the last 5 seconds |
+| `second_buffer` | `number[]` | 60-element rolling array of per-second packet-received counts (index 0 = 60 s ago) |
+| `own_git_hash` | `string\|null` | Git hash of the base-station UTS build |
+| `car_git_hash` | `string\|null` | Git hash reported by the car-side UTS |
+| `remote_ip` | `string` | Configured car IP (`REMOTE_IP` env var) |
 
 ### 4.3 `uplink_ack` — Uplink Acknowledgement
 
@@ -313,6 +339,48 @@ Server responds with:
 }
 ```
 
+### 5.4 `page_lock` — UI Page Locking
+
+Allows a client to claim exclusive editing access to a named page (e.g. `can-transmitter`, `throttle-mapper`) so multiple users don't overwrite each other's changes.
+
+```jsonc
+{
+  "type": "page_lock",
+  "page": "can-transmitter",   // "can-transmitter" | "throttle-mapper"
+  "action": "acquire"          // "acquire" | "release" | "query"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | `"page_lock"` | Yes | Message discriminator |
+| `page` | `string` | Yes | Page identifier to lock |
+| `action` | `string` | Yes | `"acquire"` claims the lock, `"release"` drops it, `"query"` returns current state without modifying |
+
+**Server responses:**
+
+`page_lock_result` — sent to the requesting client:
+```jsonc
+{
+  "type": "page_lock_result",
+  "page": "can-transmitter",
+  "success": true,
+  "holder": null     // null if acquired by this client; remote IP:port of holder if denied
+}
+```
+
+`page_lock_state` — broadcast to **all** clients when lock state changes:
+```jsonc
+{
+  "type": "page_lock_state",
+  "locks": {
+    "can-transmitter": { "holder": "192.168.1.5:54321" }
+  }
+}
+```
+
+Error codes specific to page_lock: `INVALID_PAGE`, `INVALID_ACTION` (see section 7).
+
 ---
 
 ## 6. Deployment Modes and Redis Channels
@@ -329,7 +397,9 @@ In car mode, downlink frames can also be broadcast from an in-process queue, so 
 | Channel | Direction | Publisher | Subscriber | Format |
 |---------|-----------|-----------|------------|--------|
 | `can_messages` | Downlink | Base `data.py` | WS Bridge | JSON array of `{time, canId, data}` |
-| `system_stats` | Downlink | Base `data.py` | WS Bridge | JSON object `{received, missing, recovered}` |
+| `system_stats` | Downlink | Base `data.py` | WS Bridge | JSON object (see section 4.2) |
+| `link_diagnostics` | Downlink | Base `data.py` | WS Bridge | JSON object with radio link health metrics |
+| `telemetry_heartbeat` | Downlink | Base `data.py` | WS Bridge | Heartbeat signal for connection keepalive |
 | `can_uplink` | Uplink | WS Bridge | Base `data.py` | JSON object (see below) |
 
 ### 6.1 `can_uplink` Channel Format
@@ -361,6 +431,8 @@ For batch messages, each CAN frame in the batch is published as a separate Redis
 | `UPLINK_DISABLED` | Uplink is not enabled on this server instance |
 | `UNKNOWN_TYPE` | Unrecognized message `type` |
 | `CAN_WRITE_FAILED` | Car mode only: `python-can` failed to write to `can0` |
+| `INVALID_PAGE` | `page_lock`: unknown page identifier |
+| `INVALID_ACTION` | `page_lock`: action is not `acquire`, `release`, or `query` |
 
 ---
 

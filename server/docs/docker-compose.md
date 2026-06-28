@@ -6,29 +6,32 @@ The `installer/docker-compose.yml` file orchestrates the complete DAQ telemetry 
 
 ```text
 ┌────────────┐                                ┌────────────┐
-│ Startup    │                                │ TimescaleDB │
-│ data loader├───────────────────────────────▶│ + Explorer │
+│ File       │                                │ TimescaleDB │
+│ uploader   ├───────────────────────────────▶│            │
 └────────────┘                                └────────────┘
-       │                                           │
-       │                                           ▼
-       │                               ┌─────────────────────┐
-       │                               │ Grafana dashboards  │
-       ▼                               └─────────────────────┘
-┌────────────┐                                   │
-│ File       │                                   ▼
-│ uploader   ├──────────────────────────────────▶│ Slack bot &
-└────────────┘                                   │ notifications
+                                                   │
+                                                   ▼
+                                   ┌─────────────────────┐
+                                   │ Grafana dashboards  │
+                                   └─────────────────────┘
+                                               │
+                                               ▼
+                                   ┌─────────────────────┐
+                                   │ Slack bot &         │
+                                   │ notifications       │
+                                   └─────────────────────┘
 ```
 
-All containers join the `datalink` bridge network, enabling them to communicate using Docker hostnames (for example `http://timescaledb:8181`).
+All containers join the `datalink` bridge network, enabling them to communicate using Docker hostnames (for example `timescaledb:5432`).
 
 ## Volumes
 
 | Volume | Mounted by | Purpose |
 | --- | --- | --- |
 | `timescaledb-data` | `timescaledb` | Persists TimescaleDB metadata and stored telemetry. |
-| `timescaledb-explorer-db` | `timescaledb-explorer` | Keeps explorer UI preferences. |
 | `grafana-storage` | `grafana` | Stores dashboards, plugins, and Grafana state. |
+| `code-generator-chroma` | `code-generator` | Persists ChromaDB vector store for RAG. |
+| `code-generator-cache` | `code-generator` | Caches model/dependency artefacts. |
 
 Remove volumes with `docker compose down -v` if you need a clean slate.
 
@@ -42,14 +45,13 @@ The Slack bot relies on valid `SLACK_APP_TOKEN` and `SLACK_BOT_TOKEN` values. Le
 
 ## Health checks
 
-- `timescaledb` exposes a TCP healthcheck on port 8181 to ensure the database is reachable before dependants start.
-- `startup-data-loader` waits an additional 5 seconds (`sleep 5`) to give TimescaleDB time to finish booting before loading the sample data.
+- `timescaledb` uses a `pg_isready` healthcheck to ensure the database is accepting connections before dependants start.
 
 ## Customisation tips
 
 - Override exposed ports in `docker-compose.override.yml` if default host ports conflict with local services.
 - Drop in custom dashboards under `installer/grafana/dashboards/`—Grafana auto-imports JSON files at startup.
-- Swap the example dataset in `installer/startup-data-loader/data/` for real telemetry and update `example.dbc` to match your CAN specification.
+- Replace `example.dbc` with your team's CAN database to decode real telemetry.
 
 ## Useful commands
 
@@ -59,7 +61,7 @@ cd installer
 docker compose config
 
 # Tail logs for a specific service
-docker compose logs -f startup-data-loader
+docker compose logs -f file-uploader
 
 # Execute a shell inside the TimescaleDB container
 docker compose exec timescaledb /bin/sh
