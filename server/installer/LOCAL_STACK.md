@@ -1,5 +1,7 @@
 # Local Stack — Offline Testing Guide
 
+> **Note:** This guide references `docker-compose.local.yml`, which does not currently exist in `server/installer/` (only `docker-compose.yml`, the full stack, is present). Create that override file yourself (scoping it to `timescaledb`, `grafana`, and `file-uploader`) before following the steps below, or run the equivalent `docker compose -f docker-compose.yml up -d timescaledb grafana file-uploader` against the full compose file instead.
+
 Minimal stack for testing without internet: TimescaleDB, Grafana, and file-uploader only.
 
 ## First-time setup (requires internet)

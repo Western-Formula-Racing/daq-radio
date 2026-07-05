@@ -69,10 +69,11 @@ sequenceDiagram
 
 - `frontend` serves the compiled React bundle via nginx and now proxies `/api` requests (including `/api/scan` and `/api/scanner-status`) directly to the FastAPI container. When the UI is loaded from anything other than `localhost`, the client automatically falls back to relative `/api/...` calls so a single origin on a VPS still reaches the backend. Override `VITE_API_BASE_URL` if you want the UI to talk to a different host (for example when running `npm run dev` locally) and keep that host in `ALLOWED_ORIGINS`.
 - `api` runs `uvicorn backend.app:app`, exposing
-  - `GET /api/runs` and `GET /api/sensors`
+  - `GET /api/runs`, `GET /api/sensors`, and `GET /api/sensors/grouped` (sensors grouped by their DBC CAN message)
+  - `POST /api/dbc/refresh` to reload the DBC file and regenerate the sensor grouping
   - `POST /api/runs/{key}/note` to persist notes per run
   - `POST /api/scan` to fire an on-demand scan that refreshes both JSON files in the background
-  - `POST /api/data/query` to request a timeseries slice for a given `signalName` between two timestamps; the response echoes the exact SQL (matching `sql.py`) so the frontend can display the query being executed.
+  - `POST /api/query` to request a timeseries slice for a given `signalName` between two timestamps; the response echoes the exact SQL (matching `sql.py`) so the frontend can display the query being executed.
 - `scanner` reuses the same backend image but runs `python -m backend.periodic_worker` so the scan + unique sensor collection happens at the interval defined by `SCAN_INTERVAL_SECONDS`.
 
 Set `POSTGRES_DSN` and `DEFAULT_SEASON_TABLE` to match your deployment so the SQL sent from `backend/server_scanner.py` and `backend/sql.py` queries the correct season table.

@@ -99,7 +99,6 @@ Expected running containers:
 | Container | Notes |
 |---|---|
 | timescaledb | Should show `(healthy)` |
-| timescaledb-explorer | TimescaleDB UI |
 | grafana | Dashboard |
 | grafana-bridge | Grafana API bridge |
 | file-uploader | |
@@ -110,7 +109,6 @@ Expected running containers:
 | sandbox | |
 | code-generator | |
 | slackbot | Exits cleanly if `ENABLE_SLACK=false` |
-| startup-data-loader | Runs once then exits — normal |
 
 > `lap-detector` is tabled until GPS hardware is available and is intentionally disabled. To run it: `docker compose --profile disabled up lap-detector -d`
 

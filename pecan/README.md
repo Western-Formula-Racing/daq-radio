@@ -193,7 +193,7 @@ npm run test:ui
 
 #### Test Coverage
 
-The test suite includes **42 tests** covering:
+The test suite covers:
 
 - ✅ CAN log line parsing (CSV format)
 - ✅ CAN message decoding with DBC files

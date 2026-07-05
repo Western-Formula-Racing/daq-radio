@@ -33,10 +33,19 @@ python src/main.py
 A small window appears with:
 - **Channel** - select which Kvaser CAN channel to use
 - **Bitrate** - CAN bus bitrate (default 500k)
-- **WS URL** - WebSocket URL of the dashboard (default `ws://localhost:9080`)
+- **WS URL** - WebSocket URL of the dashboard (default `wss://127.0.0.1:9081`; TLS is on by default)
 - **Start/Stop Bridge** - toggle the connection
 
 Click **Start Bridge** to begin streaming CAN frames to the dashboard.
+
+### Trusting the certificate (first run)
+
+The bridge serves a self-signed TLS certificate over `wss://`, so the browser dashboard will refuse the connection until that certificate is trusted:
+
+- **Windows**: click **Trust Certificate (Automatic)** to install it into the current-user Root store (no admin rights needed; works for Chrome/Edge). Use **Manual…** instead for Firefox, or if the automatic install fails.
+- **Other platforms**: click **Trust Certificate** to open the bridge URL in the browser, then click through **Advanced → Proceed** and wait for the green "Certificate trusted" confirmation page.
+
+Do this once per machine/browser before starting the bridge.
 
 ## Build (standalone binary)
 

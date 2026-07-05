@@ -1,5 +1,7 @@
 # Startup data loader
 
+> **Removed.** This service no longer exists in `server/installer/docker-compose.yml` and the `startup-data-loader/` directory it describes is gone. TimescaleDB now starts empty; use the `file-uploader` web UI (or the `data-downloader` scanner/API) to import CAN CSV archives. This doc is kept for historical reference only.
+
 The startup data loader seeds TimescaleDB with a small, deterministic dataset on first boot. It can also backfill additional files if you mount them into the container.
 
 ## Responsibilities

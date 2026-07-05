@@ -1,5 +1,7 @@
 # Unified Health Endpoint
 
+> **Status: Implemented.** The `/health` endpoint exists (`universal-telemetry-software/src/status_server.py`), backed by `data.py` writing the health file, and the 8080 status page polls it every 2s (`universal-telemetry-software/status/index.html`). Documented in `universal-telemetry-software/README.md` and `deploy/MACBOOK_DEPLOY.md`. This plan is kept for historical context only.
+
 ## Goal
 
 Replace the three independent, semi-redundant health detection mechanisms in the telemetry stack with a single `/health` HTTP JSON endpoint that aggregates the authoritative state of every pipeline component. Surface it in the existing 8080 status page UI in place of the current WebSocket-derived indicators.

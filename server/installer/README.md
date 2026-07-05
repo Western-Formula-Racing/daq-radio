@@ -35,7 +35,7 @@ This directory contains the Docker Compose deployment used to run the full telem
    docker compose down -v
    ```
 
-The first boot seeds TimescaleDB with the sample CAN data in `startup-data-loader/data/`. Subsequent restarts skip the import unless you remove the volumes.
+TimescaleDB starts empty; use the `file-uploader` web UI (or the `data-downloader` scanner/API) to import CAN CSV archives.
 
 ## Environment variables
 
@@ -43,19 +43,20 @@ All secrets and tokens are defined in `.env`. The defaults provided in `.env.exa
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `DBC_FILE_PATH` | Path to the CAN DBC file used by startup-data-loader and file-uploader and other services | `example.dbc` |
+| `DBC_FILE_PATH` | Path to the CAN DBC file used by file-uploader and other services | `example.dbc` |
+| `GITHUB_DBC_PATH` | Pins a specific DBC file to fetch instead (e.g. `WFR26.dbc`) | empty |
 | `POSTGRES_DSN` | DSN used by services to connect to TimescaleDB | `postgresql://wfr:wfr_password@timescaledb:5432/wfr` |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` | Bootstraps the initial admin user | `wfr` / `wfr_password` |
 | `POSTGRES_PASSWORD` | Database password shared by services that use DSN auth | `wfr_password` |
 | `GRAFANA_ADMIN_PASSWORD` | Grafana administrator password | `dev-grafana-password` |
-| `EXPLORER_SESSION_SECRET` | Secret for the TimescaleDB Explorer UI | `dev-explorer-session-key` |
 | `ENABLE_SLACK` | Gate to disable Slack-specific services | `false` |
 | `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` | Credentials for the Slack bot (optional) | empty |
 | `SLACK_WEBHOOK_URL` | Incoming webhook for notifications (optional) | empty |
 | `SLACK_DEFAULT_CHANNEL` | Default Slack channel ID for outbound messages | `C0123456789` |
 | `FILE_UPLOADER_WEBHOOK_URL` | Webhook invoked after uploads complete | inherits `SLACK_WEBHOOK_URL` |
-| `COHERE_API_KEY` | Cohere API key for AI-powered code generation | empty |
-| `COHERE_MODEL` | Cohere model to use | `command-a-03-2025` |
+| `ANTHROPIC_API_KEY` | Anthropic-compatible API key (MiniMax) for AI-powered code generation | empty |
+| `ANTHROPIC_BASE_URL` | Anthropic-compatible endpoint | `https://api.minimaxi.com/anthropic` |
+| `ANTHROPIC_MODEL` | Model to use | `MiniMax-M3` |
 | `MAX_RETRIES` | Maximum retries for failed code execution | `2` |
 | `DEFAULT_SEASON_TABLE` | Default season table for telemetry queries | `wfr26` |
 | `DEBUG` | Enables verbose logging for selected services | `0` |
@@ -74,15 +75,15 @@ All secrets and tokens are defined in `.env`. The defaults provided in `.env.exa
 | `file-uploader` | `8084` | Web UI for uploading CAN CSV archives and streaming them into TimescaleDB. |
 | `slackbot` | n/a | Socket-mode Slack bot for notifications and automation (optional). Integrates with code-generator for AI queries. |
 | `sandbox` | n/a | Custom Python execution environment for running AI-generated code and TimescaleDB queries. |
-| `code-generator` | `3030` (internal) | AI-powered code generation service using Cohere. Generates Python code from natural language. |
+| `code-generator` | `3030` (internal) | AI-powered code generation service using MiniMax (Anthropic-compatible API). Generates Python code from natural language. |
+| `grafana-bridge` | `3001` | API that creates Grafana dashboards from Pecan sessions. |
 | `health-monitor` | n/a | Monitors container health and scanner status. |
 | `lap-detector` | `8050` | Dash-based lap analysis web application, tabled until GPS hardware is available. |
-| `startup-data-loader` | n/a | Seeds TimescaleDB with sample CAN frames on first boot. |
 
 ## Data and DBC files
 
-- `startup-data-loader/data/` ships with `2025-01-01-00-00-00.csv`, a csv file to exercise the import pipeline without exposing production telemetry.
-- Both the loader and the uploader share `example.dbc`, a minimal CAN database that defines two demo messages. Replace this file with your team’s CAN definition when working with real data.
+- `file-uploader` accepts CAN CSV archives through its web UI and streams them into TimescaleDB.
+- `file-uploader` ships with `example.dbc`, a minimal CAN database that defines two demo messages. Replace this file (or set `GITHUB_DBC_PATH`) with your team’s CAN definition when working with real data.
 
 ## Observability
 
@@ -91,9 +92,8 @@ All secrets and tokens are defined in `.env`. The defaults provided in `.env.exa
 ## Troubleshooting tips
 
 - **Service fails to connect to TimescaleDB** – Confirm `POSTGRES_DSN`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` in `.env` are correct. Regenerate the volumes with `docker compose down -v` if you rotate credentials.
-- **Re-import sample data** – Run `docker compose down -v` and restart the stack to re-trigger the data loader.
 - **Slack services are optional** – Leave Slack variables empty or set `ENABLE_SLACK=false` to skip starting the bot during development.
-- **AI code generation not working** – Ensure `COHERE_API_KEY` is set in `.env`. Check logs with `docker compose logs code-generator`.
+- **AI code generation not working** – Ensure `ANTHROPIC_API_KEY` is set in `.env`. Check logs with `docker compose logs code-generator`.
 - **Sandbox execution fails** – Verify sandbox container is running with `docker ps | grep sandbox`. Check logs with `docker compose logs sandbox`.
 
 ## AI-Powered Code Generation
@@ -108,15 +108,15 @@ The stack includes an AI-powered code generation service that allows natural lan
 ```
 
 **Features:**
-- Automatic code generation from natural language using Cohere AI
+- Automatic code generation from natural language using MiniMax (Anthropic-compatible API)
 - Self-correcting retry mechanism (up to 2 retries on failure)
 - Secure sandboxed execution environment
 - Auto-generation of plots and visualizations
 - Direct TimescaleDB access for telemetry queries
 
 **Setup:**
-1. Add `COHERE_API_KEY` to your `.env` file
-2. Optional: Configure `COHERE_MODEL` and `MAX_RETRIES`
+1. Add `ANTHROPIC_API_KEY` to your `.env` file
+2. Optional: Configure `ANTHROPIC_MODEL` and `MAX_RETRIES`
 3. Services start automatically with the stack
 
 See `sandbox/README.md` for detailed documentation.

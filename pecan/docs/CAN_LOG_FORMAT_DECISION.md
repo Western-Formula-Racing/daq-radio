@@ -1,5 +1,7 @@
 # PECAN CAN Log Format Decision
 
+> **Status:** Phase 1 (PECAN CSV v1 machine columns) and Phase 4 (`.pecan` session container) are implemented — see `exportCsv()`/`exportPecanSession()` in `src/pages/Trace.tsx` and `src/utils/pecanSerializer.ts`/`src/utils/replayParser.ts`. The "Migration Note" and container `version` below are historical/outdated; the shipped container format is `version: 2` (`serializePecanV2`).
+
 ## Decision Summary
 
 Use a machine-readable raw frame format as the canonical PECAN replay format.

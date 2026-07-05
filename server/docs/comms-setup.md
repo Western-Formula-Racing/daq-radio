@@ -24,7 +24,7 @@ Base Station RPI                    Car RPI
 ### Base Station
 
 ```bash
-cd universal-telemetry-software
+cd universal-telemetry-software/deploy
 docker compose -f docker-compose.jitsi.yml up -d
 ```
 
@@ -36,7 +36,7 @@ Access: `http://<base-ip>:8000`
 # Set base station IP first
 export JITSI_URL=http://192.168.1.1:8000
 
-cd universal-telemetry-software
+cd universal-telemetry-software/deploy
 docker compose -f docker-compose.jitsi.yml --profile car up -d car-jitsi-client
 ```
 

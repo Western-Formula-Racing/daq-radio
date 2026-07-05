@@ -5,7 +5,7 @@ This guide helps you set up and test the AI-powered code generation feature for 
 ## Prerequisites
 
 - Docker and Docker Compose installed
-- Cohere API key (get one at https://cohere.com)
+- An Anthropic-compatible API key for MiniMax (get one at https://www.minimax.io)
 - TimescaleDB with telemetry data (or use the sample data)
 
 ## Setup Steps
@@ -22,10 +22,11 @@ SLACK_APP_TOKEN=xapp-your-token
 SLACK_DEFAULT_CHANNEL=C0123456789
 
 # AI Code Generation (required)
-COHERE_API_KEY=your-cohere-api-key-here
-COHERE_MODEL=command-r-plus
+ANTHROPIC_API_KEY=your-minimax-api-key-here
+ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic
+ANTHROPIC_MODEL=MiniMax-M3
 MAX_RETRIES=2
-DEFAULT_SEASON_TABLE=telemetry
+DEFAULT_SEASON_TABLE=wfr26
 ```
 
 ### 1.5. Set Up Custom Prompt (Recommended)
@@ -47,7 +48,7 @@ From the `installer/` directory:
 docker compose up -d
 
 # Or start only the AI/sandbox services for testing
-docker compose up -d postgresdb3 sandbox code-generator
+docker compose up -d timescaledb sandbox code-generator
 ```
 
 ### 3. Verify Services are Running
@@ -127,7 +128,7 @@ Once you have telemetry data in TimescaleDB, try these prompts:
 2. **Code Generator**:
    - Receives prompt
    - Loads system prompt with TimescaleDB connection details
-   - Calls Cohere AI to generate Python code
+   - Calls MiniMax (via the Anthropic-compatible API) to generate Python code
 3. **Custom Sandbox**:
    - Receives generated code
    - Executes in isolated Python subprocess
@@ -138,7 +139,7 @@ Once you have telemetry data in TimescaleDB, try these prompts:
    - Slackbot uploads images to Slack
 5. **On Failure**:
    - Error message appended to original prompt
-   - Cohere generates corrected code
+   - MiniMax generates corrected code
    - Retries up to MAX_RETRIES times
 
 ## Monitoring and Debugging
@@ -161,8 +162,8 @@ docker compose exec code-generator cat generated_sandbox_code.py
 
 ### Common Issues
 
-**"COHERE_API_KEY not found"**
-- Make sure `.env` has `COHERE_API_KEY=your-key`
+**"ANTHROPIC_API_KEY not found"**
+- Make sure `.env` has `ANTHROPIC_API_KEY=your-minimax-key`
 - Restart services: `docker compose up -d --force-recreate code-generator`
 
 **"Connection refused to sandbox"**
@@ -175,9 +176,9 @@ docker compose exec code-generator cat generated_sandbox_code.py
 - View the system prompt: `cat installer/sandbox/prompt-guide.txt`
 
 **"No data returned from TimescaleDB"**
-- Verify database name: `DEFAULT_SEASON_TABLE=telemetry` in `.env`
-- Check TimescaleDB has data: http://localhost:8888
-- Verify token is correct: `POSTGRES_PASSWORD` in `.env`
+- Verify database name: `DEFAULT_SEASON_TABLE=wfr26` in `.env`
+- Check TimescaleDB has data: `docker compose exec timescaledb psql -U wfr -d wfr -c "SELECT count(*) FROM wfr26;"`
+- Verify credentials are correct: `POSTGRES_DSN` in `.env`
 
 ## Architecture
 
@@ -194,7 +195,8 @@ docker compose exec code-generator cat generated_sandbox_code.py
          ▼
 ┌───────────────────────┐
 │  Code Generator       │
-│  (Cohere AI)          │ ← System Prompt + User Prompt
+│  (MiniMax via         │ ← System Prompt + User Prompt
+│   Anthropic API)      │
 └──────────┬────────────┘
            │ Generated Python Code
            ▼
@@ -225,17 +227,16 @@ docker compose exec code-generator cat generated_sandbox_code.py
 
 - Code executes in isolated Python subprocess with configurable timeout
 - **Has internet access** for TimescaleDB queries via `slicks` and API calls
-- Maximum runtime: 30 seconds (configurable via SANDBOX_TIMEOUT)
-- Maximum file size: 5 MB per file (configurable via SANDBOX_MAX_FILE_MB)
-- Maximum files: 10 files (configurable via SANDBOX_MAX_FILES)
+- Maximum runtime: 120 seconds (configurable via SANDBOX_TIMEOUT)
+- Maximum file size: 20 MB per file (configurable via SANDBOX_MAX_FILE_MB)
+- Maximum files: 20 files (configurable via SANDBOX_MAX_FILES)
 - TimescaleDB credentials passed via environment only (consumed by `slicks` automatically)
 - Generated code is logged for audit purposes
 
 ## Resources
 
-- Cohere Documentation: https://docs.cohere.com
-- Custom Sandbox Source: /Users/hz/GitHub/sandbox
-- TimescaleDB Docs: https://docs.postgresdata.com/postgresdb/
+- MiniMax Documentation: https://platform.minimaxi.com/document
+- Custom Sandbox Source: `server/installer/sandbox/`
 - Slack API: https://api.slack.com
 
 ## Support
