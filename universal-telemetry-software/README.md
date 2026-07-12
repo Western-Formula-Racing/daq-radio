@@ -398,6 +398,15 @@ Published by base station every second.
 { "received": 45, "missing": 1, "recovered": 0 }
 ```
 
+### `can_uplink`
+Published by the WebSocket bridge when a browser client sends `can_send`; consumed by the base station's uplink relay, which forwards it to the car via UDP (only when `ENABLE_UPLINK=true`).
+
+### `telemetry_heartbeat`
+Published every second by the producer (`src/heartbeat.py`) so pubsub subscribers can detect a half-dead connection (no message of any kind for `HEARTBEAT_STALE_S`, default 5s) and re-subscribe — this can happen even though regular Redis commands still succeed, since they use a different, auto-reconnecting pool connection.
+```json
+{ "uptime_s": 123.4, "wall_ts": 1770000000.0 }
+```
+
 ---
 
 ## Troubleshooting

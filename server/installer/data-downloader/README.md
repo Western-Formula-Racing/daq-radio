@@ -10,9 +10,18 @@ Both JSON files are shared through the `./data` directory so every service (fron
 
 ## Getting started
 
-1. Duplicate the sample env file and fill in the TimescaleDB credentials:
+1. This stack's `docker-compose.yml` reads `env_file: .env`, but there is no `.env.example` in this
+   directory anymore — the sample vars now live in `server/installer/.env.example`. Create `.env` here
+   with at least `POSTGRES_DSN` and `DEFAULT_SEASON_TABLE` (copy the matching lines from
+   `server/installer/.env.example`, or write your own):
    ```bash
-   cp .env.example .env
+   cat > .env <<'EOF'
+   POSTGRES_DSN=postgresql://wfr:wfr_password@timescaledb:5432/wfr
+   DEFAULT_SEASON_TABLE=wfr26
+   SCAN_INTERVAL_SECONDS=3600
+   VITE_API_BASE_URL=http://localhost:8000
+   ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173
+   EOF
    ```
 2. Build + launch everything:
    ```bash

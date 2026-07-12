@@ -33,7 +33,7 @@ python src/main.py
 A small window appears with:
 - **Channel** - select which Kvaser CAN channel to use
 - **Bitrate** - CAN bus bitrate (default 500k)
-- **WS URL** - WebSocket URL of the dashboard (default `ws://localhost:9080`)
+- **WS URL** - the bridge's own WebSocket server address, which the dashboard connects to (default `wss://127.0.0.1:9081`)
 - **Start/Stop Bridge** - toggle the connection
 
 Click **Start Bridge** to begin streaming CAN frames to the dashboard.

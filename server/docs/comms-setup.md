@@ -24,7 +24,7 @@ Base Station RPI                    Car RPI
 ### Base Station
 
 ```bash
-cd universal-telemetry-software
+cd universal-telemetry-software/deploy
 docker compose -f docker-compose.jitsi.yml up -d
 ```
 
@@ -32,12 +32,13 @@ Access: `http://<base-ip>:8000`
 
 ### Car RPI
 
+The car client is a standalone headless-browser image published by CI (`ghcr.io/western-formula-racing/data-acquisition/car-jitsi-client`) — it is not part of `docker-compose.jitsi.yml`.
+
 ```bash
 # Set base station IP first
-export JITSI_URL=http://192.168.1.1:8000
-
-cd universal-telemetry-software
-docker compose -f docker-compose.jitsi.yml --profile car up -d car-jitsi-client
+docker run -d --name car-jitsi-client \
+  -e JITSI_URL=http://192.168.1.1:8000 \
+  ghcr.io/western-formula-racing/data-acquisition/car-jitsi-client:latest
 ```
 
 The client will:
@@ -76,7 +77,7 @@ The client will:
 **Car can't connect?**
 - Check Ubiquiti link status
 - Verify base station IP in `JITSI_URL`
-- Check `docker logs daq-car-jitsi`
+- Check `docker logs car-jitsi-client`
 
 **No audio on car?**
 - Verify PulseAudio: `pactl info`

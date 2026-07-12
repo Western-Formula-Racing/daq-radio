@@ -5,7 +5,7 @@ This guide helps you set up and test the AI-powered code generation feature for 
 ## Prerequisites
 
 - Docker and Docker Compose installed
-- Cohere API key (get one at https://cohere.com)
+- MiniMax API key (get one at https://www.minimaxi.com), used via an Anthropic-compatible SDK
 - TimescaleDB with telemetry data (or use the sample data)
 
 ## Setup Steps
@@ -22,8 +22,9 @@ SLACK_APP_TOKEN=xapp-your-token
 SLACK_DEFAULT_CHANNEL=C0123456789
 
 # AI Code Generation (required)
-COHERE_API_KEY=your-cohere-api-key-here
-COHERE_MODEL=command-r-plus
+ANTHROPIC_API_KEY=your-minimax-api-key-here
+ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic
+ANTHROPIC_MODEL=MiniMax-M3
 MAX_RETRIES=2
 DEFAULT_SEASON_TABLE=telemetry
 ```
@@ -47,7 +48,7 @@ From the `installer/` directory:
 docker compose up -d
 
 # Or start only the AI/sandbox services for testing
-docker compose up -d postgresdb3 sandbox code-generator
+docker compose up -d timescaledb sandbox code-generator
 ```
 
 ### 3. Verify Services are Running
@@ -127,7 +128,7 @@ Once you have telemetry data in TimescaleDB, try these prompts:
 2. **Code Generator**:
    - Receives prompt
    - Loads system prompt with TimescaleDB connection details
-   - Calls Cohere AI to generate Python code
+   - Calls MiniMax AI to generate Python code
 3. **Custom Sandbox**:
    - Receives generated code
    - Executes in isolated Python subprocess
@@ -138,7 +139,7 @@ Once you have telemetry data in TimescaleDB, try these prompts:
    - Slackbot uploads images to Slack
 5. **On Failure**:
    - Error message appended to original prompt
-   - Cohere generates corrected code
+   - MiniMax generates corrected code
    - Retries up to MAX_RETRIES times
 
 ## Monitoring and Debugging
@@ -161,8 +162,8 @@ docker compose exec code-generator cat generated_sandbox_code.py
 
 ### Common Issues
 
-**"COHERE_API_KEY not found"**
-- Make sure `.env` has `COHERE_API_KEY=your-key`
+**"ANTHROPIC_API_KEY not found"**
+- Make sure `.env` has `ANTHROPIC_API_KEY=your-key`
 - Restart services: `docker compose up -d --force-recreate code-generator`
 
 **"Connection refused to sandbox"**
@@ -194,7 +195,7 @@ docker compose exec code-generator cat generated_sandbox_code.py
          ▼
 ┌───────────────────────┐
 │  Code Generator       │
-│  (Cohere AI)          │ ← System Prompt + User Prompt
+│  (MiniMax AI)         │ ← System Prompt + User Prompt
 └──────────┬────────────┘
            │ Generated Python Code
            ▼
@@ -225,7 +226,7 @@ docker compose exec code-generator cat generated_sandbox_code.py
 
 - Code executes in isolated Python subprocess with configurable timeout
 - **Has internet access** for TimescaleDB queries via `slicks` and API calls
-- Maximum runtime: 30 seconds (configurable via SANDBOX_TIMEOUT)
+- Maximum runtime: 120 seconds (configurable via SANDBOX_TIMEOUT)
 - Maximum file size: 5 MB per file (configurable via SANDBOX_MAX_FILE_MB)
 - Maximum files: 10 files (configurable via SANDBOX_MAX_FILES)
 - TimescaleDB credentials passed via environment only (consumed by `slicks` automatically)
@@ -233,9 +234,9 @@ docker compose exec code-generator cat generated_sandbox_code.py
 
 ## Resources
 
-- Cohere Documentation: https://docs.cohere.com
-- Custom Sandbox Source: /Users/hz/GitHub/sandbox
-- TimescaleDB Docs: https://docs.postgresdata.com/postgresdb/
+- MiniMax API: https://api.minimaxi.com/anthropic
+- Custom Sandbox Source: server/installer/sandbox/
+- TimescaleDB Docs: https://docs.timescale.com/
 - Slack API: https://api.slack.com
 
 ## Support

@@ -54,8 +54,9 @@ All secrets and tokens are defined in `.env`. The defaults provided in `.env.exa
 | `SLACK_WEBHOOK_URL` | Incoming webhook for notifications (optional) | empty |
 | `SLACK_DEFAULT_CHANNEL` | Default Slack channel ID for outbound messages | `C0123456789` |
 | `FILE_UPLOADER_WEBHOOK_URL` | Webhook invoked after uploads complete | inherits `SLACK_WEBHOOK_URL` |
-| `COHERE_API_KEY` | Cohere API key for AI-powered code generation | empty |
-| `COHERE_MODEL` | Cohere model to use | `command-a-03-2025` |
+| `ANTHROPIC_API_KEY` | MiniMax API key for AI-powered code generation (Anthropic-compatible SDK) | empty |
+| `ANTHROPIC_BASE_URL` | MiniMax API base URL | `https://api.minimaxi.com/anthropic` |
+| `ANTHROPIC_MODEL` | MiniMax model to use | `MiniMax-M3` |
 | `MAX_RETRIES` | Maximum retries for failed code execution | `2` |
 | `DEFAULT_SEASON_TABLE` | Default season table for telemetry queries | `wfr26` |
 | `DEBUG` | Enables verbose logging for selected services | `0` |
@@ -74,7 +75,7 @@ All secrets and tokens are defined in `.env`. The defaults provided in `.env.exa
 | `file-uploader` | `8084` | Web UI for uploading CAN CSV archives and streaming them into TimescaleDB. |
 | `slackbot` | n/a | Socket-mode Slack bot for notifications and automation (optional). Integrates with code-generator for AI queries. |
 | `sandbox` | n/a | Custom Python execution environment for running AI-generated code and TimescaleDB queries. |
-| `code-generator` | `3030` (internal) | AI-powered code generation service using Cohere. Generates Python code from natural language. |
+| `code-generator` | `3030` (internal) | AI-powered code generation service using MiniMax. Generates Python code from natural language. |
 | `health-monitor` | n/a | Monitors container health and scanner status. |
 | `lap-detector` | `8050` | Dash-based lap analysis web application, tabled until GPS hardware is available. |
 | `startup-data-loader` | n/a | Seeds TimescaleDB with sample CAN frames on first boot. |
@@ -93,7 +94,7 @@ All secrets and tokens are defined in `.env`. The defaults provided in `.env.exa
 - **Service fails to connect to TimescaleDB** – Confirm `POSTGRES_DSN`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` in `.env` are correct. Regenerate the volumes with `docker compose down -v` if you rotate credentials.
 - **Re-import sample data** – Run `docker compose down -v` and restart the stack to re-trigger the data loader.
 - **Slack services are optional** – Leave Slack variables empty or set `ENABLE_SLACK=false` to skip starting the bot during development.
-- **AI code generation not working** – Ensure `COHERE_API_KEY` is set in `.env`. Check logs with `docker compose logs code-generator`.
+- **AI code generation not working** – Ensure `ANTHROPIC_API_KEY` is set in `.env`. Check logs with `docker compose logs code-generator`.
 - **Sandbox execution fails** – Verify sandbox container is running with `docker ps | grep sandbox`. Check logs with `docker compose logs sandbox`.
 
 ## AI-Powered Code Generation
@@ -108,15 +109,15 @@ The stack includes an AI-powered code generation service that allows natural lan
 ```
 
 **Features:**
-- Automatic code generation from natural language using Cohere AI
+- Automatic code generation from natural language using MiniMax
 - Self-correcting retry mechanism (up to 2 retries on failure)
 - Secure sandboxed execution environment
 - Auto-generation of plots and visualizations
 - Direct TimescaleDB access for telemetry queries
 
 **Setup:**
-1. Add `COHERE_API_KEY` to your `.env` file
-2. Optional: Configure `COHERE_MODEL` and `MAX_RETRIES`
+1. Add `ANTHROPIC_API_KEY` to your `.env` file
+2. Optional: Configure `ANTHROPIC_MODEL` and `MAX_RETRIES`
 3. Services start automatically with the stack
 
 See `sandbox/README.md` for detailed documentation.
