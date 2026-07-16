@@ -39,6 +39,7 @@ export interface AnalysisToolbarProps {
   loading: boolean;
   exportDisabled: boolean;
   onRunChange: (runKey: string, startMs: number, endMs: number) => void;
+  onSelectCustom: () => void;
   onCustomRange: (startMs: number, endMs: number) => void;
   onExport: () => void;
 }
@@ -50,6 +51,7 @@ export function AnalysisToolbar({
   loading,
   exportDisabled,
   onRunChange,
+  onSelectCustom,
   onCustomRange,
   onExport,
 }: AnalysisToolbarProps) {
@@ -69,12 +71,9 @@ export function AnalysisToolbar({
 
   const handleRunSelect = (value: string) => {
     if (value === CUSTOM_VALUE) {
-      // Switch to custom mode while keeping the current bounds (parent clears run key).
-      const [startMs, endMs] = range;
-      if (Number.isFinite(startMs) && Number.isFinite(endMs) && startMs < endMs) {
-        setRangeError(null);
-        onCustomRange(startMs, endMs);
-      }
+      // Enter custom mode without re-emitting the current bounds.
+      setRangeError(null);
+      onSelectCustom();
       return;
     }
     const run = runs.find((r) => r.key === value);

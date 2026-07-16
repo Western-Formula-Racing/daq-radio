@@ -3,11 +3,6 @@ import { useMemo, useState, type ReactNode } from "react";
 import type { MessageGroup, SensorsGroupedResponse } from "../types";
 import { OTHER_PALETTE, subsystemColor, type PaletteEntry } from "./sensor-palette";
 
-function readTheme(): "light" | "dark" {
-  if (typeof document === "undefined") return "light";
-  return document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
-}
-
 function matchesQuery(haystacks: Array<string | number>, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
@@ -18,6 +13,7 @@ export interface AnalysisSignalPickerProps {
   grouped: SensorsGroupedResponse;
   selected: ReadonlySet<string>;
   onToggle: (signal: string) => void;
+  theme: "light" | "dark";
   maxSelected?: number;
 }
 
@@ -105,11 +101,11 @@ export function AnalysisSignalPicker({
   grouped,
   selected,
   onToggle,
+  theme,
   maxSelected = 12,
 }: AnalysisSignalPickerProps) {
   const [query, setQuery] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const theme = readTheme();
   const atCap = selected.size >= maxSelected;
 
   const filtered = useMemo(() => {
