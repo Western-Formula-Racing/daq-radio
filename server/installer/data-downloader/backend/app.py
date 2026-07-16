@@ -7,13 +7,16 @@ from typing import Dict, List, Set
 
 import docker
 import psycopg2
+import psycopg2.errors
 import psycopg2.extras
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from backend import series_queries
 from backend.config import get_settings
 from backend.dbc_utils import group_sensors_by_message, load_dbc_db, refresh_dbc
 from backend.services import DataDownloaderService
@@ -29,6 +32,14 @@ class DataQueryPayload(BaseModel):
     end: datetime
     limit: int | None = 2000
     no_limit: bool = False
+
+
+class SeriesPayload(BaseModel):
+    season: str
+    signals: List[str]
+    start: datetime
+    end: datetime
+    target_points: int = series_queries.DEFAULT_TARGET_POINTS
 
 
 class CanFramePayload(BaseModel):
@@ -55,6 +66,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 
 @app.get("/api/health")
@@ -190,6 +202,29 @@ def query_signal(payload: DataQueryPayload, season: str | None = None) -> dict:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         logger.exception("Query failed for signal %s", payload.signal)
+        raise HTTPException(status_code=503, detail=f"Database query failed: {exc}")
+
+
+@app.post("/api/series")
+def query_series(payload: SeriesPayload) -> dict:
+    try:
+        return series_queries.execute_series(
+            settings,
+            payload.season,
+            payload.signals,
+            payload.start,
+            payload.end,
+            payload.target_points,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except psycopg2.errors.QueryCanceled:
+        raise HTTPException(
+            status_code=504,
+            detail="query timed out; narrow the time window or reduce signals",
+        )
+    except psycopg2.Error as exc:
+        logger.exception("Series query failed")
         raise HTTPException(status_code=503, detail=f"Database query failed: {exc}")
 
 

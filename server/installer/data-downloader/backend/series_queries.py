@@ -10,6 +10,8 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 
+import psycopg2
+
 RAW_THRESHOLD = int(os.getenv("SERIES_RAW_THRESHOLD", "100000"))
 DEFAULT_TARGET_POINTS = int(os.getenv("SERIES_TARGET_POINTS", "4000"))
 MAX_TARGET_POINTS = 100_000
@@ -96,3 +98,90 @@ def build_estimate_sql(table: str, signal: str) -> str:
         f"WHERE time >= %(start)s AND time <= %(end)s "
         f'AND "{signal}" IS NOT NULL LIMIT %(cap)s) q'
     )
+
+
+def _get_table_columns(conn, table: str) -> set[str]:
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND table_name = %(t)s",
+            {"t": table},
+        )
+        return {row[0] for row in cur.fetchall()}
+
+
+def _estimate_rows(conn, table: str, signal: str, start, end) -> int:
+    with conn.cursor() as cur:
+        cur.execute(
+            build_estimate_sql(table, signal),
+            {"start": start, "end": end, "cap": RAW_THRESHOLD + 1},
+        )
+        return int(cur.fetchone()[0])
+
+
+def execute_series(settings, season, signals, start, end, target_points):
+    start = normalize_utc(start)
+    end = normalize_utc(end)
+    table = season.lower()
+    validate_table_name(table)
+    validate_request(signals, start, end, target_points)
+
+    conn = psycopg2.connect(
+        settings.postgres_dsn,
+        options=f"-c statement_timeout={STATEMENT_TIMEOUT_MS}",
+    )
+    try:
+        columns = _get_table_columns(conn, table)
+        if not columns:
+            raise ValueError(f"unknown season table: {table!r}")
+        unknown = [s for s in signals if s not in columns]
+        if unknown:
+            raise ValueError(f"unknown signals for {table}: {unknown}")
+
+        estimates = {
+            s: _estimate_rows(conn, table, s, start, end) for s in signals
+        }
+        modes = choose_modes(estimates)
+
+        series: dict = {}
+        params = {"start": start, "end": end}
+        for sig in signals:
+            with conn.cursor() as cur:
+                if modes[sig] == "raw":
+                    cur.execute(build_raw_sql(table, sig), params)
+                    rows = cur.fetchall()
+                    series[sig] = {
+                        "mode": "raw",
+                        "resolution_ms": None,
+                        "point_count": len(rows),
+                        "t": [int(ts.timestamp() * 1000) for ts, _ in rows],
+                        "v": [float(v) for _, v in rows],
+                    }
+                else:
+                    bucket = bucket_interval(start, end, target_points)
+                    cur.execute(
+                        build_envelope_sql(table, sig),
+                        {**params, "bucket": bucket},
+                    )
+                    rows = cur.fetchall()
+                    res_ms = int(
+                        float(bucket.split(" ")[0]) * 1000
+                    )
+                    series[sig] = {
+                        "mode": "envelope",
+                        "resolution_ms": res_ms,
+                        "point_count": len(rows),
+                        "t": [int(b.timestamp() * 1000) for b, *_ in rows],
+                        "min": [float(mn) for _, mn, _, _ in rows],
+                        "max": [float(mx) for _, _, mx, _ in rows],
+                        "avg": [float(av) for _, _, _, av in rows],
+                    }
+    finally:
+        conn.close()
+
+    return {
+        "season": table,
+        "start": start.isoformat(),
+        "end": end.isoformat(),
+        "series": series,
+    }
