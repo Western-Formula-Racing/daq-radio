@@ -889,3 +889,58 @@ body {
     width: 100%;
   }
 }
+
+.analysis-plot-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.analysis-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.analysis-legend-swatch {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 2px;
+}
+
+.analysis-legend-axis,
+.analysis-legend-remove {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 0 0.15rem;
+  color: var(--text-muted);
+}
+
+.analysis-legend-axis:hover,
+.analysis-legend-remove:hover {
+  color: var(--text);
+}
+
+.analysis-new-plot-zone {
+  border: 2px dashed var(--border-strong);
+  border-radius: 8px;
+  padding: 0.75rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-subtle);
+}
+
+.analysis-plot-card.is-drop-target,
+.analysis-new-plot-zone.is-drop-target {
+  border-color: var(--accent, #2563eb);
+  background: var(--surface-2);
+}
