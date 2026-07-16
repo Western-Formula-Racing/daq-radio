@@ -3,6 +3,7 @@ import type { Data, PlotRelayoutEvent } from "plotly.js";
 
 import type { SignalSeries } from "../types";
 import { buildTraces, parseXRangeRelayout } from "./plot-traces";
+import { plotStroke } from "../components/sensor-palette";
 
 /** Plotly can emit numbers, Date, or ISO strings; typings only allow numbers. */
 function asRelayout(event: Record<string, unknown>): PlotRelayoutEvent {
@@ -193,5 +194,53 @@ describe("parseXRangeRelayout", () => {
 
     expect(parseXRangeRelayout(asRelayout({}))).toBeNull();
     expect(parseXRangeRelayout(asRelayout({ "yaxis.range": [0, 1] }))).toBeNull();
+  });
+});
+
+describe("plotStroke", () => {
+  it("returns the shared palette border color and is case-insensitive", () => {
+    expect(plotStroke("ws_fl", "light")).toBe(plotStroke("WS_FL", "light"));
+    expect(plotStroke("WS_FL", "light")).toMatch(/^#[0-9a-f]{6}$/i);
+  });
+});
+
+describe("buildTraces yAxis", () => {
+  const raw = { mode: "raw" as const, resolution_ms: null, point_count: 1, t: [0], v: [1] };
+
+  it("defaults every trace to the left axis", () => {
+    for (const trace of buildTraces("S1", raw, "#2563eb")) {
+      expect((trace as { yaxis?: string }).yaxis).toBe("y");
+    }
+  });
+
+  it("assigns y2 to all traces of a right-axis signal, including envelope bands", () => {
+    const env = {
+      mode: "envelope" as const,
+      resolution_ms: 1000,
+      point_count: 1,
+      t: [0],
+      min: [0],
+      max: [2],
+      avg: [1],
+    };
+    const traces = buildTraces("S1", env, "#2563eb", "y2");
+    expect(traces).toHaveLength(3);
+    for (const trace of traces) {
+      expect((trace as { yaxis?: string }).yaxis).toBe("y2");
+    }
+  });
+
+  it("fills the envelope band at 0.15 alpha", () => {
+    const env = {
+      mode: "envelope" as const,
+      resolution_ms: 1000,
+      point_count: 1,
+      t: [0],
+      min: [0],
+      max: [2],
+      avg: [1],
+    };
+    const [, minTrace] = buildTraces("S1", env, "#2563eb");
+    expect((minTrace as { fillcolor?: string }).fillcolor).toBe("rgba(37, 99, 235, 0.15)");
   });
 });

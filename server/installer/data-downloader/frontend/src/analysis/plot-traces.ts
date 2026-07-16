@@ -26,11 +26,18 @@ function toDateX(t: number[]): Date[] {
   return t.map((ms) => new Date(ms));
 }
 
+const ENVELOPE_FILL_ALPHA = 0.15;
+
 /**
  * Build Plotly scattergl traces for one signal.
  * Envelope order is max → min (fill tonexty) → avg so the band fills correctly.
  */
-export function buildTraces(signal: string, series: SignalSeries, color: string): Data[] {
+export function buildTraces(
+  signal: string,
+  series: SignalSeries,
+  color: string,
+  yAxis: "y" | "y2" = "y",
+): Data[] {
   const x = toDateX(series.t);
 
   if (series.mode === "raw") {
@@ -40,6 +47,7 @@ export function buildTraces(signal: string, series: SignalSeries, color: string)
       name: signal,
       x,
       y: series.v,
+      yaxis: yAxis,
       line: { color, width: 1.5 },
       hovertemplate: "%{y:.4g}<extra>" + signal + "</extra>",
     };
@@ -47,7 +55,7 @@ export function buildTraces(signal: string, series: SignalSeries, color: string)
   }
 
   const transparent = withAlpha(color, 0);
-  const fill = withAlpha(color, 0.25);
+  const fill = withAlpha(color, ENVELOPE_FILL_ALPHA);
 
   const maxTrace: Partial<PlotData> = {
     type: "scattergl",
@@ -55,6 +63,7 @@ export function buildTraces(signal: string, series: SignalSeries, color: string)
     name: `${signal} max`,
     x,
     y: series.max,
+    yaxis: yAxis,
     line: { color: transparent, width: 0 },
     showlegend: false,
     hoverinfo: "skip",
@@ -66,6 +75,7 @@ export function buildTraces(signal: string, series: SignalSeries, color: string)
     name: `${signal} min`,
     x,
     y: series.min,
+    yaxis: yAxis,
     line: { color: transparent, width: 0 },
     fill: "tonexty",
     fillcolor: fill,
@@ -79,6 +89,7 @@ export function buildTraces(signal: string, series: SignalSeries, color: string)
     name: `${signal} (avg)`,
     x,
     y: series.avg,
+    yaxis: yAxis,
     line: { color, width: 1.5 },
     hovertemplate: "%{y:.4g}<extra>" + signal + "</extra>",
   };
