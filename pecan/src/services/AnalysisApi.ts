@@ -8,8 +8,8 @@ import type {
 
 export const ANALYSIS_API_URL_KEY = "pecan:analysis-api-url";
 
-// Production hostname is wired up in the deployment task (CF tunnel + Access).
-const PROD_API_URL = "https://data-api.westernformularacing.org";
+// Existing data-downloader tunnel hostname (api.westernformularacing.org).
+const PROD_API_URL = "https://api.westernformularacing.org";
 
 export class AnalysisApiError extends Error {
   status: number | null;

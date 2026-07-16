@@ -830,12 +830,12 @@ jobs:
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ github.ref_name }}
 
-  # ── Deploy pecan-internal to Cloudflare Pages (main branch only) ──────────
+  # ── Deploy pecan-internal to Cloudflare Pages (main/dev + pecan-analytics) ─
   deploy-pecan-internal-cloudflare:
     needs: [detect-changes, unit-tests, integration, vcan]
     runs-on: ubuntu-latest
     if: |
-      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev') &&
+      (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/pecan-analytics') &&
       needs.detect-changes.outputs.pecan == 'true'
     permissions:
       contents: read
@@ -860,6 +860,9 @@ jobs:
         run: npm run build
         env:
           VITE_INTERNAL: 'true'
+          # Public analysis API (existing tunnel hostname). Access cross-origin
+          # cookies are still TBD; tailnet users can override via localStorage.
+          VITE_ANALYSIS_API_URL: https://api.westernformularacing.org
           VITE_GITHUB_DBC_READONLY_TOKEN: ${{ secrets.VITE_GITHUB_DBC_READONLY_TOKEN }}
           VITE_RELAY_TOKEN: ${{ secrets.VITE_RELAY_TOKEN }}
           VITE_GRAFANA_BRIDGE_URL: https://grafana-proxy.westernformularacing.workers.dev/grafana-bridge/api/grafana
@@ -878,7 +881,8 @@ jobs:
           projectName: pecan-internal
           directory: ./pecan/dist
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          branch: main
+          # Keep production on main; pecan-analytics gets a Pages preview alias.
+          branch: ${{ github.ref_name == 'pecan-analytics' && 'pecan-analytics' || 'main' }}
 
   # ── Deploy grafana-worker via Wrangler ───────────────────────────────────
   deploy-worker:
