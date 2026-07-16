@@ -1,0 +1,73 @@
+import { describe, expect, it } from "vitest";
+import type { Data } from "plotly.js";
+
+import type { SignalSeries } from "../types";
+import { buildTraces } from "./plot-traces";
+
+const raw: SignalSeries = {
+  mode: "raw",
+  resolution_ms: null,
+  point_count: 2,
+  t: [0, 1000],
+  v: [1, 2],
+};
+
+const env: SignalSeries = {
+  mode: "envelope",
+  resolution_ms: 2500,
+  point_count: 2,
+  t: [0, 2500],
+  min: [1, 2],
+  max: [3, 4],
+  avg: [2, 3],
+};
+
+function asTraces(data: Data[]): Array<Record<string, unknown>> {
+  return data as Array<Record<string, unknown>>;
+}
+
+describe("buildTraces", () => {
+  it("builds one scattergl line for raw series with Date x-values", () => {
+    const traces = asTraces(buildTraces("A", raw, "#f47560"));
+    expect(traces).toHaveLength(1);
+    expect(traces[0].type).toBe("scattergl");
+    expect(traces[0].mode).toBe("lines");
+    expect(traces[0].name).toBe("A");
+    const x = traces[0].x as Date[];
+    expect(x).toHaveLength(2);
+    expect(x[0]).toBeInstanceOf(Date);
+    expect(x[0].getTime()).toBe(0);
+    expect(x[1].getTime()).toBe(1000);
+    expect(traces[0].y).toEqual([1, 2]);
+    expect((traces[0].line as { color: string }).color).toBe("#f47560");
+  });
+
+  it("builds max, min band, and avg traces for envelope series", () => {
+    const traces = asTraces(buildTraces("A", env, "#f47560"));
+    expect(traces).toHaveLength(3);
+    const [maxT, minT, avgT] = traces;
+
+    expect(maxT.type).toBe("scattergl");
+    expect(minT.type).toBe("scattergl");
+    expect(avgT.type).toBe("scattergl");
+
+    expect(minT.fill).toBe("tonexty");
+    expect(maxT.showlegend).toBe(false);
+    expect(minT.showlegend).toBe(false);
+    expect(avgT.name).toContain("A");
+
+    const maxLine = maxT.line as { color: string };
+    const minLine = minT.line as { color: string };
+    const avgLine = avgT.line as { color: string };
+    expect(avgLine.color).toBe("#f47560");
+    // Band edges share the signal color family (transparent stroke / tinted fill).
+    expect(maxLine.color).toContain("rgba");
+    expect(minLine.color).toContain("rgba");
+    expect(String(minT.fillcolor)).toContain("rgba");
+    expect(minT.fillcolor).toContain("244, 117, 96");
+
+    expect(maxT.y).toEqual([3, 4]);
+    expect(minT.y).toEqual([1, 2]);
+    expect(avgT.y).toEqual([2, 3]);
+  });
+});
