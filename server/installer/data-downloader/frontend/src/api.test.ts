@@ -56,4 +56,46 @@ describe("querySeries", () => {
       }),
     ).rejects.toThrow("TimescaleDB unavailable");
   });
+
+  it("surfaces non-JSON error bodies as plain text", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 502,
+        text: async () => "Bad Gateway from upstream",
+      }),
+    );
+
+    await expect(
+      querySeries({
+        season: "wfr26",
+        signals: ["A"],
+        start: "2026-01-01T00:00:00Z",
+        end: "2026-01-01T01:00:00Z",
+        target_points: 4000,
+      }),
+    ).rejects.toThrow("Bad Gateway from upstream");
+  });
+
+  it("falls back when the error body is empty", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        text: async () => "",
+      }),
+    );
+
+    await expect(
+      querySeries({
+        season: "wfr26",
+        signals: ["A"],
+        start: "2026-01-01T00:00:00Z",
+        end: "2026-01-01T01:00:00Z",
+        target_points: 4000,
+      }),
+    ).rejects.toThrow("Request failed (500)");
+  });
 });

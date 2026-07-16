@@ -42,10 +42,13 @@ export class SeriesCache {
   }
 
   set(key: string, value: SeriesMap): void {
+    const points = representedPoints(value);
+    // Reject oversize inserts before mutating so useful entries stay cached.
+    if (points > this.budget) return;
+
     const prior = this.entries.get(key);
     if (prior) this.points -= prior.points;
     this.entries.delete(key);
-    const points = representedPoints(value);
     this.entries.set(key, { value, points });
     this.points += points;
     while (this.points > this.budget && this.entries.size > 0) {
