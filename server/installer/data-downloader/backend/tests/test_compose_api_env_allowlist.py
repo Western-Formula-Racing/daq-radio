@@ -1,28 +1,31 @@
 """Assert data-downloader-api uses an explicit env allowlist, not broad env_file."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
 # Env names config.py reads; compose must set each explicitly.
-REQUIRED_API_ENV = (
-    "DATA_DIR",
-    "POSTGRES_DSN",
-    "DEFAULT_SEASON_TABLE",
-    "SEASONS",
-    "SCANNER_BIN",
-    "SCANNER_INCLUDE_COUNTS",
-    "SCANNER_INITIAL_CHUNK_DAYS",
-    "SENSOR_WINDOW_DAYS",
-    "SENSOR_LOOKBACK_DAYS",
-    "SCAN_INTERVAL_SECONDS",
-    "SCAN_DAILY_TIME",
-    "ALLOWED_ORIGINS",
-    "GITHUB_DBC_TOKEN",
-    "GITHUB_DBC_REPO",
-    "GITHUB_DBC_BRANCH",
-    "GITHUB_DBC_PATH",
-    "DBC_FILE_PATH",
+REQUIRED_API_ENV = frozenset(
+    {
+        "DATA_DIR",
+        "POSTGRES_DSN",
+        "DEFAULT_SEASON_TABLE",
+        "SEASONS",
+        "SCANNER_BIN",
+        "SCANNER_INCLUDE_COUNTS",
+        "SCANNER_INITIAL_CHUNK_DAYS",
+        "SENSOR_WINDOW_DAYS",
+        "SENSOR_LOOKBACK_DAYS",
+        "SCAN_INTERVAL_SECONDS",
+        "SCAN_DAILY_TIME",
+        "ALLOWED_ORIGINS",
+        "GITHUB_DBC_TOKEN",
+        "GITHUB_DBC_REPO",
+        "GITHUB_DBC_BRANCH",
+        "GITHUB_DBC_PATH",
+        "DBC_FILE_PATH",
+    }
 )
 
 # Stack secrets that must never land in the API container.
@@ -31,6 +34,8 @@ FORBIDDEN_API_ENV = (
     "SLACK_BOT_TOKEN",
     "ANTHROPIC_API_KEY",
 )
+
+_COMPOSE_DEFAULT_RE = re.compile(r"\$\{[A-Z0-9_]+:-(.*)\}$")
 
 
 def _installer_compose_path() -> Path:
@@ -61,8 +66,8 @@ def _service_block(compose_text: str, service: str) -> str:
     return "\n".join(body)
 
 
-def _environment_keys(service_body: str) -> set[str]:
-    """Parse keys under the service's environment: mapping."""
+def _environment_mapping(service_body: str) -> dict[str, str]:
+    """Parse key/value pairs under the service's environment: mapping."""
     lines = service_body.splitlines()
     env_start = None
     for i, line in enumerate(lines):
@@ -70,9 +75,9 @@ def _environment_keys(service_body: str) -> set[str]:
             env_start = i + 1
             break
     if env_start is None:
-        return set()
+        return {}
 
-    keys: set[str] = set()
+    mapping: dict[str, str] = {}
     for line in lines[env_start:]:
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
@@ -82,10 +87,18 @@ def _environment_keys(service_body: str) -> set[str]:
             break
         if ":" not in stripped:
             continue
-        key = stripped.split(":", 1)[0].strip()
-        if key:
-            keys.add(key)
-    return keys
+        key, raw_value = stripped.split(":", 1)
+        key = key.strip()
+        if not key:
+            continue
+        mapping[key] = raw_value.strip().strip('"').strip("'")
+    return mapping
+
+
+def _compose_fallback(value: str) -> str | None:
+    """Return the :-default from ${VAR:-default}, or None if not that form."""
+    match = _COMPOSE_DEFAULT_RE.fullmatch(value.strip())
+    return match.group(1) if match else None
 
 
 def test_data_downloader_api_env_is_explicit_allowlist():
@@ -103,9 +116,16 @@ def test_data_downloader_api_env_is_explicit_allowlist():
             f"data-downloader-api must not reference unrelated secret {forbidden}"
         )
 
-    env_keys = _environment_keys(block)
-    missing = [name for name in REQUIRED_API_ENV if name not in env_keys]
-    assert not missing, (
-        "data-downloader-api environment must explicitly list every config.py env name; "
-        f"missing: {missing}"
+    env_map = _environment_mapping(block)
+    env_keys = set(env_map)
+    assert env_keys == set(REQUIRED_API_ENV), (
+        "data-downloader-api environment keys must exactly match config.py allowlist; "
+        f"extra={sorted(env_keys - REQUIRED_API_ENV)} "
+        f"missing={sorted(REQUIRED_API_ENV - env_keys)}"
+    )
+
+    lookback_fallback = _compose_fallback(env_map["SENSOR_LOOKBACK_DAYS"])
+    assert lookback_fallback == "30", (
+        "SENSOR_LOOKBACK_DAYS compose fallback must match config.py default of 30 "
+        f"(got {lookback_fallback!r}); production .env may still set 365 explicitly"
     )
