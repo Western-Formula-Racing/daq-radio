@@ -944,3 +944,20 @@ body {
   border-color: var(--accent, #2563eb);
   background: var(--surface-2);
 }
+
+.analysis-signal-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.analysis-signal-plot-select {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.2rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  max-width: 5.5rem;
+}
