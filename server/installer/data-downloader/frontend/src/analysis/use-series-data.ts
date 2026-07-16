@@ -37,20 +37,22 @@ export function useSeriesData(): UseSeriesData {
   const [error, setError] = useState<string | null>(null);
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const sequenceRef = useRef(0);
+  const generationRef = useRef(0);
   const mountedRef = useRef(true);
   const lastRequestRef = useRef<SeriesRequestArgs | null>(null);
 
-  const executeRequest = useCallback(async (req: SeriesRequestArgs) => {
+  const executeRequest = useCallback(async (req: SeriesRequestArgs, generation: number) => {
+    // Drop work that was superseded while the debounce timer was pending.
+    if (generation !== generationRef.current) return;
+
     const { seasonTable, signals, startMs, endMs } = req;
     const targetPoints = targetPointsFor(signals.length);
     const key = seriesCacheKey(seasonTable, signals, startMs, endMs, targetPoints);
-    const seq = ++sequenceRef.current;
 
     const cached = seriesCache.get(key);
     if (cached) {
       // Clear loading so a later cache hit cannot leave a prior fetch stuck true.
-      if (mountedRef.current && seq === sequenceRef.current) {
+      if (mountedRef.current && generation === generationRef.current) {
         setSeriesBySignal(cached);
         setLoading(false);
         setError(null);
@@ -58,7 +60,7 @@ export function useSeriesData(): UseSeriesData {
       return;
     }
 
-    if (mountedRef.current && seq === sequenceRef.current) {
+    if (mountedRef.current && generation === generationRef.current) {
       setLoading(true);
     }
 
@@ -70,18 +72,20 @@ export function useSeriesData(): UseSeriesData {
         end: new Date(endMs).toISOString(),
         target_points: targetPoints,
       });
-      if (!mountedRef.current || seq !== sequenceRef.current) return;
+      // Cache under the request's own key even if superseded — that cannot corrupt
+      // current UI because state updates below still require a matching generation.
       seriesCache.set(key, response.series);
+      if (!mountedRef.current || generation !== generationRef.current) return;
       setSeriesBySignal(response.series);
       setError(null);
     } catch (err) {
-      if (!mountedRef.current || seq !== sequenceRef.current) return;
+      if (!mountedRef.current || generation !== generationRef.current) return;
       const message = err instanceof Error ? err.message : "failed to fetch series";
       setError(
         `${message} (${new Date(startMs).toISOString()} to ${new Date(endMs).toISOString()})`,
       );
     } finally {
-      if (mountedRef.current && seq === sequenceRef.current) {
+      if (mountedRef.current && generation === generationRef.current) {
         setLoading(false);
       }
     }
@@ -97,10 +101,14 @@ export function useSeriesData(): UseSeriesData {
         endMs,
       };
       lastRequestRef.current = req;
+      // Allocate generation at schedule time so an in-flight older fetch cannot
+      // win state updates during this request's debounce window.
+      const generation = ++generationRef.current;
+      setError(null);
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
         timerRef.current = null;
-        void executeRequest(req);
+        void executeRequest(req, generation);
       }, DEBOUNCE_MS);
     },
     [executeRequest],

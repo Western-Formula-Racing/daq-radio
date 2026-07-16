@@ -135,6 +135,71 @@ describe("useSeriesData", () => {
     expect(result.current.loading).toBe(false);
   });
 
+  it("does not render A when A resolves after uncached B is scheduled but before B's timer", async () => {
+    const first = deferred<SeriesResponse>();
+    const second = deferred<SeriesResponse>();
+    querySeriesMock
+      .mockReturnValueOnce(first.promise)
+      .mockReturnValueOnce(second.promise);
+
+    const { result } = renderHook(() => useSeriesData());
+
+    act(() => result.current.requestRange("race-uncached", ["A"], 0, 1000));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(querySeriesMock).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.requestRange("race-uncached", ["A"], 0, 2000));
+    await act(async () => {
+      first.resolve(seriesResponse("race-uncached", "A", 1));
+      await first.promise;
+    });
+    expect(result.current.seriesBySignal.A).toBeUndefined();
+    expect(querySeriesMock).toHaveBeenCalledTimes(1);
+
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(querySeriesMock).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      second.resolve(seriesResponse("race-uncached", "A", 2));
+      await second.promise;
+    });
+    expect(rawValues(result.current.seriesBySignal, "A")).toEqual([2]);
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("does not render A when A resolves after cached B is scheduled but before cache-hit timer", async () => {
+    const inflightA = deferred<SeriesResponse>();
+    querySeriesMock
+      .mockResolvedValueOnce(seriesResponse("race-cached", "A", 20))
+      .mockReturnValueOnce(inflightA.promise);
+
+    const { result } = renderHook(() => useSeriesData());
+
+    act(() => result.current.requestRange("race-cached", ["A"], 0, 2000));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(rawValues(result.current.seriesBySignal, "A")).toEqual([20]);
+    expect(querySeriesMock).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.requestRange("race-cached", ["A"], 0, 1000));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(querySeriesMock).toHaveBeenCalledTimes(2);
+    expect(result.current.loading).toBe(true);
+    expect(rawValues(result.current.seriesBySignal, "A")).toEqual([20]);
+
+    act(() => result.current.requestRange("race-cached", ["A"], 0, 2000));
+    await act(async () => {
+      inflightA.resolve(seriesResponse("race-cached", "A", 1));
+      await inflightA.promise;
+    });
+    expect(rawValues(result.current.seriesBySignal, "A")).toEqual([20]);
+    expect(querySeriesMock).toHaveBeenCalledTimes(2);
+
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(querySeriesMock).toHaveBeenCalledTimes(2);
+    expect(rawValues(result.current.seriesBySignal, "A")).toEqual([20]);
+    expect(result.current.loading).toBe(false);
+  });
+
   it("retains prior seriesBySignal while a later range is loading", async () => {
     const second = deferred<SeriesResponse>();
     querySeriesMock
@@ -160,6 +225,31 @@ describe("useSeriesData", () => {
     expect(result.current.loading).toBe(false);
   });
 
+  it("clears stale error immediately when a new range or retry is scheduled", async () => {
+    const startMs = 1_000;
+    const endMs = 2_000;
+    const errorText = `TimescaleDB unavailable (${new Date(startMs).toISOString()} to ${new Date(endMs).toISOString()})`;
+    querySeriesMock.mockRejectedValueOnce(new Error("TimescaleDB unavailable"));
+
+    const { result } = renderHook(() => useSeriesData());
+
+    act(() => result.current.requestRange("clear-err", ["A"], startMs, endMs));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(result.current.error).toBe(errorText);
+
+    act(() => result.current.requestRange("clear-err", ["A"], startMs, endMs + 1));
+    expect(result.current.error).toBeNull();
+
+    querySeriesMock.mockRejectedValueOnce(new Error("TimescaleDB unavailable"));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(result.current.error).toBe(
+      `TimescaleDB unavailable (${new Date(startMs).toISOString()} to ${new Date(endMs + 1).toISOString()})`,
+    );
+
+    act(() => result.current.retry());
+    expect(result.current.error).toBeNull();
+  });
+
   it("includes the request range in errors and retry repeats the latest request", async () => {
     const startMs = 1_000;
     const endMs = 2_000;
@@ -178,6 +268,7 @@ describe("useSeriesData", () => {
 
     querySeriesMock.mockResolvedValueOnce(seriesResponse("retry-me", "A", 99));
     act(() => result.current.retry());
+    expect(result.current.error).toBeNull();
     await act(() => vi.advanceTimersByTimeAsync(300));
 
     expect(querySeriesMock).toHaveBeenCalledTimes(2);
@@ -188,6 +279,25 @@ describe("useSeriesData", () => {
       end: new Date(endMs).toISOString(),
     });
     expect(rawValues(result.current.seriesBySignal, "A")).toEqual([99]);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("retry after success serves the cached range without another network fetch", async () => {
+    querySeriesMock.mockResolvedValueOnce(seriesResponse("retry-cache", "A", 5));
+    const { result } = renderHook(() => useSeriesData());
+
+    act(() => result.current.requestRange("retry-cache", ["A"], 50, 60));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(querySeriesMock).toHaveBeenCalledTimes(1);
+    expect(rawValues(result.current.seriesBySignal, "A")).toEqual([5]);
+    expect(result.current.error).toBeNull();
+
+    act(() => result.current.retry());
+    await act(() => vi.advanceTimersByTimeAsync(300));
+
+    expect(querySeriesMock).toHaveBeenCalledTimes(1);
+    expect(rawValues(result.current.seriesBySignal, "A")).toEqual([5]);
+    expect(result.current.loading).toBe(false);
     expect(result.current.error).toBeNull();
   });
 
