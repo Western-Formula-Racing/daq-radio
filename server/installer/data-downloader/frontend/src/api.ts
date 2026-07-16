@@ -5,7 +5,9 @@ import {
   Season,
   SensorDataResponse,
   SensorsGroupedResponse,
-  SensorsResponse
+  SensorsResponse,
+  SeriesRequest,
+  SeriesResponse
 } from "./types";
 
 const RAW_API_BASE = import.meta.env.VITE_API_BASE_URL?.trim() ?? "";
@@ -26,8 +28,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init
   });
   if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || `Request failed (${response.status})`);
+    const body = await response.text();
+    let message = body || `Request failed (${response.status})`;
+    try {
+      const parsed = JSON.parse(body) as { detail?: string };
+      if (parsed.detail) message = parsed.detail;
+    } catch {
+      // Preserve non-JSON server errors.
+    }
+    throw new Error(message);
   }
   if (response.status === 204) {
     return {} as T;
@@ -88,5 +97,12 @@ export function querySensorData(payload: DataQueryPayload, season?: string): Pro
   return request(`/api/query${query}`, {
     method: "POST",
     body: JSON.stringify(payload)
+  });
+}
+
+export function querySeries(payload: SeriesRequest): Promise<SeriesResponse> {
+  return request("/api/series", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
