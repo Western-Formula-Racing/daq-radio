@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, vi } from "vitest";
 import { dataStore } from "./lib/DataStore";
 
+// @testing-library's waitFor detects and drives fake timers only when a global
+// `jest` with advanceTimersByTime exists; vitest ships none, so `await waitFor`
+// hangs under vi.useFakeTimers(). Shim the single method it calls. Inert under
+// real timers (jestFakeTimersAreEnabled checks the faked clock separately).
+if (typeof (globalThis as { jest?: unknown }).jest === "undefined") {
+  (globalThis as { jest?: unknown }).jest = {
+    advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms),
+  };
+}
+
 function ensureLocalStorage(): void {
   const hasStorage =
     typeof globalThis.localStorage !== "undefined" &&
