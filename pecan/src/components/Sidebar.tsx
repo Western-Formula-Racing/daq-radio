@@ -89,6 +89,12 @@ function Sidebar({ onClose, isOpen, onOpenSettings, onOpenAuth }: Readonly<Input
                 isPending={true}
               />
               <SidebarOption
+                option="Analysis"
+                path="/analysis"
+                onClose={onClose}
+                isPending={true}
+              />
+              <SidebarOption
                 option="ACCUMULATOR"
                 path="/accumulator"
                 onClose={onClose}
