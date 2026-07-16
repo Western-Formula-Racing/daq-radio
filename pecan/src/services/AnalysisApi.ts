@@ -8,8 +8,10 @@ import type {
 
 export const ANALYSIS_API_URL_KEY = "pecan:analysis-api-url";
 
-// Existing data-downloader tunnel hostname (api.westernformularacing.org).
+// Public CF tunnel hostname (Access-protected).
 const PROD_API_URL = "https://api.westernformularacing.org";
+// Tailnet VPS data-downloader — used for local Vite so Analysis hits real indexes.
+const TAILNET_API_URL = "http://100.72.11.60:8000";
 
 export class AnalysisApiError extends Error {
   status: number | null;
@@ -27,10 +29,8 @@ export function resolveApiBase(): string {
   if (env) return env.replace(/\/+$/, "");
   const host = window.location.hostname;
   if (host === "localhost" || host === "127.0.0.1") {
-    // Local dev default; override via VITE_ANALYSIS_API_URL or the
-    // localStorage key to point at the VPS over Tailscale
-    // (http://100.72.11.60:8000) once /api/series is deployed there.
-    return "http://localhost:8000";
+    // Local Vite should hit the real VPS API over Tailscale, not a local uvicorn.
+    return TAILNET_API_URL;
   }
   return PROD_API_URL;
 }

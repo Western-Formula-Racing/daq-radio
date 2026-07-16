@@ -20,9 +20,9 @@ describe("resolveApiBase", () => {
     expect(resolveApiBase()).toBe("https://data-api.example.org");
   });
 
-  it("defaults to localhost:8000 on localhost dev", () => {
+  it("defaults to the tailnet VPS API on localhost dev", () => {
     // vitest jsdom runs on localhost
-    expect(resolveApiBase()).toBe("http://localhost:8000");
+    expect(resolveApiBase()).toBe("http://100.72.11.60:8000");
   });
 });
 
@@ -43,7 +43,7 @@ describe("fetchSeries", () => {
     });
     expect(result).toEqual(payload);
     expect(mock).toHaveBeenCalledWith(
-      "http://localhost:8000/api/series",
+      "http://100.72.11.60:8000/api/series",
       expect.objectContaining({ method: "POST" }),
     );
   });
