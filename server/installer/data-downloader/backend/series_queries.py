@@ -128,7 +128,10 @@ def execute_series_query(
 
     with psycopg2.connect(postgres_dsn) as conn:
         with conn.cursor() as cur:
-            # Cap long-running analytics queries so the API stays responsive.
+            # One repeatable-read snapshot for estimate + fetch; cap query runtime.
+            cur.execute(
+                "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+            )
             cur.execute(f"SET LOCAL statement_timeout = {STATEMENT_TIMEOUT_MS}")
             estimates: dict[str, int] = {}
             modes: dict[str, Literal["raw", "envelope"]] = {}

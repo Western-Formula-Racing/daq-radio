@@ -67,11 +67,15 @@ def test_response_estimate_uses_target_for_envelope():
 
 
 class FakeCursor:
-    def __init__(self, estimate, rows):
-        self.estimate = estimate
-        self.rows = rows
+    def __init__(self, estimate, rows=None):
+        if isinstance(estimate, list):
+            self._estimates = list(estimate)
+        else:
+            self._estimates = [estimate]
+        self.rows = rows if rows is not None else []
         self.executed = []
         self.last_sql = ""
+        self._estimate_idx = 0
 
     def __enter__(self):
         return self
@@ -84,7 +88,9 @@ class FakeCursor:
         self.executed.append((sql, params))
 
     def fetchone(self):
-        return (self.estimate,)
+        value = self._estimates[self._estimate_idx]
+        self._estimate_idx += 1
+        return (value,)
 
     def fetchall(self):
         return self.rows
@@ -119,7 +125,11 @@ def test_execute_series_query_sets_statement_timeout(monkeypatch):
         end=T0 + timedelta(seconds=10),
         target_points=4000,
     )
-    assert cursor.executed[0][0] == "SET LOCAL statement_timeout = 15000"
+    assert (
+        cursor.executed[0][0]
+        == "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+    )
+    assert cursor.executed[1][0] == "SET LOCAL statement_timeout = 15000"
     assert result["INV_Motor_Temp"]["mode"] == "raw"
     assert result["INV_Motor_Temp"]["v"] == [47.2]
 
@@ -145,3 +155,33 @@ def test_execute_series_query_shapes_envelope(monkeypatch):
     assert series["min"] == [1.0]
     assert series["max"] == [3.0]
     assert series["avg"] == [2.0]
+
+
+def test_execute_series_query_rejects_projected_total_before_fetch(monkeypatch):
+    monkeypatch.setattr(sq, "MAX_TOTAL_POINTS", 100)
+    # Two raw estimates: 60 + 60 = 120 > 100; never reach data fetch.
+    cursor = FakeCursor([60, 60])
+    monkeypatch.setattr(
+        sq.psycopg2,
+        "connect",
+        lambda _dsn: FakeConnection(cursor),
+    )
+    with pytest.raises(ValueError, match="estimated response exceeds"):
+        sq.execute_series_query(
+            postgres_dsn="unused",
+            table="wfr26",
+            signals=["A", "B"],
+            start=T0,
+            end=T0 + timedelta(seconds=10),
+            target_points=4000,
+        )
+    sqls = [sql for sql, _ in cursor.executed]
+    assert sqls[0] == "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+    assert sqls[1] == "SET LOCAL statement_timeout = 15000"
+    assert "COUNT(*)" in sqls[2]
+    assert '"A"' in sqls[2]
+    assert "COUNT(*)" in sqls[3]
+    assert '"B"' in sqls[3]
+    assert len(sqls) == 4
+    assert not any("ORDER BY" in sql for sql in sqls)
+    assert cursor._estimate_idx == 2
