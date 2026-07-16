@@ -6,7 +6,8 @@
     "jsx": "react-jsx",
     "types": ["vite/client", "vitest/globals"],
     "strict": true,
-    "noEmit": true
+    "noEmit": true,
+    "tsBuildInfoFile": "node_modules/.cache/tsconfig.tsbuildinfo"
   },
   "include": ["src"]
 }
