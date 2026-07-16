@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { Data } from "plotly.js";
+import type { Data, PlotRelayoutEvent } from "plotly.js";
 
 import type { SignalSeries } from "../types";
-import { buildTraces } from "./plot-traces";
+import { buildTraces, parseXRangeRelayout } from "./plot-traces";
+
+/** Plotly can emit numbers, Date, or ISO strings; typings only allow numbers. */
+function asRelayout(event: Record<string, unknown>): PlotRelayoutEvent {
+  return event as unknown as PlotRelayoutEvent;
+}
 
 const raw: SignalSeries = {
   mode: "raw",
@@ -69,5 +74,124 @@ describe("buildTraces", () => {
     expect(maxT.y).toEqual([3, 4]);
     expect(minT.y).toEqual([1, 2]);
     expect(avgT.y).toEqual([2, 3]);
+  });
+});
+
+describe("parseXRangeRelayout", () => {
+  it("uses finite numbers as epoch ms (including 0)", () => {
+    expect(
+      parseXRangeRelayout(
+        asRelayout({
+          "xaxis.range[0]": 0,
+          "xaxis.range[1]": 1000,
+        }),
+      ),
+    ).toEqual([0, 1000]);
+
+    expect(parseXRangeRelayout(asRelayout({ "xaxis.range": [0, 1000] }))).toEqual([
+      0, 1000,
+    ]);
+  });
+
+  it("accepts Date bounds via getTime", () => {
+    const start = new Date(0);
+    const end = new Date(1000);
+    expect(
+      parseXRangeRelayout(
+        asRelayout({
+          "xaxis.range[0]": start,
+          "xaxis.range[1]": end,
+        }),
+      ),
+    ).toEqual([0, 1000]);
+    expect(parseXRangeRelayout(asRelayout({ "xaxis.range": [start, end] }))).toEqual([
+      0, 1000,
+    ]);
+  });
+
+  it("parses ISO date strings", () => {
+    expect(
+      parseXRangeRelayout(
+        asRelayout({
+          "xaxis.range[0]": "1970-01-01T00:00:00.000Z",
+          "xaxis.range[1]": "1970-01-01T00:00:01.000Z",
+        }),
+      ),
+    ).toEqual([0, 1000]);
+    expect(
+      parseXRangeRelayout(
+        asRelayout({
+          "xaxis.range": ["1970-01-01T00:00:00.000Z", "1970-01-01T00:00:01.000Z"],
+        }),
+      ),
+    ).toEqual([0, 1000]);
+  });
+
+  it("returns null for malformed values", () => {
+    expect(
+      parseXRangeRelayout(
+        asRelayout({
+          "xaxis.range[0]": "not-a-date",
+          "xaxis.range[1]": 1000,
+        }),
+      ),
+    ).toBeNull();
+    expect(parseXRangeRelayout(asRelayout({ "xaxis.range": ["bad", "worse"] }))).toBeNull();
+    expect(
+      parseXRangeRelayout(
+        asRelayout({
+          "xaxis.range[0]": { foo: 1 },
+          "xaxis.range[1]": 1000,
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null for non-finite values", () => {
+    expect(
+      parseXRangeRelayout(
+        asRelayout({
+          "xaxis.range[0]": Number.NaN,
+          "xaxis.range[1]": 1000,
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      parseXRangeRelayout(
+        asRelayout({
+          "xaxis.range": [0, Number.POSITIVE_INFINITY],
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      parseXRangeRelayout(
+        asRelayout({
+          "xaxis.range[0]": new Date(Number.NaN),
+          "xaxis.range[1]": new Date(1000),
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null for reversed or equal bounds", () => {
+    expect(
+      parseXRangeRelayout(
+        asRelayout({
+          "xaxis.range[0]": 1000,
+          "xaxis.range[1]": 0,
+        }),
+      ),
+    ).toBeNull();
+    expect(parseXRangeRelayout(asRelayout({ "xaxis.range": [500, 500] }))).toBeNull();
+  });
+
+  it("returns [NaN, NaN] only for explicit autorange", () => {
+    const auto = parseXRangeRelayout(asRelayout({ "xaxis.autorange": true }));
+    expect(auto).not.toBeNull();
+    expect(Number.isNaN(auto![0])).toBe(true);
+    expect(Number.isNaN(auto![1])).toBe(true);
+
+    expect(parseXRangeRelayout(asRelayout({}))).toBeNull();
+    expect(parseXRangeRelayout(asRelayout({ "yaxis.range": [0, 1] }))).toBeNull();
   });
 });

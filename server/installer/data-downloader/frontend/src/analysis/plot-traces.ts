@@ -86,10 +86,27 @@ export function buildTraces(signal: string, series: SignalSeries, color: string)
   return [maxTrace as Data, minTrace as Data, avgTrace as Data];
 }
 
+/** Normalize a Plotly relayout bound to finite epoch ms, or null if invalid. */
+function normalizeRelayoutBound(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  if (typeof value === "string") {
+    const ms = Date.parse(value);
+    return Number.isFinite(ms) ? ms : null;
+  }
+  return null;
+}
+
 /**
  * Parse a user x-axis relayout into millisecond bounds.
- * Returns `null` when the event has no x-range / autorange keys (ignore to avoid feedback loops).
- * Returns `[NaN, NaN]` when autorange is requested (double-click reset).
+ * Returns `null` when the event has no x-range / autorange keys (ignore to avoid feedback loops),
+ * or when bounds are missing/invalid/non-finite/reversed-or-equal.
+ * Returns `[NaN, NaN]` only when autorange is requested (double-click reset).
  */
 export function parseXRangeRelayout(
   event: Readonly<PlotRelayoutEvent>,
@@ -100,18 +117,25 @@ export function parseXRangeRelayout(
     return [Number.NaN, Number.NaN];
   }
 
+  let startRaw: unknown;
+  let endRaw: unknown;
+
   if ("xaxis.range[0]" in record && "xaxis.range[1]" in record) {
-    const start = Date.parse(String(record["xaxis.range[0]"]));
-    const end = Date.parse(String(record["xaxis.range[1]"]));
-    return [start, end];
+    startRaw = record["xaxis.range[0]"];
+    endRaw = record["xaxis.range[1]"];
+  } else {
+    const range = record["xaxis.range"];
+    if (!Array.isArray(range) || range.length < 2) {
+      return null;
+    }
+    startRaw = range[0];
+    endRaw = range[1];
   }
 
-  const range = record["xaxis.range"];
-  if (Array.isArray(range) && range.length >= 2) {
-    const start = Date.parse(String(range[0]));
-    const end = Date.parse(String(range[1]));
-    return [start, end];
+  const start = normalizeRelayoutBound(startRaw);
+  const end = normalizeRelayoutBound(endRaw);
+  if (start === null || end === null || !(start < end)) {
+    return null;
   }
-
-  return null;
+  return [start, end];
 }
