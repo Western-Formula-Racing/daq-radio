@@ -11,9 +11,11 @@ import psycopg2.extras
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from backend import series_queries
 from backend.config import get_settings
 from backend.dbc_utils import group_sensors_by_message, load_dbc_db, refresh_dbc
 from backend.services import DataDownloaderService
@@ -43,6 +45,14 @@ class CanFramesBatchPayload(BaseModel):
     frames: List[CanFramePayload] = []
 
 
+class SeriesPayload(BaseModel):
+    season: str
+    signals: List[str]
+    start: datetime
+    end: datetime
+    target_points: int = series_queries.DEFAULT_TARGET_POINTS
+
+
 settings = get_settings()
 service = DataDownloaderService(settings)
 logger = logging.getLogger(__name__)
@@ -55,6 +65,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 @app.get("/api/health")
@@ -190,6 +201,44 @@ def query_signal(payload: DataQueryPayload, season: str | None = None) -> dict:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         logger.exception("Query failed for signal %s", payload.signal)
+        raise HTTPException(status_code=503, detail=f"Database query failed: {exc}")
+
+
+@app.post("/api/series")
+def query_series(payload: SeriesPayload) -> dict:
+    try:
+        series_queries.validate_request(
+            payload.signals, payload.start, payload.end, payload.target_points
+        )
+        # Metadata seasons use uppercase names; request season is the lowercase table.
+        season_by_table = {item["table"]: item for item in service.get_seasons()}
+        season_meta = season_by_table.get(payload.season)
+        if season_meta is None:
+            raise ValueError(f"unknown season table: {payload.season}")
+        known_signals = set(
+            service.get_sensors(season=season_meta["name"]).get("sensors", [])
+        )
+        unknown = sorted(set(payload.signals) - known_signals)
+        if unknown:
+            raise ValueError(f"unknown signal(s): {', '.join(unknown)}")
+        result = series_queries.execute_series_query(
+            postgres_dsn=settings.postgres_dsn,
+            table=payload.season,
+            signals=payload.signals,
+            start=payload.start,
+            end=payload.end,
+            target_points=payload.target_points,
+        )
+        return {
+            "season": payload.season,
+            "start": series_queries.normalize_utc(payload.start).isoformat(),
+            "end": series_queries.normalize_utc(payload.end).isoformat(),
+            "series": result,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception("Series query failed for %s", payload.signals)
         raise HTTPException(status_code=503, detail=f"Database query failed: {exc}")
 
 

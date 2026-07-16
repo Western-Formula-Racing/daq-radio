@@ -4,6 +4,8 @@ from datetime import datetime, timedelta, timezone
 import re
 from typing import Literal
 
+import psycopg2
+
 
 RAW_THRESHOLD = 100_000
 DEFAULT_TARGET_POINTS = 4_000
@@ -103,3 +105,73 @@ def response_estimate(
     target_points: int,
 ) -> int:
     return raw_estimate if mode == "raw" else target_points
+
+
+def _epoch_ms(value: datetime) -> int:
+    return int(normalize_utc(value).timestamp() * 1000)
+
+
+def execute_series_query(
+    *,
+    postgres_dsn: str,
+    table: str,
+    signals: list[str],
+    start: datetime,
+    end: datetime,
+    target_points: int,
+) -> dict[str, dict]:
+    start_utc = normalize_utc(start)
+    end_utc = normalize_utc(end)
+    validate_request(signals, start_utc, end_utc, target_points)
+    params = {"start": start_utc, "end": end_utc}
+    result: dict[str, dict] = {}
+
+    with psycopg2.connect(postgres_dsn) as conn:
+        with conn.cursor() as cur:
+            # Cap long-running analytics queries so the API stays responsive.
+            cur.execute(f"SET LOCAL statement_timeout = {STATEMENT_TIMEOUT_MS}")
+            estimates: dict[str, int] = {}
+            modes: dict[str, Literal["raw", "envelope"]] = {}
+            for signal in signals:
+                cur.execute(build_estimate_sql(table, signal), params)
+                estimates[signal] = int(cur.fetchone()[0])
+                modes[signal] = choose_mode(estimates[signal])
+
+            projected = sum(
+                response_estimate(modes[s], estimates[s], target_points) for s in signals
+            )
+            if projected > MAX_TOTAL_POINTS:
+                raise ValueError(
+                    f"estimated response exceeds {MAX_TOTAL_POINTS:,} points"
+                )
+
+            bucket = bucket_interval(start_utc, end_utc, target_points)
+            resolution_ms = int(bucket.split()[0])
+            for signal in signals:
+                mode = modes[signal]
+                if mode == "raw":
+                    cur.execute(build_raw_sql(table, signal), params)
+                    rows = cur.fetchall()
+                    result[signal] = {
+                        "mode": "raw",
+                        "resolution_ms": None,
+                        "point_count": len(rows),
+                        "t": [_epoch_ms(row[0]) for row in rows],
+                        "v": [float(row[1]) for row in rows],
+                    }
+                else:
+                    cur.execute(
+                        build_envelope_sql(table, signal),
+                        {**params, "bucket": bucket},
+                    )
+                    rows = cur.fetchall()
+                    result[signal] = {
+                        "mode": "envelope",
+                        "resolution_ms": resolution_ms,
+                        "point_count": len(rows),
+                        "t": [_epoch_ms(row[0]) for row in rows],
+                        "min": [float(row[1]) for row in rows],
+                        "max": [float(row[2]) for row in rows],
+                        "avg": [float(row[3]) for row in rows],
+                    }
+    return result
