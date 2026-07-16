@@ -18,6 +18,8 @@ export interface UseSeriesData {
     endMs: number,
   ): void;
   retry(): void;
+  /** Drop pending/in-flight work and wipe results (e.g. season change). */
+  clear(): void;
 }
 
 interface SeriesRequestArgs {
@@ -121,6 +123,20 @@ export function useSeriesData(): UseSeriesData {
     requestRange(last.seasonTable, last.signals, last.startMs, last.endMs);
   }, [requestRange]);
 
+  const clear = useCallback(() => {
+    generationRef.current += 1;
+    lastRequestRef.current = null;
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (mountedRef.current) {
+      setSeriesBySignal({});
+      setLoading(false);
+      setError(null);
+    }
+  }, []);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -132,5 +148,5 @@ export function useSeriesData(): UseSeriesData {
     };
   }, []);
 
-  return { seriesBySignal, loading, error, requestRange, retry };
+  return { seriesBySignal, loading, error, requestRange, retry, clear };
 }

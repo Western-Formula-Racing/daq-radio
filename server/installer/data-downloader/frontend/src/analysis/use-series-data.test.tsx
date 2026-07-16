@@ -311,4 +311,26 @@ describe("useSeriesData", () => {
 
     expect(querySeriesMock).not.toHaveBeenCalled();
   });
+
+  it("clear drops pending work and wipes series/error/loading", async () => {
+    const pending = deferred<SeriesResponse>();
+    querySeriesMock.mockReturnValueOnce(pending.promise);
+    const { result } = renderHook(() => useSeriesData());
+
+    act(() => result.current.requestRange("clear-me", ["A"], 0, 1000));
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(result.current.loading).toBe(true);
+
+    act(() => result.current.clear());
+    expect(result.current.seriesBySignal).toEqual({});
+    expect(result.current.loading).toBe(false);
+    expect(result.current.error).toBeNull();
+
+    await act(async () => {
+      pending.resolve(seriesResponse("clear-me", "A", 9));
+      await pending.promise;
+    });
+    expect(result.current.seriesBySignal).toEqual({});
+    expect(querySeriesMock).toHaveBeenCalledTimes(1);
+  });
 });
