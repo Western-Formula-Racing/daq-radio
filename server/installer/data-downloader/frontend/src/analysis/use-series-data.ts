@@ -7,8 +7,17 @@ import {
   type SeriesMap,
 } from "./series-cache";
 
+export interface LoadedSeriesRequest {
+  seasonTable: string;
+  signals: string[];
+  startMs: number;
+  endMs: number;
+}
+
 export interface UseSeriesData {
   seriesBySignal: SeriesMap;
+  /** Request that produced the current `seriesBySignal` (null while pending/cleared). */
+  loadedRequest: LoadedSeriesRequest | null;
   loading: boolean;
   error: string | null;
   requestRange(
@@ -35,6 +44,7 @@ const seriesCache = new SeriesCache();
 
 export function useSeriesData(): UseSeriesData {
   const [seriesBySignal, setSeriesBySignal] = useState<SeriesMap>({});
+  const [loadedRequest, setLoadedRequest] = useState<LoadedSeriesRequest | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,12 +60,19 @@ export function useSeriesData(): UseSeriesData {
     const { seasonTable, signals, startMs, endMs } = req;
     const targetPoints = targetPointsFor(signals.length);
     const key = seriesCacheKey(seasonTable, signals, startMs, endMs, targetPoints);
+    const applied: LoadedSeriesRequest = {
+      seasonTable,
+      signals: [...signals],
+      startMs,
+      endMs,
+    };
 
     const cached = seriesCache.get(key);
     if (cached) {
       // Clear loading so a later cache hit cannot leave a prior fetch stuck true.
       if (mountedRef.current && generation === generationRef.current) {
         setSeriesBySignal(cached);
+        setLoadedRequest(applied);
         setLoading(false);
         setError(null);
       }
@@ -79,10 +96,12 @@ export function useSeriesData(): UseSeriesData {
       seriesCache.set(key, response.series);
       if (!mountedRef.current || generation !== generationRef.current) return;
       setSeriesBySignal(response.series);
+      setLoadedRequest(applied);
       setError(null);
     } catch (err) {
       if (!mountedRef.current || generation !== generationRef.current) return;
       const message = err instanceof Error ? err.message : "failed to fetch series";
+      setLoadedRequest(null);
       setError(
         `${message} (${new Date(startMs).toISOString()} to ${new Date(endMs).toISOString()})`,
       );
@@ -106,6 +125,8 @@ export function useSeriesData(): UseSeriesData {
       // Allocate generation at schedule time so an in-flight older fetch cannot
       // win state updates during this request's debounce window.
       const generation = ++generationRef.current;
+      // Invalidate export eligibility immediately (including the debounce window).
+      setLoadedRequest(null);
       setError(null);
       if (timerRef.current !== null) clearTimeout(timerRef.current);
       timerRef.current = setTimeout(() => {
@@ -132,6 +153,7 @@ export function useSeriesData(): UseSeriesData {
     }
     if (mountedRef.current) {
       setSeriesBySignal({});
+      setLoadedRequest(null);
       setLoading(false);
       setError(null);
     }
@@ -148,5 +170,5 @@ export function useSeriesData(): UseSeriesData {
     };
   }, []);
 
-  return { seriesBySignal, loading, error, requestRange, retry, clear };
+  return { seriesBySignal, loadedRequest, loading, error, requestRange, retry, clear };
 }

@@ -95,14 +95,16 @@ export default function App() {
     }
   }, [selectedSeason, seasons.length]);
 
-  // Prefetch runs for every season for Analysis wrong-season hints — never surfaces as the page error.
+  // Prefetch non-active seasons for Analysis wrong-season hints — never surfaces as the page error.
+  // Active season is seeded by loadData; never let an older prefetch overwrite a fresher entry.
   useEffect(() => {
-    if (seasons.length === 0) return;
+    if (seasons.length === 0 || !selectedSeason) return;
     let cancelled = false;
 
     void (async () => {
+      const targets = seasons.filter((s) => s.name !== selectedSeason);
       const entries = await Promise.all(
-        seasons.map(async (s) => {
+        targets.map(async (s) => {
           try {
             const data = await fetchRuns(s.name);
             return [s.name, data.runs] as const;
@@ -115,6 +117,7 @@ export default function App() {
       setRunsBySeason((prev) => {
         const next = { ...prev };
         for (const [name, seasonRuns] of entries) {
+          if (Object.prototype.hasOwnProperty.call(next, name)) continue;
           next[name] = seasonRuns;
         }
         return next;
@@ -124,7 +127,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [seasons]);
+  }, [seasons, selectedSeason]);
 
   const loadStatus = useCallback(
     async (syncOnFinishChange: boolean) => {
@@ -388,137 +391,138 @@ export default function App() {
         </button>
       </div>
 
-      {workspace === "downloader" && (
-        <div
-          id="panel-downloader"
-          role="tabpanel"
-          aria-labelledby="tab-downloader"
-        >
-          {scanningActive && (
-            <div className="scan-banner" role="alert">
-              Scanning database. Do not click again.
-            </div>
-          )}
+      <div
+        id="panel-downloader"
+        role="tabpanel"
+        aria-labelledby="tab-downloader"
+        hidden={workspace !== "downloader"}
+      >
+        {scanningActive && (
+          <div className="scan-banner" role="alert">
+            Scanning database. Do not click again.
+          </div>
+        )}
 
-          <div className="actions">
-            {seasons.length > 1 && (
-              <select
-                value={scanSeason}
-                onChange={(e) => setScanSeason(e.target.value)}
-                disabled={scanButtonDisabled}
-                style={{ padding: "0.5rem", borderRadius: "4px", border: "1px solid var(--border-strong)", fontSize: "0.9rem", background: "var(--surface)", color: "var(--text)" }}
-              >
-                {seasons.map(s => (
-                  <option key={s.name} value={s.name}>{s.name}</option>
-                ))}
-              </select>
-            )}
-            <button className="button" onClick={handleScan} disabled={scanButtonDisabled}>
-              {scanButtonLabel}
-            </button>
-            <button className="button secondary" onClick={() => void handleRefreshClick()} disabled={loading}>
-              {loading ? "Refreshing..." : "Refresh Data"}
-            </button>
-            <p style={{ fontSize: "0.75rem", color: "var(--text-subtle)", margin: "0" }}>
-              Use the top right season selector to switch the active season.
-            </p>
-            {scanState !== "idle" && (
-              <span
-                className="status-pill"
-                style={{
-                  background:
-                    scanState === "success" ? "#dcfce7" : scanState === "error" ? "#fee2e2" : "#fef9c3",
-                  color:
-                    scanState === "success" ? "#15803d" : scanState === "error" ? "#b91c1c" : "#a16207"
-                }}
-              >
-                {scanState === "running" && "Scan in progress..."}
-                {scanState === "success" && "Scan queued and data refreshed"}
-                {scanState === "error" && "Scan failed"}
+        <div className="actions">
+          {seasons.length > 1 && (
+            <select
+              value={scanSeason}
+              onChange={(e) => setScanSeason(e.target.value)}
+              disabled={scanButtonDisabled}
+              style={{ padding: "0.5rem", borderRadius: "4px", border: "1px solid var(--border-strong)", fontSize: "0.9rem", background: "var(--surface)", color: "var(--text)" }}
+            >
+              {seasons.map(s => (
+                <option key={s.name} value={s.name}>{s.name}</option>
+              ))}
+            </select>
+          )}
+          <button className="button" onClick={handleScan} disabled={scanButtonDisabled}>
+            {scanButtonLabel}
+          </button>
+          <button className="button secondary" onClick={() => void handleRefreshClick()} disabled={loading}>
+            {loading ? "Refreshing..." : "Refresh Data"}
+          </button>
+          <p style={{ fontSize: "0.75rem", color: "var(--text-subtle)", margin: "0" }}>
+            Use the top right season selector to switch the active season.
+          </p>
+          {scanState !== "idle" && (
+            <span
+              className="status-pill"
+              style={{
+                background:
+                  scanState === "success" ? "#dcfce7" : scanState === "error" ? "#fee2e2" : "#fef9c3",
+                color:
+                  scanState === "success" ? "#15803d" : scanState === "error" ? "#b91c1c" : "#a16207"
+              }}
+            >
+              {scanState === "running" && "Scan in progress..."}
+              {scanState === "success" && "Scan queued and data refreshed"}
+              {scanState === "error" && "Scan failed"}
+            </span>
+          )}
+        </div>
+
+        {error && (
+          <div className="card" style={{ border: "1px solid var(--error-card-border)", background: "var(--error-card-bg)", color: "var(--error-text)" }}>
+            <strong>Heads up:</strong> {error}
+          </div>
+        )}
+
+        <section className="card">
+          <h2>Past Runs</h2>
+          <p className="subtitle">Last refresh: {lastRunsRefresh}</p>
+          {loading && !runs ? (
+            <p className="subtitle">Loading runs...</p>
+          ) : runs ? (
+            <RunTable
+              runs={runs.runs}
+              drafts={noteDrafts}
+              onChange={handleNoteChange}
+              onSave={handleSaveNote}
+              savingKey={savingKey}
+              onPickRun={handleRunPick}
+            />
+          ) : (
+            <p className="subtitle">No data yet.</p>
+          )}
+        </section>
+
+        <section className="card" ref={sensorsSectionRef}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }}>
+            <h2 style={{ margin: 0 }}>Unique Sensors</h2>
+            {sensorsGrouped?.dbc_source && sensorsGrouped.dbc_source !== "none" && (
+              <span className="tag" style={{ fontSize: "0.72rem" }}>
+                DBC: {sensorsGrouped.dbc_source}
               </span>
             )}
           </div>
-
-          {error && (
-            <div className="card" style={{ border: "1px solid var(--error-card-border)", background: "var(--error-card-bg)", color: "var(--error-text)" }}>
-              <strong>Heads up:</strong> {error}
+          <p className="subtitle" style={{ marginTop: "0.35rem" }}>Last refresh: {lastSensorRefresh}</p>
+          {loading && !sensors ? (
+            <p className="subtitle">Loading sensors...</p>
+          ) : sensorsGrouped && sensorsGrouped.messages.length > 0 ? (
+            <SensorGroupedGrid
+              grouped={sensorsGrouped}
+              theme={theme}
+              onPick={handleSensorPick}
+            />
+          ) : (
+            <div className="sensor-grid">
+              {sensorsPreview.length === 0 && <p className="subtitle">No sensors captured.</p>}
+              {sensorsPreview.map((sensor) => (
+                <button
+                  key={sensor}
+                  type="button"
+                  className="sensor-chip"
+                  onClick={() => handleSensorPick(sensor)}
+                >
+                  {sensor}
+                </button>
+              ))}
             </div>
           )}
+        </section>
 
-          <section className="card">
-            <h2>Past Runs</h2>
-            <p className="subtitle">Last refresh: {lastRunsRefresh}</p>
-            {loading && !runs ? (
-              <p className="subtitle">Loading runs...</p>
-            ) : runs ? (
-              <RunTable
-                runs={runs.runs}
-                drafts={noteDrafts}
-                onChange={handleNoteChange}
-                onSave={handleSaveNote}
-                savingKey={savingKey}
-                onPickRun={handleRunPick}
-              />
-            ) : (
-              <p className="subtitle">No data yet.</p>
-            )}
-          </section>
+        <section className="card" ref={downloaderSectionRef}>
+          <DataDownload
+            runs={runs?.runs ?? []}
+            sensors={sensorsPreview}
+            sensorsGrouped={sensorsGrouped ?? undefined}
+            season={selectedSeason}
+            externalSelection={downloaderSelection ?? undefined}
+            theme={theme}
+          />
+        </section>
+      </div>
 
-          <section className="card" ref={sensorsSectionRef}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }}>
-              <h2 style={{ margin: 0 }}>Unique Sensors</h2>
-              {sensorsGrouped?.dbc_source && sensorsGrouped.dbc_source !== "none" && (
-                <span className="tag" style={{ fontSize: "0.72rem" }}>
-                  DBC: {sensorsGrouped.dbc_source}
-                </span>
-              )}
-            </div>
-            <p className="subtitle" style={{ marginTop: "0.35rem" }}>Last refresh: {lastSensorRefresh}</p>
-            {loading && !sensors ? (
-              <p className="subtitle">Loading sensors...</p>
-            ) : sensorsGrouped && sensorsGrouped.messages.length > 0 ? (
-              <SensorGroupedGrid
-                grouped={sensorsGrouped}
-                theme={theme}
-                onPick={handleSensorPick}
-              />
-            ) : (
-              <div className="sensor-grid">
-                {sensorsPreview.length === 0 && <p className="subtitle">No sensors captured.</p>}
-                {sensorsPreview.map((sensor) => (
-                  <button
-                    key={sensor}
-                    type="button"
-                    className="sensor-chip"
-                    onClick={() => handleSensorPick(sensor)}
-                  >
-                    {sensor}
-                  </button>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section className="card" ref={downloaderSectionRef}>
-            <DataDownload
-              runs={runs?.runs ?? []}
-              sensors={sensorsPreview}
-              sensorsGrouped={sensorsGrouped ?? undefined}
-              season={selectedSeason}
-              externalSelection={downloaderSelection ?? undefined}
-              theme={theme}
-            />
-          </section>
-        </div>
-      )}
-
-      {workspace === "analysis" && activeSeason && (
+      {activeSeason && (
         <div
           id="panel-analysis"
           role="tabpanel"
           aria-labelledby="tab-analysis"
+          hidden={workspace !== "analysis"}
         >
           <AnalysisWorkspace
+            key={selectedSeason}
             season={activeSeason}
             runs={runs?.runs ?? []}
             grouped={sensorsGrouped}

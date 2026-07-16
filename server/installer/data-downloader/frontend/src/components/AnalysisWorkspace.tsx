@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { findSeasonWithData } from "../analysis/analysis-range";
 import { downloadSeriesCsv, seriesToCsv } from "../analysis/export-csv";
+import type { SeriesMap } from "../analysis/series-cache";
 import { useSeriesData } from "../analysis/use-series-data";
 import type { RunRecord, Season, SensorsGroupedResponse } from "../types";
 import { AnalysisPlotStack } from "./AnalysisPlotStack";
@@ -37,6 +38,21 @@ function hasPlottableSeries(
   });
 }
 
+function signalsMatchExact(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((signal) => set.has(signal));
+}
+
+function selectedOnlySeries(seriesBySignal: SeriesMap, signals: string[]): SeriesMap {
+  const filtered: SeriesMap = {};
+  for (const signal of signals) {
+    const series = seriesBySignal[signal];
+    if (series) filtered[signal] = series;
+  }
+  return filtered;
+}
+
 export function AnalysisWorkspace({
   season,
   runs,
@@ -51,24 +67,10 @@ export function AnalysisWorkspace({
   const [awaitingFirstResponse, setAwaitingFirstResponse] = useState(false);
   const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
 
-  const { seriesBySignal, loading, error, requestRange, retry, clear } = useSeriesData();
+  const { seriesBySignal, loadedRequest, loading, error, requestRange, retry } = useSeriesData();
 
   const seasonName = season.name;
   const seasonTable = season.table;
-  const prevSeasonRef = useRef(seasonName);
-
-  // Season change: wipe selection state and hook results so prior season data never shows.
-  useEffect(() => {
-    if (prevSeasonRef.current === seasonName) return;
-    prevSeasonRef.current = seasonName;
-    setSelectedRunKey("");
-    setSelectedSignals([]);
-    setFullRange(null);
-    setViewRange(null);
-    setAwaitingFirstResponse(false);
-    setExportConfirmOpen(false);
-    clear();
-  }, [seasonName, clear]);
 
   const selectedSet = useMemo(() => new Set(selectedSignals), [selectedSignals]);
 
@@ -125,17 +127,34 @@ export function AnalysisWorkspace({
       wasLoadingRef.current = true;
       return;
     }
-    if (wasLoadingRef.current || Object.keys(seriesBySignal).length > 0 || error) {
+    if (wasLoadingRef.current || Object.keys(seriesBySignal).length > 0 || error || loadedRequest) {
       setAwaitingFirstResponse(false);
       wasLoadingRef.current = false;
     }
-  }, [loading, seriesBySignal, error]);
+  }, [loading, seriesBySignal, error, loadedRequest]);
+
+  const exportSeries = useMemo(
+    () => selectedOnlySeries(seriesBySignal, selectedSignals),
+    [seriesBySignal, selectedSignals],
+  );
+
+  const loadedMatchesSelection =
+    loadedRequest != null &&
+    viewRange != null &&
+    loadedRequest.seasonTable === seasonTable &&
+    loadedRequest.startMs === viewRange[0] &&
+    loadedRequest.endMs === viewRange[1] &&
+    signalsMatchExact(loadedRequest.signals, selectedSignals) &&
+    signalsMatchExact(Object.keys(exportSeries), selectedSignals);
 
   const toolbarRange: [number, number] = viewRange ?? [Number.NaN, Number.NaN];
   const exportDisabled =
     selectedSignals.length === 0 ||
     !viewRange ||
-    !hasPlottableSeries(seriesBySignal, selectedSignals);
+    loading ||
+    awaitingFirstResponse ||
+    !loadedMatchesSelection ||
+    !hasPlottableSeries(exportSeries, selectedSignals);
 
   const wrongSeasonHint = useMemo(() => {
     if (!viewRange || !isValidRange(viewRange[0], viewRange[1])) return null;
@@ -168,20 +187,25 @@ export function AnalysisWorkspace({
     hasPlottableSeries(seriesBySignal, selectedSignals);
 
   const performExport = useCallback(() => {
-    if (!viewRange) return;
-    downloadSeriesCsv(seriesBySignal, seasonName, viewRange[0], viewRange[1]);
+    if (!loadedRequest || exportDisabled) return;
+    downloadSeriesCsv(
+      exportSeries,
+      seasonName,
+      loadedRequest.startMs,
+      loadedRequest.endMs,
+    );
     setExportConfirmOpen(false);
-  }, [seriesBySignal, seasonName, viewRange]);
+  }, [loadedRequest, exportDisabled, exportSeries, seasonName]);
 
   const handleExport = useCallback(() => {
-    if (!viewRange || exportDisabled) return;
-    const { containsEnvelope } = seriesToCsv(seriesBySignal);
+    if (exportDisabled) return;
+    const { containsEnvelope } = seriesToCsv(exportSeries);
     if (containsEnvelope) {
       setExportConfirmOpen(true);
       return;
     }
     performExport();
-  }, [viewRange, exportDisabled, seriesBySignal, performExport]);
+  }, [exportDisabled, exportSeries, performExport]);
 
   const pickerGrouped = grouped ?? EMPTY_GROUPED;
 

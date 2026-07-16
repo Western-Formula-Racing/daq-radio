@@ -16,7 +16,29 @@ vi.mock("../api", () => ({
 }));
 
 vi.mock("react-plotly.js", () => ({
-  default: () => <div data-testid="plotly-mock" />,
+  default: ({ onRelayout }: { onRelayout?: (event: Record<string, unknown>) => void }) => (
+    <div data-testid="plotly-mock">
+      <button
+        type="button"
+        data-testid="plotly-zoom"
+        onClick={() =>
+          onRelayout?.({
+            "xaxis.range[0]": Date.parse("2026-06-08T22:00:00.000Z"),
+            "xaxis.range[1]": Date.parse("2026-06-09T00:00:00.000Z"),
+          })
+        }
+      >
+        Zoom
+      </button>
+      <button
+        type="button"
+        data-testid="plotly-autorange"
+        onClick={() => onRelayout?.({ "xaxis.autorange": true })}
+      >
+        Reset autorange
+      </button>
+    </div>
+  ),
 }));
 
 vi.mock("../analysis/export-csv", async () => {
@@ -191,7 +213,8 @@ describe("Analysis workspace tabs (App)", () => {
     expect(screen.getByRole("tab", { name: "Downloader" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Analysis" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Past Runs" })).toBeInTheDocument();
-    expect(screen.queryByLabelText(/Run window/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Run window/i })).not.toBeInTheDocument();
+    expect(document.getElementById("panel-analysis")).toHaveAttribute("hidden");
   });
 
   it("switches to Analysis workspace while keeping the shared season selected", async () => {
@@ -200,9 +223,11 @@ describe("Analysis workspace tabs (App)", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Analysis" }));
 
-    expect(screen.getByLabelText(/Run window/i)).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /Run window/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/Search signals/i)).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Past Runs" })).not.toBeInTheDocument();
+    expect(document.getElementById("panel-downloader")).toHaveAttribute("hidden");
+    expect(document.getElementById("panel-analysis")).not.toHaveAttribute("hidden");
 
     const activeSeason = screen.getByRole("button", { name: "WFR26" });
     expect(activeSeason).toHaveStyle({ fontWeight: "bold" });
@@ -232,6 +257,62 @@ describe("Analysis workspace tabs (App)", () => {
       }),
     );
   });
+
+  it("does not query the new season table with the old range/signals after a season switch", async () => {
+    render(<App />);
+    await flushInitialLoad();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Analysis" }));
+    fireEvent.change(screen.getByLabelText(/Run window/i), {
+      target: { value: run.key },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_2" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(await screen.findByTestId("plotly-mock")).toBeInTheDocument();
+
+    querySeriesMock.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "WFR25" }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByTestId("plotly-mock")).not.toBeInTheDocument();
+    const signalChip = screen.queryByRole("checkbox", { name: "INV_Analog_Input_2" });
+    if (signalChip) {
+      expect(signalChip).toHaveAttribute("aria-checked", "false");
+    }
+    const staleCalls = querySeriesMock.mock.calls.filter(
+      ([payload]) =>
+        payload.season === "wfr25" &&
+        Array.isArray(payload.signals) &&
+        payload.signals.includes("INV_Analog_Input_2") &&
+        payload.start === run.start_utc &&
+        payload.end === run.end_utc,
+    );
+    expect(staleCalls).toHaveLength(0);
+  });
+
+  it("preserves Downloader local form state across Analysis tab round-trips", async () => {
+    render(<App />);
+    await flushInitialLoad();
+
+    const limitInput = screen.getByDisplayValue("5000");
+    fireEvent.change(limitInput, { target: { value: "1234" } });
+    expect(screen.getByDisplayValue("1234")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Analysis" }));
+    expect(screen.getByLabelText(/Run window/i)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Past Runs" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Downloader" }));
+    expect(screen.getByRole("heading", { name: "Past Runs" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("1234")).toBeInTheDocument();
+  });
 });
 
 describe("AnalysisWorkspace", () => {
@@ -246,12 +327,13 @@ describe("AnalysisWorkspace", () => {
     downloadSeriesCsvMock.mockReset();
   });
 
-  it("clears prior season plots when the season prop changes", async () => {
+  it("clears prior season plots when remounted with a new season key", async () => {
     const clearSeason: Season = { name: "WFR26", year: 2026, table: "wfr26-clear" };
     querySeriesMock.mockResolvedValue(seriesResponse("wfr26-clear", "INV_Analog_Input_2", 5));
 
     const { rerender } = render(
       <AnalysisWorkspace
+        key={clearSeason.name}
         season={clearSeason}
         runs={[run]}
         grouped={grouped}
@@ -274,6 +356,7 @@ describe("AnalysisWorkspace", () => {
     querySeriesMock.mockClear();
     rerender(
       <AnalysisWorkspace
+        key={seasons[1].name}
         season={seasons[1]}
         runs={[]}
         grouped={emptyGrouped}
@@ -368,7 +451,192 @@ describe("AnalysisWorkspace", () => {
       }),
     );
 
+    const startMs = Date.parse(run.start_utc);
+    const endMs = Date.parse(run.end_utc);
     expect(downloadSeriesCsvMock).toHaveBeenCalledTimes(1);
+    expect(downloadSeriesCsvMock).toHaveBeenCalledWith(
+      {
+        INV_Analog_Input_2: expect.objectContaining({ mode: "envelope", point_count: 1 }),
+      },
+      "WFR26",
+      startMs,
+      endMs,
+    );
     confirmSpy.mockRestore();
+  });
+
+  it("disables export while a refresh is pending and exports only selected loaded series", async () => {
+    const exportSeason: Season = { name: "WFR26", year: 2026, table: "wfr26-export-guard" };
+    const multiGrouped: SensorsGroupedResponse = {
+      ...grouped,
+      messages: [
+        {
+          name: "M160_Temperature_Set_1",
+          subsystem: "INV",
+          can_id: 160,
+          can_id_hex: "0x0A0",
+          signals: ["INV_Analog_Input_2", "INV_Analog_Input_3"],
+        },
+      ],
+    };
+
+    querySeriesMock.mockImplementation(async (payload) => {
+      const series: SeriesResponse["series"] = {};
+      for (const signal of payload.signals) {
+        series[signal] = {
+          mode: "raw",
+          resolution_ms: null,
+          point_count: 1,
+          t: [Date.parse(run.start_utc)],
+          v: [signal === "INV_Analog_Input_2" ? 5 : 9],
+        };
+      }
+      return {
+        season: "wfr26-export-guard",
+        start: "s",
+        end: "e",
+        series,
+      };
+    });
+
+    render(
+      <AnalysisWorkspace
+        season={exportSeason}
+        runs={[run]}
+        grouped={multiGrouped}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), {
+      target: { value: run.key },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_2" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_3" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(await screen.findAllByTestId("plotly-mock")).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_3" }));
+
+    const exportBtn = screen.getByRole("button", { name: /Export CSV/i });
+    expect(exportBtn).toBeDisabled();
+    fireEvent.click(exportBtn);
+    expect(downloadSeriesCsvMock).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(await screen.findByTestId("plotly-mock")).toBeInTheDocument();
+    expect(exportBtn).not.toBeDisabled();
+
+    fireEvent.click(exportBtn);
+
+    const startMs = Date.parse(run.start_utc);
+    const endMs = Date.parse(run.end_utc);
+    expect(downloadSeriesCsvMock).toHaveBeenCalledTimes(1);
+    expect(downloadSeriesCsvMock).toHaveBeenCalledWith(
+      {
+        INV_Analog_Input_2: expect.objectContaining({ mode: "raw", point_count: 1 }),
+      },
+      "WFR26",
+      startMs,
+      endMs,
+    );
+    const exported = downloadSeriesCsvMock.mock.calls[0][0];
+    expect(exported).not.toHaveProperty("INV_Analog_Input_3");
+  });
+
+  it("retries the latest failed series request", async () => {
+    const retrySeason: Season = { name: "WFR26", year: 2026, table: "wfr26-retry" };
+    querySeriesMock
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValueOnce(seriesResponse("wfr26-retry", "INV_Analog_Input_2", 7));
+
+    render(
+      <AnalysisWorkspace
+        season={retrySeason}
+        runs={[run]}
+        grouped={grouped}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), {
+      target: { value: run.key },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_2" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/boom/i);
+    fireEvent.click(screen.getByRole("button", { name: /Retry/i }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(await screen.findByTestId("plotly-mock")).toBeInTheDocument();
+    expect(querySeriesMock).toHaveBeenCalledTimes(2);
+    expect(querySeriesMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        season: "wfr26-retry",
+        signals: ["INV_Analog_Input_2"],
+        start: run.start_utc,
+        end: run.end_utc,
+      }),
+    );
+  });
+
+  it("resets the plot range to the full run window on autorange relayout", async () => {
+    const relayoutSeason: Season = { name: "WFR26", year: 2026, table: "wfr26-relayout" };
+    querySeriesMock.mockResolvedValue(seriesResponse("wfr26-relayout", "INV_Analog_Input_2", 5));
+
+    render(
+      <AnalysisWorkspace
+        season={relayoutSeason}
+        runs={[run]}
+        grouped={grouped}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), {
+      target: { value: run.key },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_2" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(await screen.findByTestId("plotly-mock")).toBeInTheDocument();
+
+    const startInput = screen.getByLabelText(/Start \(local/i) as HTMLInputElement;
+    const endInput = screen.getByLabelText(/End \(local/i) as HTMLInputElement;
+    const fullStart = startInput.value;
+    const fullEnd = endInput.value;
+    expect(fullStart).not.toBe("");
+    expect(fullEnd).not.toBe("");
+
+    fireEvent.click(screen.getByTestId("plotly-zoom"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(querySeriesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        season: "wfr26-relayout",
+        start: "2026-06-08T22:00:00.000Z",
+        end: "2026-06-09T00:00:00.000Z",
+      }),
+    );
+    expect(startInput.value).not.toBe(fullStart);
+
+    fireEvent.click(screen.getByTestId("plotly-autorange"));
+    expect(startInput.value).toBe(fullStart);
+    expect(endInput.value).toBe(fullEnd);
   });
 });
