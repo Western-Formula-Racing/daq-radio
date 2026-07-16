@@ -176,8 +176,8 @@ function PlotCard({
   );
 }
 
-/** Shared Plot sizing — Task 7 CSS owns card chrome; Plotly still needs explicit dimensions. */
-const PLOT_STYLE = { width: "100%", height: "100%" } as const;
+/** Explicit px height — percentage fails when the flex body has only min-height (no definite height). */
+const PLOT_STYLE = { width: "100%", height: "180px" } as const;
 
 /**
  * Vertically stacked linked plots: one card per selected signal, shared controlled x-range.
