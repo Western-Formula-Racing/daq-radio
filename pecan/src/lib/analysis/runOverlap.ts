@@ -15,3 +15,14 @@ export function findSeasonWithData(
   }
   return null;
 }
+
+/** Prefetch run indexes for every season so wrong-season empty hints can cross-check. */
+export async function prefetchRunsBySeason(
+  seasonNames: string[],
+  fetchRunsFn: (season: string) => Promise<RunEntry[]>,
+): Promise<Record<string, RunEntry[]>> {
+  const pairs = await Promise.all(
+    seasonNames.map(async (name) => [name, await fetchRunsFn(name)] as const),
+  );
+  return Object.fromEntries(pairs);
+}

@@ -7,7 +7,10 @@ import {
 } from "../services/AnalysisApi";
 import type { GroupedSensors, RunEntry, SeasonEntry } from "../types/analysis";
 import { useSeriesData } from "../lib/analysis/useSeriesData";
-import { findSeasonWithData } from "../lib/analysis/runOverlap";
+import {
+  findSeasonWithData,
+  prefetchRunsBySeason,
+} from "../lib/analysis/runOverlap";
 import { exportCsv } from "../lib/analysis/exportCsv";
 import RunList from "../components/analysis/RunList";
 import SignalTree from "../components/analysis/SignalTree";
@@ -24,7 +27,7 @@ export default function Analysis() {
   });
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectedRunKey, setSelectedRunKey] = useState<string | null>(null);
-  // Full selected window (run or custom range); zoom narrows within it
+  // Outer window for the selected run/custom range; zoom resets to this on double-click.
   const [fullRange, setFullRange] = useState<[number, number] | null>(null);
   const [viewRange, setViewRange] = useState<[number, number] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -43,25 +46,51 @@ export default function Analysis() {
   }, [seasonEntries, season]);
 
   useEffect(() => {
+    let cancelled = false;
     fetchSeasons()
-      .then((list) => {
+      .then(async (list) => {
+        if (cancelled) return;
         setSeasonEntries(list);
         if (list.length) setSeason(list[0].name);
+        // Prefetch every season's run index so empty results can hint another season.
+        const bySeason = await prefetchRunsBySeason(
+          list.map((s) => s.name),
+          fetchRuns,
+        );
+        if (cancelled) return;
+        setRunsBySeason(bySeason);
       })
-      .catch((e) => setLoadError(String(e.message ?? e)));
+      .catch((e) => {
+        if (!cancelled) setLoadError(String(e.message ?? e));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!season) return;
+    let cancelled = false;
+    // Keep selected-season runs fresh for the RunList; merge into the prefetched index.
     fetchRuns(season)
       .then((r) => {
+        if (cancelled) return;
         setRuns(r);
         setRunsBySeason((prev) => ({ ...prev, [season]: r }));
       })
-      .catch((e) => setLoadError(String(e.message ?? e)));
+      .catch((e) => {
+        if (!cancelled) setLoadError(String(e.message ?? e));
+      });
     fetchSensorsGrouped(season)
-      .then(setGrouped)
-      .catch((e) => setLoadError(String(e.message ?? e)));
+      .then((g) => {
+        if (!cancelled) setGrouped(g);
+      })
+      .catch((e) => {
+        if (!cancelled) setLoadError(String(e.message ?? e));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [season]);
 
   const signals = useMemo(() => [...selected], [selected]);
@@ -101,7 +130,7 @@ export default function Analysis() {
     });
   }, []);
 
-  // v1 grouping: one stacked subplot per signal
+  // One subplot per signal until multi-signal grouping lands.
   const plotGroups = useMemo(() => signals.map((s) => [s]), [signals]);
 
   const allEmpty =
@@ -121,7 +150,7 @@ export default function Analysis() {
       {sig}:{" "}
       {s.mode === "raw"
         ? `raw (${Intl.NumberFormat().format(s.point_count)} pts)`
-        : `envelope @ ${(s.resolution_ms ?? 0) / 1000}s — zoom in for raw`}
+        : `envelope @ ${(s.resolution_ms ?? 0) / 1000}s - zoom in for raw`}
     </span>
   ));
 
@@ -163,7 +192,7 @@ export default function Analysis() {
         <div className="mx-4 my-1 rounded border border-amber-900 bg-amber-950/40 px-3 py-2 text-xs text-amber-300">
           No data in {season} for this window.
           {seasonHint && seasonHint !== season && (
-            <> The run index shows data in <b>{seasonHint}</b> here — switch season.</>
+            <> The run index shows data in <b>{seasonHint}</b> here; switch season.</>
           )}
         </div>
       )}
