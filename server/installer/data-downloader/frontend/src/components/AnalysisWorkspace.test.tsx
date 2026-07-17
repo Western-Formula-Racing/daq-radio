@@ -795,9 +795,9 @@ describe("multi-plot workspace", () => {
     expect(screen.getAllByTestId("analysis-plot-card")).toHaveLength(2);
 
     // Regroup the two signals into a single plot; membership is unchanged.
-    const select = screen.getByLabelText("Plot for INV_Analog_Input_3");
-    const plot1 = within(select).getByRole("option", { name: "Plot 1" }) as HTMLOptionElement;
-    fireEvent.change(select, { target: { value: plot1.value } });
+    const trigger = screen.getByLabelText("Plot for INV_Analog_Input_3");
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("option", { name: "Plot 1" }));
 
     expect(screen.getAllByTestId("analysis-plot-card")).toHaveLength(1);
 
@@ -981,7 +981,10 @@ describe("state timeline wiring", () => {
       }),
       expect.anything(),
     );
-    expect(screen.getByTestId("analysis-timeline")).toBeInTheDocument();
+    const timeline = screen.getByTestId("analysis-timeline");
+    expect(timeline).toBeInTheDocument();
+    // The timeline lives in the plots column so its tracks share the plots' x extent.
+    expect(timeline.parentElement).toHaveClass("analysis-plots");
     expect(screen.getByRole("button", { name: "Car DRIVE" })).toBeInTheDocument();
   });
 

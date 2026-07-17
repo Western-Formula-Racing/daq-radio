@@ -3,7 +3,7 @@ import type { Config, Data, Layout, PlotRelayoutEvent } from "plotly.js";
 import Plot from "react-plotly.js";
 
 import { NEW_PLOT, type PlotGroup, type PlotLayout } from "../analysis/plot-layout";
-import { buildTraces, parseXRangeRelayout } from "../analysis/plot-traces";
+import { buildTraces, parseXRangeRelayout, PLOT_AREA_MARGIN } from "../analysis/plot-traces";
 import type { SeriesMap } from "../analysis/series-cache";
 import { plotStroke } from "./sensor-palette";
 
@@ -91,7 +91,13 @@ function PlotCard({
   const layout = useMemo((): Partial<Layout> => {
     const base: Partial<Layout> = {
       autosize: true,
-      margin: { t: 8, r: hasRight ? 52 : 16, b: isBottom ? 36 : 8, l: 52, pad: 2 },
+      margin: {
+        t: 8,
+        r: hasRight ? 52 : PLOT_AREA_MARGIN.right,
+        b: isBottom ? 36 : 8,
+        l: PLOT_AREA_MARGIN.left,
+        pad: 2,
+      },
       hovermode: "x unified",
       showlegend: false,
       uirevision: group.id,

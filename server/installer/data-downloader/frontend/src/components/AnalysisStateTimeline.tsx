@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 
+import { PLOT_AREA_MARGIN } from "../analysis/plot-traces";
 import {
   faultNamesAt,
   formatDuration,
@@ -8,6 +9,11 @@ import {
   severityFor,
 } from "../analysis/state-timeline";
 import type { StatesResponse } from "../types";
+
+// Lane labels live inside the plots' left axis gutter and tracks stop at the
+// plots' right margin, so timeline segments line up with the plot time axis.
+const LANE_LABEL_STYLE = { width: `${PLOT_AREA_MARGIN.left}px` } as const;
+const TRACK_STYLE = { marginRight: `${PLOT_AREA_MARGIN.right}px` } as const;
 
 const COLLAPSE_KEY = "analysis-timeline-collapsed";
 
@@ -100,8 +106,10 @@ export function AnalysisStateTimeline({
             <>
               {data.lanes.map((lane) => (
                 <div className="analysis-timeline-lane" key={lane.id}>
-                  <span className="analysis-timeline-label">{lane.label}</span>
-                  <div className="analysis-timeline-track">
+                  <span className="analysis-timeline-label" style={LANE_LABEL_STYLE}>
+                    {lane.label}
+                  </span>
+                  <div className="analysis-timeline-track" style={TRACK_STYLE}>
                     {lane.segments.map((seg) => {
                       const box = segmentBox(seg.start_ms, seg.end_ms, viewRange);
                       if (!box) return null;
@@ -122,8 +130,10 @@ export function AnalysisStateTimeline({
                 </div>
               ))}
               <div className="analysis-timeline-lane">
-                <span className="analysis-timeline-label">Faults</span>
-                <div className="analysis-timeline-track">
+                <span className="analysis-timeline-label" style={LANE_LABEL_STYLE}>
+                  Faults
+                </span>
+                <div className="analysis-timeline-track" style={TRACK_STYLE}>
                   {data.faults.flatMap((fault) =>
                     fault.segments.map((seg) => {
                       const box = segmentBox(seg.start_ms, seg.end_ms, viewRange);

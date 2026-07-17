@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 
 import { NEW_PLOT } from "../analysis/plot-layout";
 import type { MessageGroup, SensorsGroupedResponse } from "../types";
+import { PlotAssignMenu } from "./PlotAssignMenu";
 import { SIGNALS_MIME } from "./AnalysisPlotStack";
 import { OTHER_PALETTE, subsystemColor, type PaletteEntry } from "./sensor-palette";
 
@@ -111,23 +112,16 @@ function PickerGroup({
                     {signal}
                   </button>
                   {isSelected && onAssignSignals && plotOptions && (
-                    <select
-                      className="analysis-signal-plot-select"
-                      aria-label={`Plot for ${signal}`}
+                    <PlotAssignMenu
+                      signal={signal}
                       value={
                         assignments?.[signal] != null
                           ? plotOptions[assignments[signal] - 1]?.id ?? NEW_PLOT
                           : NEW_PLOT
                       }
-                      onChange={(e) => onAssignSignals([signal], e.target.value)}
-                    >
-                      {plotOptions.map((opt) => (
-                        <option key={opt.id} value={opt.id}>
-                          {opt.label}
-                        </option>
-                      ))}
-                      <option value={NEW_PLOT}>New plot</option>
-                    </select>
+                      options={plotOptions}
+                      onAssign={(target) => onAssignSignals([signal], target)}
+                    />
                   )}
                 </span>
               );

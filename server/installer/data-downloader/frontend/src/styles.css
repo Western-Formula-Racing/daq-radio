@@ -946,25 +946,89 @@ body {
 }
 
 .analysis-signal-item {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.25rem 0.5rem;
   min-width: 0;
 }
 
-.analysis-signal-plot-select {
-  font-size: 0.7rem;
-  padding: 0.1rem 0.2rem;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  background: var(--surface);
+.analysis-plot-menu {
+  position: relative;
+  flex: none;
+  margin-left: auto;
+}
+
+.analysis-plot-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.1;
   color: var(--text);
-  max-width: 5.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.analysis-plot-menu-trigger:hover,
+.analysis-plot-menu-trigger[aria-expanded="true"] {
+  border-color: var(--accent, #2563eb);
+  background: var(--surface-2);
+}
+
+.analysis-plot-menu-caret {
+  font-size: 9px;
+  opacity: 0.65;
+}
+
+.analysis-plot-menu-list {
+  z-index: 60;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow-card, 0 20px 25px -20px rgba(15, 23, 42, 0.25));
+}
+
+.analysis-plot-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.analysis-plot-menu-item.is-focused {
+  background: var(--accent-soft-bg, #eef2ff);
+  color: var(--accent-soft-text, #1e3a8a);
+}
+
+.analysis-plot-menu-item.is-selected {
+  font-weight: 600;
+}
+
+.analysis-plot-menu-tick {
+  width: 12px;
+  text-align: center;
+  color: var(--accent, #2563eb);
 }
 
 .analysis-timeline {
-  padding: 8px 14px 10px;
-  margin-bottom: 12px;
+  /* Horizontal padding mirrors .analysis-plot-card so the lane gutters can
+     line up with the plots' axis margins. */
+  padding: 8px 0.85rem 10px;
 }
 
 .analysis-timeline-header {
@@ -1001,16 +1065,21 @@ body {
 .analysis-timeline-lane {
   display: flex;
   align-items: center;
-  gap: 10px;
   height: 24px;
 }
 
 .analysis-timeline-label {
-  width: 64px;
+  /* Width comes inline from PLOT_AREA_MARGIN.left; the label sits inside the
+     same gutter the plots reserve for their y-axis. */
   flex: none;
-  font-size: 12px;
+  box-sizing: border-box;
+  padding-right: 8px;
+  font-size: 11px;
   text-align: right;
   opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .analysis-timeline-track {

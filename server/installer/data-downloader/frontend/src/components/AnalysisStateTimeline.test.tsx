@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { PLOT_AREA_MARGIN } from "../analysis/plot-traces";
 import type { StatesResponse } from "../types";
 import { AnalysisStateTimeline } from "./AnalysisStateTimeline";
 
@@ -61,6 +62,14 @@ describe("AnalysisStateTimeline", () => {
     expect(
       screen.getByRole("button", { name: "Fault Over-current Fault" }),
     ).toBeInTheDocument();
+  });
+
+  it("aligns lane gutters with the shared plot-area margins", () => {
+    render(<AnalysisStateTimeline {...baseProps} />);
+    const label = screen.getByText("Car");
+    expect(label).toHaveStyle({ width: `${PLOT_AREA_MARGIN.left}px` });
+    const track = label.nextElementSibling as HTMLElement;
+    expect(track).toHaveStyle({ marginRight: `${PLOT_AREA_MARGIN.right}px` });
   });
 
   it("zooms to a clicked segment with minimum-span padding", () => {

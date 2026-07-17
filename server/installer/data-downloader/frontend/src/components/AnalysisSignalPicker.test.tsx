@@ -128,8 +128,10 @@ describe("picker grouping interactions", () => {
         theme="light"
       />,
     );
-    const dropdown = screen.getByLabelText("Plot for INV_DC_Bus_Voltage");
-    fireEvent.change(dropdown, { target: { value: NEW_PLOT } });
+    const trigger = screen.getByLabelText("Plot for INV_DC_Bus_Voltage");
+    expect(trigger.tagName).toBe("BUTTON");
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("option", { name: "New plot" }));
     expect(onAssignSignals).toHaveBeenCalledWith(["INV_DC_Bus_Voltage"], NEW_PLOT);
   });
 });

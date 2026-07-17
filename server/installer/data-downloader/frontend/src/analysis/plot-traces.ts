@@ -2,6 +2,11 @@ import type { Data, PlotData, PlotRelayoutEvent } from "plotly.js";
 
 import type { SignalSeries } from "../types";
 
+// Horizontal plot-area insets shared by every plot card and the state
+// timeline, so the timeline's tracks stay pixel-aligned with the plots'
+// time axis. Right-axis plots widen their right margin and drift slightly.
+export const PLOT_AREA_MARGIN = { left: 52, right: 16 } as const;
+
 /** Hex (#rgb / #rrggbb) → rgba() with the given alpha. */
 export function withAlpha(hex: string, alpha: number): string {
   const raw = hex.replace("#", "").trim();

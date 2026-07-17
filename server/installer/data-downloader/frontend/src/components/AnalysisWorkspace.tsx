@@ -367,17 +367,6 @@ export function AnalysisWorkspace({
         </div>
       )}
 
-      {fullRange && viewRange && (
-        <AnalysisStateTimeline
-          data={statesData}
-          loading={statesLoading}
-          error={statesError}
-          viewRange={viewRange}
-          onSelectRange={handleTimelineSelect}
-          onRetry={handleStatesRetry}
-        />
-      )}
-
       <div className="analysis-grid">
         <aside className="analysis-rail">
           <AnalysisSignalPicker
@@ -392,6 +381,17 @@ export function AnalysisWorkspace({
         </aside>
 
         <section className="analysis-plots" aria-live="polite">
+          {fullRange && viewRange && (
+            <AnalysisStateTimeline
+              data={statesData}
+              loading={statesLoading}
+              error={statesError}
+              viewRange={viewRange}
+              onSelectRange={handleTimelineSelect}
+              onRetry={handleStatesRetry}
+            />
+          )}
+
           {error && (
             <div className="analysis-error card" role="alert">
               <strong>Could not load series.</strong>
