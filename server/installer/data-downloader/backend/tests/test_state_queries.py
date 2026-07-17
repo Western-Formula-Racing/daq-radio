@@ -32,6 +32,7 @@ def test_transitions_sql_quotes_signal_and_uses_lag_and_gap():
     assert "interval '5 seconds'" in sql
     assert "prev_value IS DISTINCT FROM value" in sql
     assert "%(start)s" in sql and "%(end)s" in sql
+    assert "AND message_name = %(message)s" in sql
 
 
 def test_transitions_sql_rejects_invalid_identifiers():
@@ -46,6 +47,15 @@ def test_lookback_sql_bounds_lookback_and_orders_desc():
     assert "time < %(start)s" in sql
     assert "time >= %(lookback)s" in sql
     assert "ORDER BY time DESC LIMIT 1" in sql
+    assert "AND message_name = %(message)s" in sql
+
+
+def test_last_sample_sql_bounds_window_and_orders_desc():
+    sql = stq.build_last_sample_sql("wfr26", "State")
+    assert "time >= %(start)s" in sql
+    assert "time <= %(end)s" in sql
+    assert "ORDER BY time DESC LIMIT 1" in sql
+    assert "AND message_name = %(message)s" in sql
 
 
 def test_assemble_segments_splits_on_value_change():
@@ -215,6 +225,7 @@ def test_execute_states_query_shapes_lanes_and_faults(monkeypatch):
     segments = result["lanes"][0]["segments"]
     assert [s["label"] for s in segments] == ["DRIVE", "DEVICE_FAULT"]
     assert segments[0]["start_ms"] < segments[0]["end_ms"]
+    assert "message" not in result["lanes"][0]
 
     assert len(result["faults"]) == 1
     fault = result["faults"][0]
@@ -224,6 +235,13 @@ def test_execute_states_query_shapes_lanes_and_faults(monkeypatch):
 
     assert cursor.executed[0][0] == "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
     assert cursor.executed[1][0] == "SET LOCAL statement_timeout = 15000"
+
+    # State lane queries (indices 3-5) must be scoped to VCU_State_Info.
+    for _, params in cursor.executed[3:6]:
+        assert params["message"] == "VCU_State_Info"
+    # INV_Run_Fault_Lo queries (indices 6-8) must be scoped to M171_Fault_Codes.
+    for _, params in cursor.executed[6:9]:
+        assert params["message"] == "M171_Fault_Codes"
 
 
 def test_execute_states_query_rejects_bad_window():

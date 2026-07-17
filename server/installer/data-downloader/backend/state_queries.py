@@ -24,16 +24,21 @@ GAP_MS = GAP_SECONDS * 1000
 LOOKBACK_HOURS = 1
 
 STATE_LANES = (
-    {"id": "car", "signal": "State", "label": "Car"},
-    {"id": "inverter", "signal": "INV_VSM_State", "label": "Inverter"},
+    {"id": "car", "signal": "State", "label": "Car", "message": "VCU_State_Info"},
+    {
+        "id": "inverter",
+        "signal": "INV_VSM_State",
+        "label": "Inverter",
+        "message": "M170_Internal_States",
+    },
 )
 
-# (source, column, bit offset into the 32-entry name tables)
+# (source, column, bit offset into the 32-entry name tables, message name)
 FAULT_SOURCES = (
-    ("post", "INV_Post_Fault_Lo", 0),
-    ("post", "INV_Post_Fault_Hi", 16),
-    ("run", "INV_Run_Fault_Lo", 0),
-    ("run", "INV_Run_Fault_Hi", 16),
+    ("post", "INV_Post_Fault_Lo", 0, "M171_Fault_Codes"),
+    ("post", "INV_Post_Fault_Hi", 16, "M171_Fault_Codes"),
+    ("run", "INV_Run_Fault_Lo", 0, "M171_Fault_Codes"),
+    ("run", "INV_Run_Fault_Hi", 16, "M171_Fault_Codes"),
 )
 
 # PM100/CM200 fault bit names (Cascadia Motion CAN protocol). None marks a
@@ -137,7 +142,8 @@ def build_transitions_sql(table: str, signal: str) -> str:
         "LAG(time) OVER (ORDER BY time) AS prev_time "
         f"FROM {_table(table)} "
         "WHERE time >= %(start)s AND time <= %(end)s "
-        f"AND {column} IS NOT NULL"
+        f"AND {column} IS NOT NULL "
+        "AND message_name = %(message)s"
         ") AS samples "
         "WHERE prev_value IS DISTINCT FROM value "
         f"OR time - prev_time > interval '{GAP_SECONDS} seconds' "
@@ -150,7 +156,8 @@ def build_lookback_sql(table: str, signal: str) -> str:
     return (
         f"SELECT {column} FROM {_table(table)} "
         "WHERE time < %(start)s AND time >= %(lookback)s "
-        f"AND {column} IS NOT NULL ORDER BY time DESC LIMIT 1"
+        f"AND {column} IS NOT NULL AND message_name = %(message)s "
+        "ORDER BY time DESC LIMIT 1"
     )
 
 
@@ -159,7 +166,8 @@ def build_last_sample_sql(table: str, signal: str) -> str:
     return (
         f"SELECT time FROM {_table(table)} "
         "WHERE time >= %(start)s AND time <= %(end)s "
-        f"AND {column} IS NOT NULL ORDER BY time DESC LIMIT 1"
+        f"AND {column} IS NOT NULL AND message_name = %(message)s "
+        "ORDER BY time DESC LIMIT 1"
     )
 
 
@@ -260,7 +268,7 @@ def execute_states_query(
         "start": start_utc,
         "lookback": start_utc - timedelta(hours=LOOKBACK_HOURS),
     }
-    wanted = [lane["signal"] for lane in STATE_LANES] + [c for _, c, _ in FAULT_SOURCES]
+    wanted = [lane["signal"] for lane in STATE_LANES] + [c for _, c, _, _ in FAULT_SOURCES]
     lanes: list[dict] = []
     fault_lists: dict[tuple[str, str], list[tuple[int, int]]] = {}
     fault_order: list[tuple[str, str]] = []
@@ -272,14 +280,16 @@ def execute_states_query(
             cur.execute(build_columns_sql(), {"table": _table(table), "columns": wanted})
             present = {row[0] for row in cur.fetchall()}
 
-            def segments_for(signal: str) -> list[dict]:
-                cur.execute(build_lookback_sql(table, signal), lookback_params)
+            def segments_for(signal: str, message: str) -> list[dict]:
+                lookback_query_params = {**lookback_params, "message": message}
+                query_params = {**params, "message": message}
+                cur.execute(build_lookback_sql(table, signal), lookback_query_params)
                 row = cur.fetchone()
                 seed = int(row[0]) if row is not None else None
-                cur.execute(build_last_sample_sql(table, signal), params)
+                cur.execute(build_last_sample_sql(table, signal), query_params)
                 row = cur.fetchone()
                 last_ms = _epoch_ms(row[0]) if row is not None else None
-                cur.execute(build_transitions_sql(table, signal), params)
+                cur.execute(build_transitions_sql(table, signal), query_params)
                 rows = [
                     (
                         _epoch_ms(r[0]),
@@ -294,16 +304,23 @@ def execute_states_query(
                 if lane["signal"] not in present:
                     continue
                 segments = label_segments(
-                    segments_for(lane["signal"]),
+                    segments_for(lane["signal"], lane["message"]),
                     choices_by_signal.get(lane["signal"]),
                 )
-                lanes.append({**lane, "segments": segments})
+                lanes.append(
+                    {
+                        "id": lane["id"],
+                        "signal": lane["signal"],
+                        "label": lane["label"],
+                        "segments": segments,
+                    }
+                )
 
-            for source, column, bit_offset in FAULT_SOURCES:
+            for source, column, bit_offset, message in FAULT_SOURCES:
                 if column not in present:
                     continue
                 decoded = decode_fault_segments(
-                    segments_for(column), FAULT_NAME_TABLES[source], bit_offset
+                    segments_for(column, message), FAULT_NAME_TABLES[source], bit_offset
                 )
                 for name, intervals in decoded.items():
                     key = (source, name)
