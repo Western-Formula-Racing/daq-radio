@@ -61,6 +61,7 @@ import {
   querySeries,
 } from "../api";
 import { downloadSeriesCsv } from "../analysis/export-csv";
+import { serializeLayout } from "../analysis/plot-layout";
 import { AnalysisWorkspace } from "./AnalysisWorkspace";
 
 const fetchSeasonsMock = vi.mocked(fetchSeasons);
@@ -198,6 +199,7 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.clearAllMocks();
+  window.localStorage.clear();
 });
 
 describe("Analysis workspace tabs (App)", () => {
@@ -638,5 +640,185 @@ describe("AnalysisWorkspace", () => {
     fireEvent.click(screen.getByTestId("plotly-autorange"));
     expect(startInput.value).toBe(fullStart);
     expect(endInput.value).toBe(fullEnd);
+  });
+});
+
+describe("multi-plot workspace", () => {
+  const runsBySeason: Record<string, RunRecord[]> = {
+    WFR26: [run],
+    WFR25: [],
+  };
+
+  const twoSignalGrouped: SensorsGroupedResponse = {
+    ...grouped,
+    messages: [
+      {
+        name: "M160_Temperature_Set_1",
+        subsystem: "INV",
+        can_id: 160,
+        can_id_hex: "0x0A0",
+        signals: ["INV_Analog_Input_2", "INV_Analog_Input_3"],
+      },
+    ],
+  };
+
+  function groupedWithSignals(signals: string[]): SensorsGroupedResponse {
+    return {
+      ...grouped,
+      messages: [
+        {
+          name: "M160_Temperature_Set_1",
+          subsystem: "INV",
+          can_id: 160,
+          can_id_hex: "0x0A0",
+          signals,
+        },
+      ],
+    };
+  }
+
+  function stubGenericSeries() {
+    querySeriesMock.mockImplementation(async (payload) => {
+      const series: SeriesResponse["series"] = {};
+      for (const signal of payload.signals) {
+        series[signal] = {
+          mode: "raw",
+          resolution_ms: null,
+          point_count: 1,
+          t: [Date.parse(run.start_utc)],
+          v: [1],
+        };
+      }
+      return { season: payload.season, start: "s", end: "e", series };
+    });
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    querySeriesMock.mockReset();
+    downloadSeriesCsvMock.mockReset();
+    window.localStorage.clear();
+    stubGenericSeries();
+  });
+
+  it("requests the flattened signal list once for all groups", async () => {
+    render(
+      <AnalysisWorkspace
+        season={seasons[0]}
+        runs={[run]}
+        grouped={twoSignalGrouped}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_2" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_3" }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(querySeriesMock).toHaveBeenCalledTimes(1);
+    expect(querySeriesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        season: "wfr26",
+        signals: ["INV_Analog_Input_2", "INV_Analog_Input_3"],
+      }),
+    );
+    expect(screen.getAllByTestId("analysis-plot-card")).toHaveLength(2);
+
+    // Regroup the two signals into a single plot; membership is unchanged.
+    const select = screen.getByLabelText("Plot for INV_Analog_Input_3");
+    const plot1 = within(select).getByRole("option", { name: "Plot 1" }) as HTMLOptionElement;
+    fireEvent.change(select, { target: { value: plot1.value } });
+
+    expect(screen.getAllByTestId("analysis-plot-card")).toHaveLength(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    // Same membership must not re-fire the series request.
+    expect(querySeriesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("persists the layout per season and restores it on remount", async () => {
+    window.localStorage.setItem(
+      "analysis-layout:WFR26",
+      serializeLayout([{ id: "x", signals: ["S1", "S2"], rightAxis: ["S2"] }]),
+    );
+
+    render(
+      <AnalysisWorkspace
+        season={seasons[0]}
+        runs={[run]}
+        grouped={groupedWithSignals(["S1", "S2"])}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    expect(screen.getByRole("checkbox", { name: "S1" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("checkbox", { name: "S2" })).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(screen.getAllByTestId("analysis-plot-card")).toHaveLength(1);
+    const card = screen.getByTestId("analysis-plot-card");
+    expect(within(card).getByText("S1")).toBeInTheDocument();
+    expect(within(card).getByText("S2")).toBeInTheDocument();
+  });
+
+  it("prunes persisted signals unknown to the season before the first request", async () => {
+    window.localStorage.setItem(
+      "analysis-layout:WFR26",
+      serializeLayout([{ id: "x", signals: ["S1", "GONE"], rightAxis: [] }]),
+    );
+
+    render(
+      <AnalysisWorkspace
+        season={seasons[0]}
+        runs={[run]}
+        grouped={groupedWithSignals(["S1"])}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(querySeriesMock).toHaveBeenCalled();
+    for (const [payload] of querySeriesMock.mock.calls) {
+      expect(payload.signals).toEqual(["S1"]);
+      expect(payload.signals).not.toContain("GONE");
+    }
+  });
+
+  it("recovers to an empty layout from corrupt storage", () => {
+    window.localStorage.setItem("analysis-layout:WFR26", "{broken");
+
+    expect(() =>
+      render(
+        <AnalysisWorkspace
+          season={seasons[0]}
+          runs={[run]}
+          grouped={grouped}
+          theme="light"
+          runsBySeason={runsBySeason}
+        />,
+      ),
+    ).not.toThrow();
+
+    expect(
+      screen.getByText(/Select a run window and one or more signals/i),
+    ).toBeInTheDocument();
   });
 });
