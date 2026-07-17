@@ -1266,6 +1266,19 @@ body {
   color: var(--text-muted);
 }
 
+.analysis-config-plots {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.72rem;
+  color: var(--text-subtle, var(--text-muted));
+  overflow-wrap: anywhere;
+}
+
+.analysis-config-notice {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
 .analysis-config-row-actions {
   display: flex;
   gap: 0.4rem;

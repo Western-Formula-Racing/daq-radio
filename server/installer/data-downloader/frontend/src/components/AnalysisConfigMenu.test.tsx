@@ -59,7 +59,7 @@ describe("AnalysisConfigMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save current view" }));
     const saveBtn = screen.getByRole("button", { name: "Save" });
     expect(saveBtn).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Config name"), { target: { value: "My view" } });
+    fireEvent.change(screen.getByLabelText("Config title"), { target: { value: "My view" } });
     fireEvent.change(screen.getByLabelText("Config author"), { target: { value: "hz" } });
     fireEvent.click(saveBtn);
     expect(onSave).toHaveBeenCalledWith({ name: "My view", note: "", author: "hz" });
@@ -73,6 +73,22 @@ describe("AnalysisConfigMenu", () => {
     expect(onDelete).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Delete?" }));
     expect(onDelete).toHaveBeenCalledWith("c1");
+  });
+
+  it("shows the plot grouping summary for each config", () => {
+    renderMenu({
+      configs: [
+        config({ plots: [{ signals: ["Speed", "RPM"], rightAxis: [] }, { signals: ["Brake_Pressure"], rightAxis: [] }] }),
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: /saved views/i }));
+    expect(screen.getByText("[Speed, RPM][Brake_Pressure]")).toBeInTheDocument();
+  });
+
+  it("notes that saved views are shared with everyone", () => {
+    renderMenu();
+    fireEvent.click(screen.getByRole("button", { name: /saved views/i }));
+    expect(screen.getByText(/shared with everyone/i)).toBeInTheDocument();
   });
 
   it("marks configs from another season", () => {

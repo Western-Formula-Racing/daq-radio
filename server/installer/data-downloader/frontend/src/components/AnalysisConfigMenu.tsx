@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 
-import type { SavedConfig } from "../types";
+import type { SavedConfig, SavedConfigPlot } from "../types";
 
 const AUTHOR_KEY = "analysis-config-author";
 const MAX_VISIBLE = 200;
@@ -19,6 +19,12 @@ function writeAuthor(value: string): void {
   } catch {
     // Ignore persistence failures in restricted environments.
   }
+}
+
+// Compact per-plot grouping, e.g. "[Speed, RPM][Brake_Pressure]" — one bracket
+// per plot so users can tell views apart by how signals are grouped.
+function formatPlotSummary(plots: SavedConfigPlot[]): string {
+  return plots.map((p) => `[${p.signals.join(", ")}]`).join("");
 }
 
 function formatWindow(startIso: string, endIso: string): string {
@@ -88,6 +94,9 @@ export function AnalysisConfigMenu({
 
       {open && (
         <div className="analysis-config-panel" role="dialog" aria-label="Saved views">
+          <p className="analysis-config-notice">
+            Saved views are shared with everyone who can access this page.
+          </p>
           <div className="analysis-config-panel-head">
             <button
               type="button"
@@ -112,10 +121,10 @@ export function AnalysisConfigMenu({
               <input
                 type="text"
                 className="selector-input"
-                placeholder="Name (required)"
+                placeholder="Title (required)"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                aria-label="Config name"
+                aria-label="Config title"
               />
               <input
                 type="text"
@@ -164,6 +173,7 @@ export function AnalysisConfigMenu({
                   </div>
                   {cfg.author && <span className="analysis-config-author">{cfg.author}</span>}
                   {cfg.note && <span className="analysis-config-note">{cfg.note}</span>}
+                  <span className="analysis-config-plots">{formatPlotSummary(cfg.plots)}</span>
                   <span className="analysis-config-window">
                     {formatWindow(cfg.start, cfg.end)}
                   </span>
