@@ -139,3 +139,98 @@ def test_fault_name_tables_shape():
     assert len(stq.RUN_FAULT_NAMES) == 32
     assert stq.RUN_FAULT_NAMES[11] == "CAN Command Message Lost Fault"
     assert stq.POST_FAULT_NAMES[22] == "Precharge Timeout"
+
+
+class ScriptedCursor:
+    """Feeds queued fetch results in order while recording executed SQL."""
+
+    def __init__(self, script):
+        self.script = list(script)
+        self.executed = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return None
+
+    def execute(self, sql, params=None):
+        self.executed.append((sql, params))
+
+    def fetchone(self):
+        kind, value = self.script.pop(0)
+        assert kind == "one", f"expected fetchall next, got fetchone ({value})"
+        return value
+
+    def fetchall(self):
+        kind, value = self.script.pop(0)
+        assert kind == "all", f"expected fetchone next, got fetchall ({value})"
+        return value
+
+
+class FakeConnection:
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return None
+
+    def cursor(self):
+        return self._cursor
+
+
+def test_execute_states_query_shapes_lanes_and_faults(monkeypatch):
+    import psycopg2
+
+    start = T0
+    end = T0 + timedelta(minutes=10)
+    t = lambda seconds: start + timedelta(seconds=seconds)
+    # Column probe says only State and INV_Run_Fault_Lo exist.
+    script = [
+        ("all", [("State",), ("INV_Run_Fault_Lo",)]),
+        # State lane: lookback, last sample, transitions.
+        ("one", (1.0,)),
+        ("one", (t(100),)),
+        ("all", [(t(0), 4.0, None), (t(60), 6.0, t(59))]),
+        # INV_Run_Fault_Lo: lookback none, last sample, transitions.
+        ("one", None),
+        ("one", (t(100),)),
+        ("all", [(t(50), float(1 << 11), None), (t(80), 0.0, t(79))]),
+    ]
+    cursor = ScriptedCursor(script)
+    monkeypatch.setattr(psycopg2, "connect", lambda _dsn: FakeConnection(cursor))
+
+    result = stq.execute_states_query(
+        postgres_dsn="unused",
+        table="wfr26",
+        start=start,
+        end=end,
+        choices_by_signal={"State": {4: "DRIVE", 6: "DEVICE_FAULT"}},
+    )
+
+    assert [lane["id"] for lane in result["lanes"]] == ["car"]
+    segments = result["lanes"][0]["segments"]
+    assert [s["label"] for s in segments] == ["DRIVE", "DEVICE_FAULT"]
+    assert segments[0]["start_ms"] < segments[0]["end_ms"]
+
+    assert len(result["faults"]) == 1
+    fault = result["faults"][0]
+    assert fault["name"] == "CAN Command Message Lost Fault"
+    assert fault["source"] == "run"
+    assert len(fault["segments"]) == 1
+
+    assert cursor.executed[0][0] == "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"
+    assert cursor.executed[1][0] == "SET LOCAL statement_timeout = 15000"
+
+
+def test_execute_states_query_rejects_bad_window():
+    with pytest.raises(ValueError, match="start must be before end"):
+        stq.execute_states_query(
+            postgres_dsn="unused",
+            table="wfr26",
+            start=T0,
+            end=T0,
+        )

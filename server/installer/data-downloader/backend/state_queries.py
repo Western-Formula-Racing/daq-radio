@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
+import psycopg2
+
 from backend.series_queries import (
     MAX_WINDOW_DAYS,
     STATEMENT_TIMEOUT_MS,
@@ -238,3 +240,85 @@ def merge_intervals(intervals: list[tuple[int, int]]) -> list[dict]:
         else:
             merged.append([start, end])
     return [{"start_ms": s, "end_ms": e} for s, e in merged]
+
+
+def execute_states_query(
+    *,
+    postgres_dsn: str,
+    table: str,
+    start: datetime,
+    end: datetime,
+    choices_by_signal: dict[str, dict[int, str] | None] | None = None,
+) -> dict:
+    start_utc = normalize_utc(start)
+    end_utc = normalize_utc(end)
+    validate_states_request(start_utc, end_utc)
+    choices_by_signal = choices_by_signal or {}
+    window_start_ms = _epoch_ms(start_utc)
+    params = {"start": start_utc, "end": end_utc}
+    lookback_params = {
+        "start": start_utc,
+        "lookback": start_utc - timedelta(hours=LOOKBACK_HOURS),
+    }
+    wanted = [lane["signal"] for lane in STATE_LANES] + [c for _, c, _ in FAULT_SOURCES]
+    lanes: list[dict] = []
+    fault_lists: dict[tuple[str, str], list[tuple[int, int]]] = {}
+    fault_order: list[tuple[str, str]] = []
+
+    with psycopg2.connect(postgres_dsn) as conn:
+        with conn.cursor() as cur:
+            cur.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+            cur.execute(f"SET LOCAL statement_timeout = {STATEMENT_TIMEOUT_MS}")
+            cur.execute(build_columns_sql(), {"table": _table(table), "columns": wanted})
+            present = {row[0] for row in cur.fetchall()}
+
+            def segments_for(signal: str) -> list[dict]:
+                cur.execute(build_lookback_sql(table, signal), lookback_params)
+                row = cur.fetchone()
+                seed = int(row[0]) if row is not None else None
+                cur.execute(build_last_sample_sql(table, signal), params)
+                row = cur.fetchone()
+                last_ms = _epoch_ms(row[0]) if row is not None else None
+                cur.execute(build_transitions_sql(table, signal), params)
+                rows = [
+                    (
+                        _epoch_ms(r[0]),
+                        int(r[1]),
+                        _epoch_ms(r[2]) if r[2] is not None else None,
+                    )
+                    for r in cur.fetchall()
+                ]
+                return assemble_segments(rows, seed, window_start_ms, last_ms)
+
+            for lane in STATE_LANES:
+                if lane["signal"] not in present:
+                    continue
+                segments = label_segments(
+                    segments_for(lane["signal"]),
+                    choices_by_signal.get(lane["signal"]),
+                )
+                lanes.append({**lane, "segments": segments})
+
+            for source, column, bit_offset in FAULT_SOURCES:
+                if column not in present:
+                    continue
+                decoded = decode_fault_segments(
+                    segments_for(column), FAULT_NAME_TABLES[source], bit_offset
+                )
+                for name, intervals in decoded.items():
+                    key = (source, name)
+                    if key not in fault_lists:
+                        fault_lists[key] = []
+                        fault_order.append(key)
+                    fault_lists[key].extend(intervals)
+
+    faults = [
+        {
+            "name": name,
+            "source": source,
+            "segments": merge_intervals(fault_lists[(source, name)]),
+        }
+        for source, name in fault_order
+    ]
+    faults.sort(key=lambda f: f["segments"][0]["start_ms"])
+    return {"lanes": lanes, "faults": faults}

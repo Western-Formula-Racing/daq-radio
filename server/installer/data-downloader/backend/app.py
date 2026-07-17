@@ -15,9 +15,14 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
-from backend import series_queries
+from backend import series_queries, state_queries
 from backend.config import get_settings
-from backend.dbc_utils import group_sensors_by_message, load_dbc_db, refresh_dbc
+from backend.dbc_utils import (
+    group_sensors_by_message,
+    load_dbc_db,
+    refresh_dbc,
+    signal_choices,
+)
 from backend.services import DataDownloaderService
 
 
@@ -51,6 +56,12 @@ class SeriesPayload(BaseModel):
     start: datetime
     end: datetime
     target_points: int = series_queries.DEFAULT_TARGET_POINTS
+
+
+class StatesPayload(BaseModel):
+    season: str
+    start: datetime
+    end: datetime
 
 
 settings = get_settings()
@@ -239,6 +250,37 @@ def query_series(payload: SeriesPayload) -> dict:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         logger.exception("Series query failed for %s", payload.signals)
+        raise HTTPException(status_code=503, detail=f"Database query failed: {exc}")
+
+
+@app.post("/api/states")
+def query_states(payload: StatesPayload) -> dict:
+    try:
+        state_queries.validate_states_request(payload.start, payload.end)
+        if payload.season not in {item["table"] for item in service.get_seasons()}:
+            raise ValueError(f"unknown season table: {payload.season}")
+        db, _source = load_dbc_db(settings)
+        choices = {
+            lane["signal"]: signal_choices(db, lane["signal"])
+            for lane in state_queries.STATE_LANES
+        }
+        result = state_queries.execute_states_query(
+            postgres_dsn=settings.postgres_dsn,
+            table=payload.season,
+            start=payload.start,
+            end=payload.end,
+            choices_by_signal=choices,
+        )
+        return {
+            "season": payload.season,
+            "start": series_queries.normalize_utc(payload.start).isoformat(),
+            "end": series_queries.normalize_utc(payload.end).isoformat(),
+            **result,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        logger.exception("States query failed for %s", payload.season)
         raise HTTPException(status_code=503, detail=f"Database query failed: {exc}")
 
 
