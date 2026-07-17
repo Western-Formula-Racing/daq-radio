@@ -64,6 +64,26 @@ class StatesPayload(BaseModel):
     end: datetime
 
 
+class PlotGroupModel(BaseModel):
+    signals: List[str]
+    rightAxis: List[str] = []
+
+
+class AnalysisConfigCreate(BaseModel):
+    name: str
+    note: str = ""
+    author: str = ""
+    season: str
+    start: datetime
+    end: datetime
+    plots: List[PlotGroupModel]
+
+
+class AnalysisConfigPatch(BaseModel):
+    name: str | None = None
+    note: str | None = None
+
+
 settings = get_settings()
 service = DataDownloaderService(settings)
 logger = logging.getLogger(__name__)
@@ -282,6 +302,69 @@ def query_states(payload: StatesPayload) -> dict:
     except Exception as exc:
         logger.exception("States query failed for %s", payload.season)
         raise HTTPException(status_code=503, detail=f"Database query failed: {exc}")
+
+
+def _known_season_tables() -> Set[str]:
+    return {item["table"] for item in service.get_seasons()}
+
+
+@app.get("/api/analysis-configs")
+def list_analysis_configs() -> dict:
+    payload = service.list_analysis_configs()
+    return {"configs": payload.get("configs", [])}
+
+
+@app.post("/api/analysis-configs", status_code=201)
+def create_analysis_config(payload: AnalysisConfigCreate) -> dict:
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="name must not be empty")
+    if payload.season not in _known_season_tables():
+        raise HTTPException(status_code=400, detail=f"unknown season table: {payload.season}")
+    if not (payload.start < payload.end):
+        raise HTTPException(status_code=400, detail="start must be before end")
+    if not payload.plots:
+        raise HTTPException(status_code=400, detail="at least one plot is required")
+    normalized_plots = []
+    for group in payload.plots:
+        if not group.signals:
+            raise HTTPException(status_code=400, detail="each plot needs at least one signal")
+        if not set(group.rightAxis).issubset(set(group.signals)):
+            raise HTTPException(status_code=400, detail="rightAxis must be a subset of signals")
+        normalized_plots.append({"signals": group.signals, "rightAxis": group.rightAxis})
+    config = service.create_analysis_config(
+        {
+            "name": name,
+            "note": payload.note.strip(),
+            "author": payload.author.strip(),
+            "season": payload.season,
+            "start": series_queries.normalize_utc(payload.start).isoformat(),
+            "end": series_queries.normalize_utc(payload.end).isoformat(),
+            "plots": normalized_plots,
+        }
+    )
+    return config
+
+
+@app.patch("/api/analysis-configs/{config_id}")
+def patch_analysis_config(config_id: str, payload: AnalysisConfigPatch) -> dict:
+    name = None
+    if payload.name is not None:
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="name must not be empty")
+    note = payload.note.strip() if payload.note is not None else None
+    config = service.update_analysis_config(config_id, name, note)
+    if config is None:
+        raise HTTPException(status_code=404, detail=f"config {config_id} not found")
+    return config
+
+
+@app.delete("/api/analysis-configs/{config_id}", status_code=204, response_model=None)
+def delete_analysis_config(config_id: str) -> None:
+    if not service.delete_analysis_config(config_id):
+        raise HTTPException(status_code=404, detail=f"config {config_id} not found")
+    return None
 
 
 # ── CAN frames batch ingest (for flight-recorder sync) ─────────────────────────
