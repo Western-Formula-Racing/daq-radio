@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { queryStates } from "../api";
+import { createAnalysisConfig, deleteAnalysisConfig, fetchAnalysisConfigs, queryStates } from "../api";
 import { findSeasonWithData } from "../analysis/analysis-range";
 import { downloadSeriesCsv, seriesToCsv } from "../analysis/export-csv";
 import {
@@ -13,9 +13,11 @@ import {
   toggleRightAxis,
   toggleSignal,
 } from "../analysis/plot-layout";
+import { layoutToPlots, plotsToLayout } from "../analysis/saved-config";
 import type { SeriesMap } from "../analysis/series-cache";
 import { useSeriesData } from "../analysis/use-series-data";
-import type { RunRecord, Season, SensorsGroupedResponse, StatesResponse } from "../types";
+import type { RunRecord, SavedConfig, Season, SensorsGroupedResponse, StatesResponse } from "../types";
+import { AnalysisConfigMenu } from "./AnalysisConfigMenu";
 import { AnalysisPlotStack } from "./AnalysisPlotStack";
 import { AnalysisSignalPicker } from "./AnalysisSignalPicker";
 import { AnalysisStateTimeline } from "./AnalysisStateTimeline";
@@ -34,6 +36,9 @@ export interface AnalysisWorkspaceProps {
   grouped: SensorsGroupedResponse | null;
   theme: "light" | "dark";
   runsBySeason: Record<string, RunRecord[]>;
+  pendingConfig?: SavedConfig | null;
+  onPendingConfigConsumed?: () => void;
+  onCrossSeasonLoad?: (config: SavedConfig) => void;
 }
 
 const EMPTY_GROUPED: SensorsGroupedResponse = {
@@ -78,28 +83,63 @@ export function AnalysisWorkspace({
   grouped,
   theme,
   runsBySeason,
+  pendingConfig = null,
+  onPendingConfigConsumed,
+  onCrossSeasonLoad,
 }: AnalysisWorkspaceProps) {
+  // A pendingConfig arrives only after App switched the season to match it.
+  const seededConfig = pendingConfig && pendingConfig.season === season.table ? pendingConfig : null;
+
   const [selectedRunKey, setSelectedRunKey] = useState("");
   const [plots, setPlots] = useState<PlotLayout>(() => {
+    if (seededConfig) return plotsToLayout(seededConfig.plots);
     try {
       return parseLayout(window.localStorage.getItem(layoutStorageKey(season.name))) ?? [];
     } catch {
       return [];
     }
   });
-  const [fullRange, setFullRange] = useState<[number, number] | null>(null);
-  const [viewRange, setViewRange] = useState<[number, number] | null>(null);
+  const seededRange = useMemo<[number, number] | null>(() => {
+    if (!seededConfig) return null;
+    const start = new Date(seededConfig.start).getTime();
+    const end = new Date(seededConfig.end).getTime();
+    return Number.isFinite(start) && Number.isFinite(end) && start < end ? [start, end] : null;
+    // seededConfig is fixed for this mount; compute once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [fullRange, setFullRange] = useState<[number, number] | null>(seededRange);
+  const [viewRange, setViewRange] = useState<[number, number] | null>(seededRange);
   const [awaitingFirstResponse, setAwaitingFirstResponse] = useState(false);
   const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
   const [statesData, setStatesData] = useState<StatesResponse | null>(null);
   const [statesLoading, setStatesLoading] = useState(false);
   const [statesError, setStatesError] = useState<string | null>(null);
   const [statesReloadKey, setStatesReloadKey] = useState(0);
+  const [configs, setConfigs] = useState<SavedConfig[]>([]);
+  const [crossSeasonPrompt, setCrossSeasonPrompt] = useState<SavedConfig | null>(null);
 
   const { seriesBySignal, loadedRequest, loading, error, requestRange, retry } = useSeriesData();
 
   const seasonName = season.name;
   const seasonTable = season.table;
+
+  useEffect(() => {
+    if (seededConfig) onPendingConfigConsumed?.();
+    // Run once on mount; seededConfig is fixed for this mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const refreshConfigs = useCallback(() => {
+    fetchAnalysisConfigs()
+      .then(setConfigs)
+      .catch(() => {
+        // A failed config fetch must never break the analysis view.
+      });
+  }, []);
+
+  useEffect(() => {
+    refreshConfigs();
+  }, [refreshConfigs]);
 
   // Persist on every layout change; storage failures must never break the UI.
   useEffect(() => {
@@ -175,6 +215,64 @@ export function AnalysisWorkspace({
     },
     [fullRange],
   );
+
+  const applyConfig = useCallback((config: SavedConfig) => {
+    const start = new Date(config.start).getTime();
+    const end = new Date(config.end).getTime();
+    setPlots(plotsToLayout(config.plots));
+    setSelectedRunKey("");
+    if (Number.isFinite(start) && Number.isFinite(end) && start < end) {
+      setFullRange([start, end]);
+      setViewRange([start, end]);
+    }
+  }, []);
+
+  const handleLoadConfig = useCallback(
+    (config: SavedConfig) => {
+      if (config.season === seasonTable) {
+        applyConfig(config);
+        return;
+      }
+      setCrossSeasonPrompt(config);
+    },
+    [seasonTable, applyConfig],
+  );
+
+  const handleConfirmCrossSeason = useCallback(() => {
+    if (crossSeasonPrompt) onCrossSeasonLoad?.(crossSeasonPrompt);
+    setCrossSeasonPrompt(null);
+  }, [crossSeasonPrompt, onCrossSeasonLoad]);
+
+  const handleSaveConfig = useCallback(
+    (fields: { name: string; note: string; author: string }) => {
+      if (!viewRange || plots.length === 0) return;
+      createAnalysisConfig({
+        name: fields.name,
+        note: fields.note,
+        author: fields.author,
+        season: seasonTable,
+        start: new Date(viewRange[0]).toISOString(),
+        end: new Date(viewRange[1]).toISOString(),
+        plots: layoutToPlots(plots),
+      })
+        .then(() => refreshConfigs())
+        .catch(() => {
+          // Surface nothing destructive; the list simply will not gain the entry.
+        });
+    },
+    [viewRange, plots, seasonTable, refreshConfigs],
+  );
+
+  const handleDeleteConfig = useCallback(
+    (id: string) => {
+      deleteAnalysisConfig(id)
+        .then(() => refreshConfigs())
+        .catch(() => refreshConfigs());
+    },
+    [refreshConfigs],
+  );
+
+  const saveConfigDisabled = plots.length === 0 || !viewRange;
 
   // Request series whenever table + signals + view range are valid.
   useEffect(() => {
@@ -350,6 +448,38 @@ export function AnalysisWorkspace({
         onCustomRange={handleCustomRange}
         onExport={handleExport}
       />
+
+      <div className="analysis-config-bar">
+        <AnalysisConfigMenu
+          configs={configs}
+          activeSeasonTable={seasonTable}
+          saveDisabled={saveConfigDisabled}
+          onSave={handleSaveConfig}
+          onLoad={handleLoadConfig}
+          onDelete={handleDeleteConfig}
+        />
+      </div>
+
+      {crossSeasonPrompt && (
+        <div className="analysis-export-confirm" role="status">
+          <p>
+            "{crossSeasonPrompt.name}" was saved on {crossSeasonPrompt.season}. Switch from{" "}
+            {seasonTable} and load it?
+          </p>
+          <div className="analysis-export-confirm-actions">
+            <button type="button" className="button" onClick={handleConfirmCrossSeason}>
+              Switch and load
+            </button>
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => setCrossSeasonPrompt(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {exportConfirmOpen && (
         <div

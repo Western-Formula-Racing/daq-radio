@@ -20,6 +20,9 @@ vi.mock("../api", () => ({
   querySeries: vi.fn(),
   querySensorData: vi.fn(),
   queryStates: vi.fn(),
+  fetchAnalysisConfigs: vi.fn().mockResolvedValue([]),
+  createAnalysisConfig: vi.fn(),
+  deleteAnalysisConfig: vi.fn(),
 }));
 
 vi.mock("react-plotly.js", () => ({
@@ -1117,5 +1120,48 @@ describe("state timeline wiring", () => {
 
     expect(await screen.findByTestId("plotly-mock")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(/states down/i);
+  });
+});
+
+describe("saved analysis configs", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    querySeriesMock.mockReset();
+    queryStatesMock.mockReset();
+    queryStatesMock.mockResolvedValue(statesResponse());
+  });
+
+  it("routes a cross-season load up to onCrossSeasonLoad", async () => {
+    const { fetchAnalysisConfigs } = await import("../api");
+    (fetchAnalysisConfigs as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        id: "c1",
+        name: "Other season",
+        note: "",
+        author: "",
+        season: "wfr25",
+        start: "2026-06-20T15:00:00.000Z",
+        end: "2026-06-20T15:05:00.000Z",
+        plots: [{ signals: ["Brake_Pressure"], rightAxis: [] }],
+        created_at: "2026-06-20T15:06:00.000Z",
+        updated_at: "2026-06-20T15:06:00.000Z",
+      },
+    ]);
+    const onCrossSeasonLoad = vi.fn();
+    render(
+      <AnalysisWorkspace
+        season={{ name: "WFR26", year: 2026, table: "wfr26" }}
+        runs={[]}
+        grouped={null}
+        theme="light"
+        runsBySeason={{}}
+        onCrossSeasonLoad={onCrossSeasonLoad}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /saved views/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Load" }));
+    // Cross-season load asks for confirmation, then routes up.
+    fireEvent.click(screen.getByRole("button", { name: /switch/i }));
+    expect(onCrossSeasonLoad).toHaveBeenCalledWith(expect.objectContaining({ id: "c1" }));
   });
 });
