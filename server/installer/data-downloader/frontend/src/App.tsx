@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchRuns, fetchSensors, fetchSensorsGrouped, fetchScannerStatus, triggerScan, updateNote, fetchSeasons } from "./api";
 import { Moon, Sun } from "lucide-react";
-import { RunRecord, RunsResponse, ScannerStatus, SensorsGroupedResponse, SensorsResponse, Season } from "./types";
+import { RunRecord, RunsResponse, ScannerStatus, SensorsGroupedResponse, SensorsResponse, Season, SavedConfig } from "./types";
 import { RunTable } from "./components/RunTable";
 import { DataDownload } from "./components/data-download";
 import { SensorGroupedGrid } from "./components/SensorGroupedGrid";
@@ -51,6 +51,7 @@ export default function App() {
   const [scannerStatus, setScannerStatus] = useState<ScannerStatus | null>(null);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [workspace, setWorkspace] = useState<Workspace>("downloader");
+  const [pendingConfig, setPendingConfig] = useState<SavedConfig | null>(null);
   const sensorsSectionRef = useRef<HTMLElement | null>(null);
   const downloaderSectionRef = useRef<HTMLElement | null>(null);
   const statusFinishedRef = useRef<string | null>(null);
@@ -296,6 +297,16 @@ export default function App() {
     [seasons, selectedSeason],
   );
 
+  const handleCrossSeasonLoad = useCallback(
+    (config: SavedConfig) => {
+      const target = seasons.find((s) => s.table === config.season);
+      if (!target) return;
+      setPendingConfig(config);
+      setSelectedSeason(target.name);
+    },
+    [seasons],
+  );
+
   return (
     <div className={`app-shell${workspace === "analysis" ? " is-analysis" : ""}`}>
       <header style={{ marginBottom: "1.5rem", borderLeft: `6px solid ${seasonColor(selectedSeason)}`, paddingLeft: "1rem" }}>
@@ -528,6 +539,9 @@ export default function App() {
             grouped={sensorsGrouped}
             theme={theme}
             runsBySeason={runsBySeason}
+            pendingConfig={pendingConfig}
+            onPendingConfigConsumed={() => setPendingConfig(null)}
+            onCrossSeasonLoad={handleCrossSeasonLoad}
           />
         </div>
       )}
