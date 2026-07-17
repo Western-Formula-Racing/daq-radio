@@ -338,3 +338,49 @@ npx vitest run
 - The PM100 fault tables are hardcoded from the Cascadia Motion CAN protocol. If the inverter firmware changes the fault bit layout, the tables in `state_queries.py` must be updated.
 - Signal names must match valid SQL identifiers (`[A-Za-z_][A-Za-z0-9_]*`). Signals with non-identifier names cannot be queried.
 - The client-side series cache is in-memory and shared across hook instances. It does not persist across page reloads.
+
+## Production deployment (VPS auto-deploy)
+
+On the WFR DAQ production VPS the data-downloader does **not** run from the standalone
+`docker compose up --build` above — it runs as three services inside the shared **`installer`**
+compose project (`server/installer/docker-compose.yml`): `data-downloader-api`,
+`data-downloader-frontend`, and `data-downloader-scanner`.
+
+Those services are kept in sync with `main` by a systemd timer, **`dd-rebuild-cron`**
+(`scripts/dd-rebuild-cron.sh` + `.service` + `.timer`). Every 5 minutes it:
+
+1. Checks the VPS checkout is on `main` with a clean tracked tree, then `git fetch`es `origin/main`.
+2. If `origin/main` has **fast-forwarded**, `git reset --hard`s to it (refuses on a dirty tree,
+   wrong branch, or divergence — those need a human).
+3. Rebuilds **only** `data-downloader-api/-frontend/-scanner` from `server/installer` and recreates
+   them with `--no-deps`, so it **never recreates `timescaledb`** (that would bounce the team DB).
+4. Health-gates on `/api/health` + `POST /api/states`; if the new stack is unhealthy it automatically
+   rolls back to the previous commit and rebuilds.
+
+**Practical effect:** merging to `main` auto-deploys the data-downloader to the VPS within ~5 minutes —
+no manual `docker compose build` needed for these services.
+
+### Install / re-install on the VPS
+
+```bash
+cd ~/projects/data-acquisition/server/installer/data-downloader/scripts
+sudo install -m 0755 dd-rebuild-cron.sh      /usr/local/bin/dd-rebuild-cron.sh
+sudo install -m 0644 dd-rebuild-cron.service /etc/systemd/system/dd-rebuild-cron.service
+sudo install -m 0644 dd-rebuild-cron.timer   /etc/systemd/system/dd-rebuild-cron.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now dd-rebuild-cron.timer
+```
+
+### Operating it
+
+```bash
+systemctl list-timers dd-rebuild-cron.timer   # next/last run
+journalctl -u dd-rebuild-cron -f              # follow deploy logs
+sudo systemctl start dd-rebuild-cron.service  # force a check now (no-op if main hasn't moved)
+sudo systemctl disable --now dd-rebuild-cron.timer  # pause auto-deploy
+```
+
+**Gotcha:** the cron refuses to run while the VPS working tree has uncommitted **tracked** changes
+(it will not `git reset --hard` over your edits). If auto-deploy seems stuck, check
+`journalctl -u dd-rebuild-cron` for a "refusing" line. Untracked files (e.g. `.env`) are fine —
+`git reset --hard` never removes them.
