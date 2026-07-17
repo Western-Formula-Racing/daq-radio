@@ -51,6 +51,31 @@ vi.mock("../analysis/export-csv", async () => {
   };
 });
 
+// Capture every requestRange invocation so tests can assert on what the workspace
+// dispatches, not just what survives the debounce coalescing at the querySeries boundary.
+const { requestRangeCalls } = vi.hoisted(() => ({ requestRangeCalls: [] as string[][] }));
+
+vi.mock("../analysis/use-series-data", async () => {
+  const actual = await vi.importActual<typeof import("../analysis/use-series-data")>(
+    "../analysis/use-series-data",
+  );
+  const React = await import("react");
+  return {
+    ...actual,
+    useSeriesData: () => {
+      const hook = actual.useSeriesData();
+      const requestRange = React.useCallback(
+        (seasonTable: string, signals: string[], startMs: number, endMs: number) => {
+          requestRangeCalls.push([...signals]);
+          hook.requestRange(seasonTable, signals, startMs, endMs);
+        },
+        [hook.requestRange],
+      );
+      return { ...hook, requestRange };
+    },
+  };
+});
+
 import App from "../App";
 import {
   fetchRuns,
@@ -698,6 +723,7 @@ describe("multi-plot workspace", () => {
     querySeriesMock.mockReset();
     downloadSeriesCsvMock.mockReset();
     window.localStorage.clear();
+    requestRangeCalls.length = 0;
     stubGenericSeries();
   });
 
@@ -794,6 +820,60 @@ describe("multi-plot workspace", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300);
     });
+
+    expect(querySeriesMock).toHaveBeenCalled();
+    for (const [payload] of querySeriesMock.mock.calls) {
+      expect(payload.signals).toEqual(["S1"]);
+      expect(payload.signals).not.toContain("GONE");
+    }
+  });
+
+  it("never requests a stale persisted signal when the sensor list arrives after the range", async () => {
+    // Unique table so the shared series cache never masks the request under test.
+    const lateSeason: Season = { name: "WFR26", year: 2026, table: "wfr26-late-grouped" };
+    window.localStorage.setItem(
+      "analysis-layout:WFR26",
+      serializeLayout([{ id: "x", signals: ["S1", "GONE"], rightAxis: [] }]),
+    );
+
+    const { rerender } = render(
+      <AnalysisWorkspace
+        season={lateSeason}
+        runs={[run]}
+        grouped={null}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    // Establish a view range while the sensor list is still loading.
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(querySeriesMock).not.toHaveBeenCalled();
+
+    // Sensor list arrives without GONE; prune and request now commit together.
+    rerender(
+      <AnalysisWorkspace
+        season={lateSeason}
+        runs={[run]}
+        grouped={groupedWithSignals(["S1"])}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    // The stale signal must never be dispatched at all, not merely coalesced away by
+    // the debounce. Assert on the dispatched requestRange args, then on the API boundary.
+    expect(requestRangeCalls.length).toBeGreaterThan(0);
+    for (const signals of requestRangeCalls) {
+      expect(signals).toEqual(["S1"]);
+      expect(signals).not.toContain("GONE");
+    }
 
     expect(querySeriesMock).toHaveBeenCalled();
     for (const [payload] of querySeriesMock.mock.calls) {

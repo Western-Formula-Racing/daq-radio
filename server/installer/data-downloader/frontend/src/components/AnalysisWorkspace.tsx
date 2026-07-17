@@ -114,8 +114,15 @@ export function AnalysisWorkspace({
 
   const selectedSignals = useMemo(() => flattenSignals(plots), [plots]);
   const selectedSet = useMemo(() => new Set(selectedSignals), [selectedSignals]);
-  // Order-insensitive key so regrouping between plots never re-triggers a request.
-  const signalsKey = useMemo(() => [...selectedSignals].sort().join(" "), [selectedSignals]);
+  // Only request signals the season knows: a stale persisted signal must never reach
+  // the API, even in the commit before pruneUnknown cleans the layout itself.
+  const requestSignals = useMemo(
+    () => (knownSignals ? selectedSignals.filter((s) => knownSignals.has(s)) : []),
+    [knownSignals, selectedSignals],
+  );
+  // Order-insensitive key over the filtered set so neither regrouping nor the
+  // post-prune re-render (which drops the stale signal) refires the request.
+  const signalsKey = useMemo(() => [...requestSignals].sort().join(" "), [requestSignals]);
 
   const handleToggleSignal = useCallback((signal: string) => {
     setPlots((prev) => toggleSignal(prev, signal));
@@ -161,15 +168,14 @@ export function AnalysisWorkspace({
 
   // Request series whenever table + signals + view range are valid.
   useEffect(() => {
-    if (!viewRange || !isValidRange(viewRange[0], viewRange[1]) || selectedSignals.length === 0) {
-      return;
-    }
+    if (!viewRange || !isValidRange(viewRange[0], viewRange[1])) return;
     // Wait for the sensor list so restored layouts are pruned before the first request.
     if (!knownSignals) return;
+    if (requestSignals.length === 0) return;
     setAwaitingFirstResponse(true);
     setExportConfirmOpen(false);
-    requestRange(seasonTable, [...selectedSignals].sort(), viewRange[0], viewRange[1]);
-    // signalsKey stands in for selectedSignals so regrouping does not refire.
+    requestRange(seasonTable, [...requestSignals].sort(), viewRange[0], viewRange[1]);
+    // signalsKey stands in for requestSignals so regrouping does not refire.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seasonTable, signalsKey, viewRange, requestRange, knownSignals]);
 
