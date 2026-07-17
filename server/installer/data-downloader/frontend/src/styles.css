@@ -1159,3 +1159,32 @@ body {
   opacity: 0.7;
   padding: 2px 0;
 }
+
+.analysis-timeline-tooltip {
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+  max-width: 280px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-card, 0 20px 25px -20px rgba(15, 23, 42, 0.25));
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  pointer-events: none;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.analysis-timeline-tooltip-hidden {
+  display: none;
+}
+
+.analysis-timeline-tooltip strong {
+  font-weight: 600;
+}
