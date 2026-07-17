@@ -166,18 +166,27 @@ services:
       context: ./data-downloader
       dockerfile: backend/Dockerfile
     container_name: data-downloader-api
-    env_file:
-      - .env
+    # Explicit allowlist only; avoid env_file so Grafana/Slack/Anthropic secrets stay out.
     environment:
+      DATA_DIR: "${DATA_DIR:-/app/data}"
       POSTGRES_DSN: "${POSTGRES_DSN:-postgresql://wfr:wfr_password@timescaledb:5432/wfr}"
+      DEFAULT_SEASON_TABLE: "${DEFAULT_SEASON_TABLE:-wfr26}"
       SEASONS: "${SEASONS:-}"
-      # DBC grouping — same token as file-uploader; most recently committed .dbc auto-selected
+      SCANNER_BIN: "${SCANNER_BIN:-hour}"
+      SCANNER_INCLUDE_COUNTS: "${SCANNER_INCLUDE_COUNTS:-true}"
+      SCANNER_INITIAL_CHUNK_DAYS: "${SCANNER_INITIAL_CHUNK_DAYS:-31}"
+      SENSOR_WINDOW_DAYS: "${SENSOR_WINDOW_DAYS:-7}"
+      SENSOR_LOOKBACK_DAYS: "${SENSOR_LOOKBACK_DAYS:-30}"
+      SCAN_INTERVAL_SECONDS: "${SCAN_INTERVAL_SECONDS:-3600}"
+      SCAN_DAILY_TIME: "${SCAN_DAILY_TIME:-}"
+      ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173,https://daq.westernformularacing.org}"
+      # Same GitHub DBC token as file-uploader; newest .dbc auto-selected when path unset.
       GITHUB_DBC_TOKEN: "${GITHUB_DBC_TOKEN:-}"
       GITHUB_DBC_REPO: "${GITHUB_DBC_REPO:-Western-Formula-Racing/DBC}"
       GITHUB_DBC_BRANCH: "${GITHUB_DBC_BRANCH:-main}"
-      # Optional: pin a specific file (e.g. WFR26.dbc); leave unset to auto-pick newest
+      # Optional pin (e.g. WFR26.dbc); leave unset to auto-pick newest.
       GITHUB_DBC_PATH: "${GITHUB_DBC_PATH:-}"
-      # Fallback: local DBC file (mounted below or already on disk)
+      # Fallback local DBC path when GitHub is unavailable.
       DBC_FILE_PATH: "${DBC_FILE_PATH:-}"
     ports:
       - "8000:8000"

@@ -561,3 +561,331 @@ body {
   max-height: none;
   margin-top: 0;
 }
+
+/* ── Workspace tabs ───────────────────────────────────────────────────────── */
+
+.app-shell.is-analysis {
+  max-width: 1400px;
+}
+
+.workspace-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 0 1.25rem;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  width: fit-content;
+  max-width: 100%;
+}
+
+.workspace-tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.45rem 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.workspace-tab:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.workspace-tab.is-selected {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.workspace-tab:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+/* ── Analysis workspace ───────────────────────────────────────────────────── */
+
+.analysis-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.analysis-toolbar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  box-shadow: var(--shadow-card);
+}
+
+.analysis-toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+}
+
+.analysis-toolbar-run {
+  flex: 1 1 220px;
+  min-width: 180px;
+}
+
+.analysis-toolbar-start,
+.analysis-toolbar-end {
+  flex: 1 1 180px;
+  min-width: 160px;
+}
+
+.analysis-toolbar-actions {
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.analysis-toolbar-loading {
+  margin: 0;
+}
+
+.analysis-toolbar-error {
+  margin: 0.5rem 0 0;
+}
+
+.analysis-export-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--warn-border);
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  font-size: 0.9rem;
+}
+
+.analysis-export-confirm p {
+  margin: 0;
+  flex: 1 1 240px;
+}
+
+.analysis-export-confirm-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.analysis-grid {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: 1rem;
+  align-items: start;
+  min-height: 420px;
+}
+
+.analysis-rail {
+  position: sticky;
+  top: 0.75rem;
+  max-height: calc(100vh - 2rem);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  padding: 0.85rem;
+}
+
+.analysis-signal-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  min-height: 0;
+  flex: 1;
+}
+
+.analysis-signal-picker-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.analysis-signal-picker-count {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.analysis-signal-search {
+  width: 100%;
+}
+
+.analysis-signal-groups {
+  margin-top: 0.25rem;
+  max-height: none;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.analysis-signal-chip.is-selected {
+  background: var(--accent-soft-bg);
+  border-color: var(--accent);
+  color: var(--accent-soft-text);
+  font-weight: 600;
+}
+
+.analysis-plots {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.analysis-plot-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.analysis-plot-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  padding: 0.75rem 0.85rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 220px;
+}
+
+.analysis-plot-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.35rem;
+}
+
+.analysis-plot-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.analysis-plot-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.analysis-plot-badge,
+.analysis-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: var(--accent-soft-bg);
+  color: var(--accent-soft-text);
+}
+
+.analysis-plot-badge.is-envelope {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+
+.analysis-plot-count,
+.analysis-plot-resolution {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.analysis-plot-body {
+  flex: 1;
+  min-height: 180px;
+}
+
+.analysis-plotly {
+  width: 100%;
+  height: 180px;
+}
+
+.analysis-plot-empty,
+.analysis-empty,
+.analysis-idle {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 180px;
+  padding: 1.25rem 1.35rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.analysis-empty p,
+.analysis-idle {
+  margin: 0;
+}
+
+.analysis-empty-hint {
+  color: var(--warn-text);
+  font-size: 0.85rem;
+}
+
+.analysis-error {
+  border: 1px solid var(--error-card-border);
+  background: var(--error-card-bg);
+  color: var(--error-text);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.analysis-error p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.analysis-status-badge {
+  align-self: flex-start;
+}
+
+@media (max-width: 849px) {
+  .analysis-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .analysis-rail {
+    position: static;
+    max-height: 320px;
+  }
+
+  .analysis-toolbar-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .analysis-toolbar-actions {
+    width: 100%;
+  }
+}
