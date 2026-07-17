@@ -69,3 +69,8 @@ export function paletteIndex(subsystem: string): number {
 export function subsystemColor(subsystem: string, theme: "light" | "dark"): PaletteEntry {
   return PALETTE[paletteIndex(subsystem)][theme];
 }
+
+/** Stroke color for plot traces, sharing the subsystem hash and palette borders. */
+export function plotStroke(name: string, theme: "light" | "dark"): string {
+  return PALETTE[paletteIndex(name)][theme].border;
+}

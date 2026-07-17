@@ -1,13 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { queryStates } from "../api";
 import { findSeasonWithData } from "../analysis/analysis-range";
 import { downloadSeriesCsv, seriesToCsv } from "../analysis/export-csv";
+import {
+  type PlotLayout,
+  assignSignals,
+  flattenSignals,
+  parseLayout,
+  pruneUnknown,
+  serializeLayout,
+  toggleRightAxis,
+  toggleSignal,
+} from "../analysis/plot-layout";
 import type { SeriesMap } from "../analysis/series-cache";
 import { useSeriesData } from "../analysis/use-series-data";
-import type { RunRecord, Season, SensorsGroupedResponse } from "../types";
+import type { RunRecord, Season, SensorsGroupedResponse, StatesResponse } from "../types";
 import { AnalysisPlotStack } from "./AnalysisPlotStack";
 import { AnalysisSignalPicker } from "./AnalysisSignalPicker";
+import { AnalysisStateTimeline } from "./AnalysisStateTimeline";
 import { AnalysisToolbar } from "./AnalysisToolbar";
+
+const layoutStorageKey = (seasonName: string) => `analysis-layout:${seasonName}`;
+
+function knownSignalsOf(grouped: SensorsGroupedResponse | null): Set<string> | null {
+  if (!grouped) return null;
+  return new Set([...grouped.messages.flatMap((m) => m.signals), ...grouped.ungrouped]);
+}
 
 export interface AnalysisWorkspaceProps {
   season: Season;
@@ -61,23 +80,70 @@ export function AnalysisWorkspace({
   runsBySeason,
 }: AnalysisWorkspaceProps) {
   const [selectedRunKey, setSelectedRunKey] = useState("");
-  const [selectedSignals, setSelectedSignals] = useState<string[]>([]);
+  const [plots, setPlots] = useState<PlotLayout>(() => {
+    try {
+      return parseLayout(window.localStorage.getItem(layoutStorageKey(season.name))) ?? [];
+    } catch {
+      return [];
+    }
+  });
   const [fullRange, setFullRange] = useState<[number, number] | null>(null);
   const [viewRange, setViewRange] = useState<[number, number] | null>(null);
   const [awaitingFirstResponse, setAwaitingFirstResponse] = useState(false);
   const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
+  const [statesData, setStatesData] = useState<StatesResponse | null>(null);
+  const [statesLoading, setStatesLoading] = useState(false);
+  const [statesError, setStatesError] = useState<string | null>(null);
+  const [statesReloadKey, setStatesReloadKey] = useState(0);
 
   const { seriesBySignal, loadedRequest, loading, error, requestRange, retry } = useSeriesData();
 
   const seasonName = season.name;
   const seasonTable = season.table;
 
+  // Persist on every layout change; storage failures must never break the UI.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(layoutStorageKey(seasonName), serializeLayout(plots));
+    } catch {
+      // Ignore persistence failures in restricted environments.
+    }
+  }, [plots, seasonName]);
+
+  const knownSignals = useMemo(() => knownSignalsOf(grouped), [grouped]);
+
+  // Drop persisted signals this season does not know before they can hit the API.
+  useEffect(() => {
+    if (!knownSignals) return;
+    setPlots((prev) => pruneUnknown(prev, knownSignals));
+  }, [knownSignals]);
+
+  const selectedSignals = useMemo(() => flattenSignals(plots), [plots]);
   const selectedSet = useMemo(() => new Set(selectedSignals), [selectedSignals]);
+  // Only request signals the season knows: a stale persisted signal must never reach
+  // the API, even in the commit before pruneUnknown cleans the layout itself.
+  const requestSignals = useMemo(
+    () => (knownSignals ? selectedSignals.filter((s) => knownSignals.has(s)) : []),
+    [knownSignals, selectedSignals],
+  );
+  // Order-insensitive key over the filtered set so neither regrouping nor the
+  // post-prune re-render (which drops the stale signal) refires the request.
+  const signalsKey = useMemo(() => [...requestSignals].sort().join(" "), [requestSignals]);
 
   const handleToggleSignal = useCallback((signal: string) => {
-    setSelectedSignals((prev) =>
-      prev.includes(signal) ? prev.filter((s) => s !== signal) : [...prev, signal],
-    );
+    setPlots((prev) => toggleSignal(prev, signal));
+  }, []);
+
+  const handleClearAll = useCallback(() => {
+    setPlots([]);
+  }, []);
+
+  const handleAssignSignals = useCallback((signals: string[], target: string) => {
+    setPlots((prev) => assignSignals(prev, signals, target));
+  }, []);
+
+  const handleToggleRightAxis = useCallback((groupId: string, signal: string) => {
+    setPlots((prev) => toggleRightAxis(prev, groupId, signal));
   }, []);
 
   const handleRunChange = useCallback((runKey: string, startMs: number, endMs: number) => {
@@ -112,13 +178,48 @@ export function AnalysisWorkspace({
 
   // Request series whenever table + signals + view range are valid.
   useEffect(() => {
-    if (!viewRange || !isValidRange(viewRange[0], viewRange[1]) || selectedSignals.length === 0) {
-      return;
-    }
+    if (!viewRange || !isValidRange(viewRange[0], viewRange[1])) return;
+    // Wait for the sensor list so restored layouts are pruned before the first request.
+    if (!knownSignals) return;
+    if (requestSignals.length === 0) return;
     setAwaitingFirstResponse(true);
     setExportConfirmOpen(false);
-    requestRange(seasonTable, selectedSignals, viewRange[0], viewRange[1]);
-  }, [seasonTable, selectedSignals, viewRange, requestRange]);
+    requestRange(seasonTable, [...requestSignals].sort(), viewRange[0], viewRange[1]);
+    // signalsKey stands in for requestSignals so regrouping does not refire.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seasonTable, signalsKey, viewRange, requestRange, knownSignals]);
+
+  // Fetch the state timeline once per selected window; zoom is display-only.
+  useEffect(() => {
+    if (!fullRange || !isValidRange(fullRange[0], fullRange[1])) {
+      setStatesData(null);
+      setStatesError(null);
+      return;
+    }
+    const controller = new AbortController();
+    setStatesLoading(true);
+    setStatesError(null);
+    queryStates(
+      {
+        season: seasonTable,
+        start: new Date(fullRange[0]).toISOString(),
+        end: new Date(fullRange[1]).toISOString(),
+      },
+      { signal: controller.signal },
+    )
+      .then((response) => {
+        setStatesData(response);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        setStatesData(null);
+        setStatesError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setStatesLoading(false);
+      });
+    return () => controller.abort();
+  }, [seasonTable, fullRange, statesReloadKey]);
 
   // Mark first response complete once loading settles after a request.
   const wasLoadingRef = useRef(false);
@@ -180,6 +281,11 @@ export function AnalysisWorkspace({
     viewRange != null &&
     !hasPlottableSeries(seriesBySignal, selectedSignals);
 
+  // True only when we still have plots rendered AND a refresh is in flight
+  // (signal/window change after the first response). Drives the "Refreshing"
+  // overlay instead of letting the plot stack silently redraw.
+  const refreshInFlight = !error && (loading || awaitingFirstResponse) && !showEmpty && (awaitingFirstResponse || hasPlottableSeries(seriesBySignal, selectedSignals) || wrongSeasonHint != null);
+
   const keepPreviousPlots =
     !error &&
     selectedSignals.length > 0 &&
@@ -207,7 +313,29 @@ export function AnalysisWorkspace({
     performExport();
   }, [exportDisabled, exportSeries, performExport]);
 
+  const handleTimelineSelect = useCallback((startMs: number, endMs: number) => {
+    setViewRange([startMs, endMs]);
+  }, []);
+
+  const handleStatesRetry = useCallback(() => {
+    setStatesReloadKey((key) => key + 1);
+  }, []);
+
   const pickerGrouped = grouped ?? EMPTY_GROUPED;
+
+  const plotOptions = useMemo(
+    () => plots.map((p, i) => ({ id: p.id, label: `Plot ${i + 1}` })),
+    [plots],
+  );
+  const assignments = useMemo(() => {
+    const map: Record<string, number> = {};
+    plots.forEach((p, i) =>
+      p.signals.forEach((s) => {
+        map[s] = i + 1;
+      }),
+    );
+    return map;
+  }, [plots]);
 
   return (
     <div className="analysis-workspace">
@@ -254,11 +382,26 @@ export function AnalysisWorkspace({
             grouped={pickerGrouped}
             selected={selectedSet}
             onToggle={handleToggleSignal}
+            onClearAll={handleClearAll}
+            onAssignSignals={handleAssignSignals}
+            assignments={assignments}
+            plotOptions={plotOptions}
             theme={theme}
           />
         </aside>
 
         <section className="analysis-plots" aria-live="polite">
+          {fullRange && viewRange && (
+            <AnalysisStateTimeline
+              data={statesData}
+              loading={statesLoading}
+              error={statesError}
+              viewRange={viewRange}
+              onSelectRange={handleTimelineSelect}
+              onRetry={handleStatesRetry}
+            />
+          )}
+
           {error && (
             <div className="analysis-error card" role="alert">
               <strong>Could not load series.</strong>
@@ -287,15 +430,36 @@ export function AnalysisWorkspace({
           )}
 
           {!error && keepPreviousPlots && viewRange && (
-            <AnalysisPlotStack
-              seriesBySignal={seriesBySignal}
-              signals={selectedSignals}
-              range={viewRange}
-              onRangeChange={handlePlotRangeChange}
-              theme={theme}
-            />
+            <div className="analysis-plot-stack-wrap">
+              <AnalysisPlotStack
+                layout={plots}
+                seriesBySignal={seriesBySignal}
+                range={viewRange}
+                onRangeChange={handlePlotRangeChange}
+                onAssignSignals={handleAssignSignals}
+                onRemoveSignal={handleToggleSignal}
+                onToggleRightAxis={handleToggleRightAxis}
+                theme={theme}
+              />
+              {refreshInFlight && (
+                <div className="analysis-refreshing" role="status" data-testid="analysis-refreshing">
+                  Refreshing…
+                </div>
+              )}
+            </div>
           )}
 
+          {!error &&
+            !awaitingFirstResponse &&
+            !loading &&
+            !showEmpty &&
+            !keepPreviousPlots &&
+            !fullRange && (
+              <div className="analysis-idle" role="status" data-testid="analysis-idle-no-window">
+                <strong>{selectedSignals.length} signal{selectedSignals.length === 1 ? "" : "s"} selected.</strong>
+                <p>Select a run window or time range to plot them.</p>
+              </div>
+            )}
           {!error &&
             !awaitingFirstResponse &&
             !loading &&

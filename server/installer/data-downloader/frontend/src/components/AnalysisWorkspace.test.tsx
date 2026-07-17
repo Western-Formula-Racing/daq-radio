@@ -1,7 +1,13 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { RunRecord, Season, SensorsGroupedResponse, SeriesResponse } from "../types";
+import type {
+  RunRecord,
+  Season,
+  SensorsGroupedResponse,
+  SeriesResponse,
+  StatesResponse,
+} from "../types";
 
 vi.mock("../api", () => ({
   fetchSeasons: vi.fn(),
@@ -13,6 +19,7 @@ vi.mock("../api", () => ({
   updateNote: vi.fn(),
   querySeries: vi.fn(),
   querySensorData: vi.fn(),
+  queryStates: vi.fn(),
 }));
 
 vi.mock("react-plotly.js", () => ({
@@ -51,6 +58,31 @@ vi.mock("../analysis/export-csv", async () => {
   };
 });
 
+// Capture every requestRange invocation so tests can assert on what the workspace
+// dispatches, not just what survives the debounce coalescing at the querySeries boundary.
+const { requestRangeCalls } = vi.hoisted(() => ({ requestRangeCalls: [] as string[][] }));
+
+vi.mock("../analysis/use-series-data", async () => {
+  const actual = await vi.importActual<typeof import("../analysis/use-series-data")>(
+    "../analysis/use-series-data",
+  );
+  const React = await import("react");
+  return {
+    ...actual,
+    useSeriesData: () => {
+      const hook = actual.useSeriesData();
+      const requestRange = React.useCallback(
+        (seasonTable: string, signals: string[], startMs: number, endMs: number) => {
+          requestRangeCalls.push([...signals]);
+          hook.requestRange(seasonTable, signals, startMs, endMs);
+        },
+        [hook.requestRange],
+      );
+      return { ...hook, requestRange };
+    },
+  };
+});
+
 import App from "../App";
 import {
   fetchRuns,
@@ -59,8 +91,10 @@ import {
   fetchSensors,
   fetchSensorsGrouped,
   querySeries,
+  queryStates,
 } from "../api";
 import { downloadSeriesCsv } from "../analysis/export-csv";
+import { serializeLayout } from "../analysis/plot-layout";
 import { AnalysisWorkspace } from "./AnalysisWorkspace";
 
 const fetchSeasonsMock = vi.mocked(fetchSeasons);
@@ -69,6 +103,7 @@ const fetchSensorsMock = vi.mocked(fetchSensors);
 const fetchSensorsGroupedMock = vi.mocked(fetchSensorsGrouped);
 const fetchScannerStatusMock = vi.mocked(fetchScannerStatus);
 const querySeriesMock = vi.mocked(querySeries);
+const queryStatesMock = vi.mocked(queryStates);
 const downloadSeriesCsvMock = vi.mocked(downloadSeriesCsv);
 
 const seasons: Season[] = [
@@ -147,6 +182,31 @@ function seriesResponse(
   };
 }
 
+function statesResponse(overrides: Partial<StatesResponse> = {}): StatesResponse {
+  return {
+    season: "wfr26",
+    start: "s",
+    end: "e",
+    lanes: [
+      {
+        id: "car",
+        signal: "State",
+        label: "Car",
+        segments: [
+          {
+            start_ms: Date.parse(run.start_utc) + 60_000,
+            end_ms: Date.parse(run.start_utc) + 120_000,
+            value: 4,
+            label: "DRIVE",
+          },
+        ],
+      },
+    ],
+    faults: [],
+    ...overrides,
+  };
+}
+
 function emptySeriesResponse(season: string, signal: string): SeriesResponse {
   return {
     season,
@@ -185,6 +245,7 @@ function stubAppApis() {
     updated_at: null,
   });
   querySeriesMock.mockResolvedValue(seriesResponse("wfr26", "INV_Analog_Input_2", 5));
+  queryStatesMock.mockResolvedValue(statesResponse());
 }
 
 async function flushInitialLoad() {
@@ -198,6 +259,7 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   vi.clearAllMocks();
+  window.localStorage.clear();
 });
 
 describe("Analysis workspace tabs (App)", () => {
@@ -324,7 +386,9 @@ describe("AnalysisWorkspace", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     querySeriesMock.mockReset();
+    queryStatesMock.mockReset();
     downloadSeriesCsvMock.mockReset();
+    queryStatesMock.mockResolvedValue(statesResponse());
   });
 
   it("clears prior season plots when remounted with a new season key", async () => {
@@ -409,6 +473,53 @@ describe("AnalysisWorkspace", () => {
       await Promise.resolve();
     });
 
+    expect(screen.getByTestId("analysis-empty")).toBeInTheDocument();
+  });
+
+  it("shows a 'Refreshing' overlay over the previous plots while a refresh is in flight", async () => {
+    const refreshSeason: Season = { name: "WFR26", year: 2026, table: "wfr26-refresh-overlay" };
+    let resolveSecond!: (value: SeriesResponse) => void;
+    querySeriesMock
+      .mockResolvedValueOnce(seriesResponse(refreshSeason.table, "INV_Analog_Input_2", 5))
+      .mockReturnValueOnce(
+        new Promise<SeriesResponse>((resolve) => {
+          resolveSecond = resolve;
+        }),
+      );
+
+    render(
+      <AnalysisWorkspace
+        season={refreshSeason}
+        runs={[run]}
+        grouped={grouped}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_2" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(await screen.findByTestId("plotly-mock")).toBeInTheDocument();
+
+    // Zoom fires a second /api/series request; the first response stays visible.
+    fireEvent.click(screen.getByTestId("plotly-zoom"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(screen.queryByTestId("analysis-empty")).toBeNull();
+    expect(screen.getByTestId("analysis-refreshing")).toBeInTheDocument();
+    expect(await screen.findByTestId("plotly-mock")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveSecond(emptySeriesResponse(refreshSeason.table, "INV_Analog_Input_2"));
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByTestId("analysis-refreshing")).toBeNull();
     expect(screen.getByTestId("analysis-empty")).toBeInTheDocument();
   });
 
@@ -638,5 +749,373 @@ describe("AnalysisWorkspace", () => {
     fireEvent.click(screen.getByTestId("plotly-autorange"));
     expect(startInput.value).toBe(fullStart);
     expect(endInput.value).toBe(fullEnd);
+  });
+});
+
+describe("multi-plot workspace", () => {
+  const runsBySeason: Record<string, RunRecord[]> = {
+    WFR26: [run],
+    WFR25: [],
+  };
+
+  const twoSignalGrouped: SensorsGroupedResponse = {
+    ...grouped,
+    messages: [
+      {
+        name: "M160_Temperature_Set_1",
+        subsystem: "INV",
+        can_id: 160,
+        can_id_hex: "0x0A0",
+        signals: ["INV_Analog_Input_2", "INV_Analog_Input_3"],
+      },
+    ],
+  };
+
+  function groupedWithSignals(signals: string[]): SensorsGroupedResponse {
+    return {
+      ...grouped,
+      messages: [
+        {
+          name: "M160_Temperature_Set_1",
+          subsystem: "INV",
+          can_id: 160,
+          can_id_hex: "0x0A0",
+          signals,
+        },
+      ],
+    };
+  }
+
+  function stubGenericSeries() {
+    querySeriesMock.mockImplementation(async (payload) => {
+      const series: SeriesResponse["series"] = {};
+      for (const signal of payload.signals) {
+        series[signal] = {
+          mode: "raw",
+          resolution_ms: null,
+          point_count: 1,
+          t: [Date.parse(run.start_utc)],
+          v: [1],
+        };
+      }
+      return { season: payload.season, start: "s", end: "e", series };
+    });
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    querySeriesMock.mockReset();
+    queryStatesMock.mockReset();
+    downloadSeriesCsvMock.mockReset();
+    window.localStorage.clear();
+    requestRangeCalls.length = 0;
+    stubGenericSeries();
+    queryStatesMock.mockResolvedValue(statesResponse());
+  });
+
+  it("requests the flattened signal list once for all groups", async () => {
+    render(
+      <AnalysisWorkspace
+        season={seasons[0]}
+        runs={[run]}
+        grouped={twoSignalGrouped}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_2" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_3" }));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(querySeriesMock).toHaveBeenCalledTimes(1);
+    expect(querySeriesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        season: "wfr26",
+        signals: ["INV_Analog_Input_2", "INV_Analog_Input_3"],
+      }),
+    );
+    expect(screen.getAllByTestId("analysis-plot-card")).toHaveLength(2);
+
+    // Regroup the two signals into a single plot; membership is unchanged.
+    const trigger = screen.getByLabelText("Plot for INV_Analog_Input_3");
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("option", { name: "Plot 1" }));
+
+    expect(screen.getAllByTestId("analysis-plot-card")).toHaveLength(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    // Same membership must not re-fire the series request.
+    expect(querySeriesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("persists the layout per season and restores it on remount", async () => {
+    window.localStorage.setItem(
+      "analysis-layout:WFR26",
+      serializeLayout([{ id: "x", signals: ["S1", "S2"], rightAxis: ["S2"] }]),
+    );
+
+    render(
+      <AnalysisWorkspace
+        season={seasons[0]}
+        runs={[run]}
+        grouped={groupedWithSignals(["S1", "S2"])}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    expect(screen.getByRole("checkbox", { name: "S1" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("checkbox", { name: "S2" })).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(screen.getAllByTestId("analysis-plot-card")).toHaveLength(1);
+    const card = screen.getByTestId("analysis-plot-card");
+    expect(within(card).getByText("S1")).toBeInTheDocument();
+    expect(within(card).getByText("S2")).toBeInTheDocument();
+  });
+
+  it("prunes persisted signals unknown to the season before the first request", async () => {
+    window.localStorage.setItem(
+      "analysis-layout:WFR26",
+      serializeLayout([{ id: "x", signals: ["S1", "GONE"], rightAxis: [] }]),
+    );
+
+    render(
+      <AnalysisWorkspace
+        season={seasons[0]}
+        runs={[run]}
+        grouped={groupedWithSignals(["S1"])}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(querySeriesMock).toHaveBeenCalled();
+    for (const [payload] of querySeriesMock.mock.calls) {
+      expect(payload.signals).toEqual(["S1"]);
+      expect(payload.signals).not.toContain("GONE");
+    }
+  });
+
+  it("never requests a stale persisted signal when the sensor list arrives after the range", async () => {
+    // Unique table so the shared series cache never masks the request under test.
+    const lateSeason: Season = { name: "WFR26", year: 2026, table: "wfr26-late-grouped" };
+    window.localStorage.setItem(
+      "analysis-layout:WFR26",
+      serializeLayout([{ id: "x", signals: ["S1", "GONE"], rightAxis: [] }]),
+    );
+
+    const { rerender } = render(
+      <AnalysisWorkspace
+        season={lateSeason}
+        runs={[run]}
+        grouped={null}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    // Establish a view range while the sensor list is still loading.
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(querySeriesMock).not.toHaveBeenCalled();
+
+    // Sensor list arrives without GONE; prune and request now commit together.
+    rerender(
+      <AnalysisWorkspace
+        season={lateSeason}
+        runs={[run]}
+        grouped={groupedWithSignals(["S1"])}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    // The stale signal must never be dispatched at all, not merely coalesced away by
+    // the debounce. Assert on the dispatched requestRange args, then on the API boundary.
+    expect(requestRangeCalls.length).toBeGreaterThan(0);
+    for (const signals of requestRangeCalls) {
+      expect(signals).toEqual(["S1"]);
+      expect(signals).not.toContain("GONE");
+    }
+
+    expect(querySeriesMock).toHaveBeenCalled();
+    for (const [payload] of querySeriesMock.mock.calls) {
+      expect(payload.signals).toEqual(["S1"]);
+      expect(payload.signals).not.toContain("GONE");
+    }
+  });
+
+  it("recovers to an empty layout from corrupt storage", () => {
+    window.localStorage.setItem("analysis-layout:WFR26", "{broken");
+
+    expect(() =>
+      render(
+        <AnalysisWorkspace
+          season={seasons[0]}
+          runs={[run]}
+          grouped={grouped}
+          theme="light"
+          runsBySeason={runsBySeason}
+        />,
+      ),
+    ).not.toThrow();
+
+    expect(
+      screen.getByText(/Select a run window and one or more signals/i),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("state timeline wiring", () => {
+  const runsBySeason: Record<string, RunRecord[]> = {
+    WFR26: [run],
+    WFR25: [],
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    querySeriesMock.mockReset();
+    queryStatesMock.mockReset();
+    querySeriesMock.mockResolvedValue(seriesResponse("wfr26", "INV_Analog_Input_2", 5));
+    queryStatesMock.mockResolvedValue(statesResponse());
+  });
+
+  it("fetches states once when a run window is selected, even with no signals", async () => {
+    render(
+      <AnalysisWorkspace
+        season={seasons[0]}
+        runs={[run]}
+        grouped={grouped}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(queryStatesMock).toHaveBeenCalledTimes(1);
+    expect(queryStatesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        season: "wfr26",
+        start: run.start_utc,
+        end: run.end_utc,
+      }),
+      expect.anything(),
+    );
+    const timeline = screen.getByTestId("analysis-timeline");
+    expect(timeline).toBeInTheDocument();
+    // The timeline lives in the plots column so its tracks share the plots' x extent.
+    expect(timeline.parentElement).toHaveClass("analysis-plots");
+    expect(screen.getByRole("button", { name: "Car DRIVE" })).toBeInTheDocument();
+  });
+
+  it("does not refetch states on zoom", async () => {
+    const zoomSeason: Season = { name: "WFR26", year: 2026, table: "wfr26-states-zoom" };
+    render(
+      <AnalysisWorkspace
+        season={zoomSeason}
+        runs={[run]}
+        grouped={grouped}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_2" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(await screen.findByTestId("plotly-mock")).toBeInTheDocument();
+    expect(queryStatesMock).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId("plotly-zoom"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    // The zoom refires the series request but never the states request.
+    expect(queryStatesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("zooms the plots when a timeline segment is clicked", async () => {
+    const clickSeason: Season = { name: "WFR26", year: 2026, table: "wfr26-states-click" };
+    render(
+      <AnalysisWorkspace
+        season={clickSeason}
+        runs={[run]}
+        grouped={grouped}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_2" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    querySeriesMock.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Car DRIVE" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    const segStart = new Date(Date.parse(run.start_utc) + 60_000).toISOString();
+    const segEnd = new Date(Date.parse(run.start_utc) + 120_000).toISOString();
+    expect(querySeriesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ start: segStart, end: segEnd }),
+    );
+  });
+
+  it("shows a timeline error without blocking the plots", async () => {
+    const errSeason: Season = { name: "WFR26", year: 2026, table: "wfr26-states-error" };
+    queryStatesMock.mockRejectedValue(new Error("states down"));
+
+    render(
+      <AnalysisWorkspace
+        season={errSeason}
+        runs={[run]}
+        grouped={grouped}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_2" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(await screen.findByTestId("plotly-mock")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(/states down/i);
   });
 });

@@ -7,7 +7,9 @@ import {
   SensorsGroupedResponse,
   SensorsResponse,
   SeriesRequest,
-  SeriesResponse
+  SeriesResponse,
+  StatesRequest,
+  StatesResponse
 } from "./types";
 
 const RAW_API_BASE = import.meta.env.VITE_API_BASE_URL?.trim() ?? "";
@@ -104,5 +106,13 @@ export function querySeries(payload: SeriesRequest): Promise<SeriesResponse> {
   return request("/api/series", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export function queryStates(payload: StatesRequest, init?: RequestInit): Promise<StatesResponse> {
+  return request("/api/states", {
+    method: "POST",
+    body: JSON.stringify(payload),
+    ...init,
   });
 }

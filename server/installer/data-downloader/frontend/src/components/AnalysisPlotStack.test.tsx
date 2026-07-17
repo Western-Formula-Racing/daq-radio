@@ -1,9 +1,10 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { CSSProperties } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { SignalSeries } from "../types";
-import { AnalysisPlotStack } from "./AnalysisPlotStack";
+import { NEW_PLOT } from "../analysis/plot-layout";
+import type { SeriesMap } from "../analysis/series-cache";
+import { AnalysisPlotStack, SIGNALS_MIME, readSignalsPayload } from "./AnalysisPlotStack";
 
 vi.mock("react-plotly.js", () => ({
   default: (props: {
@@ -24,36 +25,147 @@ afterEach(() => {
   cleanup();
 });
 
-const series: SignalSeries = {
+const rawSeries = (v: number[]): SeriesMap[string] => ({
   mode: "raw",
   resolution_ms: null,
-  point_count: 3,
-  t: [
-    Date.parse("2026-06-08T21:00:00.000Z"),
-    Date.parse("2026-06-08T22:00:00.000Z"),
-    Date.parse("2026-06-08T23:00:00.000Z"),
-  ],
-  v: [1.0, 2.5, 1.8],
+  point_count: v.length,
+  t: v.map((_, i) => i * 1000),
+  v,
+});
+
+function makeDataTransfer(payload: unknown): DataTransfer {
+  const data: Record<string, string> = {
+    [SIGNALS_MIME]: JSON.stringify(payload),
+  };
+  return {
+    types: Object.keys(data),
+    getData: (type: string) => data[type] ?? "",
+    setData: (type: string, value: string) => {
+      data[type] = value;
+    },
+    dropEffect: "move",
+    effectAllowed: "move",
+  } as unknown as DataTransfer;
+}
+
+const baseProps = {
+  seriesBySignal: { S1: rawSeries([1, 2]), S2: rawSeries([3, 4]) } as SeriesMap,
+  range: [0, 2000] as [number, number],
+  onRangeChange: vi.fn(),
+  onAssignSignals: vi.fn(),
+  onRemoveSignal: vi.fn(),
+  onToggleRightAxis: vi.fn(),
+  theme: "light" as const,
 };
 
-describe("AnalysisPlotStack", () => {
+describe("AnalysisPlotStack groups", () => {
+  it("renders one card per group with a legend chip per signal", () => {
+    render(
+      <AnalysisPlotStack
+        {...baseProps}
+        layout={[{ id: "g1", signals: ["S1", "S2"], rightAxis: [] }]}
+      />,
+    );
+    expect(screen.getAllByTestId("analysis-plot-card")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /remove S1/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /remove S2/i })).toBeInTheDocument();
+  });
+
+  it("toggles the right axis from the legend chip axis badge", () => {
+    const onToggleRightAxis = vi.fn();
+    render(
+      <AnalysisPlotStack
+        {...baseProps}
+        onToggleRightAxis={onToggleRightAxis}
+        layout={[{ id: "g1", signals: ["S1", "S2"], rightAxis: [] }]}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /move S2 to the right axis/i }));
+    expect(onToggleRightAxis).toHaveBeenCalledWith("g1", "S2");
+  });
+
+  it("hides axis badges on single-signal cards", () => {
+    render(
+      <AnalysisPlotStack
+        {...baseProps}
+        layout={[{ id: "g1", signals: ["S1"], rightAxis: [] }]}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /right axis/i })).toBeNull();
+  });
+
+  it("dispatches onAssignSignals when a payload drops on a card", () => {
+    const onAssignSignals = vi.fn();
+    render(
+      <AnalysisPlotStack
+        {...baseProps}
+        onAssignSignals={onAssignSignals}
+        layout={[{ id: "g1", signals: ["S1"], rightAxis: [] }]}
+      />,
+    );
+    fireEvent.drop(screen.getByTestId("analysis-plot-card"), {
+      dataTransfer: makeDataTransfer({ signals: ["S2"] }),
+    });
+    expect(onAssignSignals).toHaveBeenCalledWith(["S2"], "g1");
+  });
+
+  it("dispatches NEW_PLOT when dropped on the new-plot zone", () => {
+    const onAssignSignals = vi.fn();
+    render(
+      <AnalysisPlotStack
+        {...baseProps}
+        onAssignSignals={onAssignSignals}
+        layout={[{ id: "g1", signals: ["S1"], rightAxis: [] }]}
+      />,
+    );
+    fireEvent.drop(screen.getByTestId("analysis-new-plot-zone"), {
+      dataTransfer: makeDataTransfer({ signals: ["S2"] }),
+    });
+    expect(onAssignSignals).toHaveBeenCalledWith(["S2"], NEW_PLOT);
+  });
+
+  it("ignores foreign drop payloads", () => {
+    const onAssignSignals = vi.fn();
+    render(
+      <AnalysisPlotStack
+        {...baseProps}
+        onAssignSignals={onAssignSignals}
+        layout={[{ id: "g1", signals: ["S1"], rightAxis: [] }]}
+      />,
+    );
+    const dt = {
+      types: ["text/plain"],
+      getData: () => "",
+    } as unknown as DataTransfer;
+    fireEvent.drop(screen.getByTestId("analysis-plot-card"), { dataTransfer: dt });
+    expect(onAssignSignals).not.toHaveBeenCalled();
+  });
+
+  it("shows the empty-stack message when the layout has no groups", () => {
+    render(<AnalysisPlotStack {...baseProps} layout={[]} />);
+    expect(screen.getByText(/select one or more signals to plot/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("analysis-plot-card")).toBeNull();
+  });
+
   it("passes Plotly an explicit 180px height (not percentage) so plots stay in-card", () => {
     render(
       <AnalysisPlotStack
-        seriesBySignal={{ INV_Analog_Input_1: series }}
-        signals={["INV_Analog_Input_1"]}
-        range={[
-          Date.parse("2026-06-08T21:00:00.000Z"),
-          Date.parse("2026-06-09T03:00:00.000Z"),
-        ]}
-        onRangeChange={vi.fn()}
+        {...baseProps}
+        layout={[{ id: "g1", signals: ["S1"], rightAxis: [] }]}
         theme="dark"
       />,
     );
-
     const plot = screen.getByTestId("plotly-mock");
     expect(Number(plot.getAttribute("data-trace-count"))).toBeGreaterThan(0);
     expect(plot).toHaveStyle({ width: "100%", height: "180px" });
     expect(plot.style.height).not.toBe("100%");
+  });
+});
+
+describe("readSignalsPayload", () => {
+  it("parses a valid payload and rejects junk", () => {
+    expect(readSignalsPayload(makeDataTransfer({ signals: ["A", "B"] }))).toEqual(["A", "B"]);
+    expect(readSignalsPayload(makeDataTransfer({ signals: "A" }))).toBeNull();
+    expect(readSignalsPayload(null)).toBeNull();
   });
 });

@@ -714,14 +714,25 @@ body {
 
 .analysis-signal-picker-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.analysis-signal-picker-meta {
+  display: flex;
+  align-items: center;
   gap: 0.5rem;
 }
 
 .analysis-signal-picker-count {
   margin: 0;
   font-size: 0.8rem;
+}
+
+.analysis-signal-clear {
+  font-size: 0.75rem;
+  padding: 2px 8px;
 }
 
 .analysis-signal-search {
@@ -819,6 +830,25 @@ body {
   min-height: 180px;
 }
 
+.analysis-plot-stack-wrap {
+  position: relative;
+}
+
+.analysis-refreshing {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  background: rgba(127, 127, 127, 0.18);
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: 5;
+}
+
 .analysis-plotly {
   width: 100%;
   height: 180px;
@@ -888,4 +918,273 @@ body {
   .analysis-toolbar-actions {
     width: 100%;
   }
+}
+
+.analysis-plot-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.analysis-legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.analysis-legend-swatch {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 2px;
+}
+
+.analysis-legend-axis,
+.analysis-legend-remove {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.7rem;
+  padding: 0 0.15rem;
+  color: var(--text-muted);
+}
+
+.analysis-legend-axis:hover,
+.analysis-legend-remove:hover {
+  color: var(--text);
+}
+
+.analysis-new-plot-zone {
+  border: 2px dashed var(--border-strong);
+  border-radius: 8px;
+  padding: 0.75rem;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--text-subtle);
+}
+
+.analysis-plot-card.is-drop-target,
+.analysis-new-plot-zone.is-drop-target {
+  border-color: var(--accent, #2563eb);
+  background: var(--surface-2);
+}
+
+.analysis-signal-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  min-width: 0;
+}
+
+.analysis-plot-menu {
+  position: relative;
+  flex: none;
+  margin-left: auto;
+}
+
+.analysis-plot-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.1;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.analysis-plot-menu-trigger:hover,
+.analysis-plot-menu-trigger[aria-expanded="true"] {
+  border-color: var(--accent, #2563eb);
+  background: var(--surface-2);
+}
+
+.analysis-plot-menu-caret {
+  font-size: 9px;
+  opacity: 0.65;
+}
+
+.analysis-plot-menu-list {
+  z-index: 60;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow-card, 0 20px 25px -20px rgba(15, 23, 42, 0.25));
+}
+
+.analysis-plot-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.analysis-plot-menu-item.is-focused {
+  background: var(--accent-soft-bg, #eef2ff);
+  color: var(--accent-soft-text, #1e3a8a);
+}
+
+.analysis-plot-menu-item.is-selected {
+  font-weight: 600;
+}
+
+.analysis-plot-menu-tick {
+  width: 12px;
+  text-align: center;
+  color: var(--accent, #2563eb);
+}
+
+.analysis-timeline {
+  /* Horizontal padding mirrors .analysis-plot-card so the lane gutters can
+     line up with the plots' axis margins. */
+  padding: 8px 0.85rem 10px;
+}
+
+.analysis-timeline-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.analysis-timeline-chevron {
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+.analysis-timeline-chevron.collapsed {
+  transform: rotate(-90deg);
+}
+
+.analysis-timeline-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.analysis-timeline-lane {
+  display: flex;
+  align-items: center;
+  height: 24px;
+}
+
+.analysis-timeline-label {
+  /* Width comes inline from PLOT_AREA_MARGIN.left; the label sits inside the
+     same gutter the plots reserve for their y-axis. */
+  flex: none;
+  box-sizing: border-box;
+  padding-right: 8px;
+  font-size: 11px;
+  text-align: right;
+  opacity: 0.75;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-timeline-track {
+  position: relative;
+  flex: 1;
+  height: 14px;
+  border-radius: 4px;
+  background: rgba(127, 127, 127, 0.12);
+  overflow: hidden;
+}
+
+.analysis-timeline-segment {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.analysis-timeline-segment.severity-ok {
+  background: #34a853;
+}
+
+.analysis-timeline-segment.severity-transitional {
+  background: #f9ab00;
+}
+
+.analysis-timeline-segment.severity-fault {
+  background: #ea4335;
+}
+
+.analysis-timeline-segment.severity-unknown {
+  background: #9aa0a6;
+}
+
+.analysis-timeline-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.analysis-timeline-skeleton,
+.analysis-timeline-empty {
+  font-size: 13px;
+  opacity: 0.7;
+  padding: 2px 0;
+}
+
+.analysis-timeline-tooltip {
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+  max-width: 280px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-card, 0 20px 25px -20px rgba(15, 23, 42, 0.25));
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  pointer-events: none;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.analysis-timeline-tooltip-hidden {
+  display: none;
+}
+
+.analysis-timeline-tooltip strong {
+  font-weight: 600;
 }

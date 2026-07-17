@@ -1,112 +1,106 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { Config, Data, Layout, PlotRelayoutEvent } from "plotly.js";
 import Plot from "react-plotly.js";
 
-import { buildTraces, parseXRangeRelayout } from "../analysis/plot-traces";
+import { NEW_PLOT, type PlotGroup, type PlotLayout } from "../analysis/plot-layout";
+import { buildTraces, parseXRangeRelayout, PLOT_AREA_MARGIN } from "../analysis/plot-traces";
 import type { SeriesMap } from "../analysis/series-cache";
-import type { SignalSeries } from "../types";
+import { plotStroke } from "./sensor-palette";
 
-/** Season-independent plot stroke colors (light / dark pairs by hash index). */
-const PLOT_PALETTE: Array<{ light: string; dark: string }> = [
-  { light: "#2563eb", dark: "#60a5fa" },
-  { light: "#c2410c", dark: "#fb923c" },
-  { light: "#0d9488", dark: "#2dd4bf" },
-  { light: "#7c3aed", dark: "#a78bfa" },
-  { light: "#b45309", dark: "#fbbf24" },
-  { light: "#15803d", dark: "#4ade80" },
-  { light: "#be185d", dark: "#f472b6" },
-  { light: "#0e7490", dark: "#22d3ee" },
-];
+export const SIGNALS_MIME = "application/x-wfr-signals";
 
-/** djb2 → stable palette index for a signal name (not season). */
-export function signalPlotColor(signal: string, theme: "light" | "dark"): string {
-  let h = 5381;
-  for (let i = 0; i < signal.length; i++) {
-    h = (((h << 5) + h) ^ signal.charCodeAt(i)) >>> 0;
+/** Parse the custom drag payload; null for foreign or malformed drops. */
+export function readSignalsPayload(dt: DataTransfer | null): string[] | null {
+  if (!dt) return null;
+  const raw = dt.getData(SIGNALS_MIME);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as { signals?: unknown };
+    if (!Array.isArray(parsed.signals)) return null;
+    const signals = parsed.signals.filter((s): s is string => typeof s === "string");
+    return signals.length > 0 ? signals : null;
+  } catch {
+    return null;
   }
-  return PLOT_PALETTE[h % PLOT_PALETTE.length][theme];
-}
-
-function formatResolution(ms: number): string {
-  if (ms >= 60_000 && ms % 60_000 === 0) return `${ms / 60_000}m`;
-  if (ms >= 1000 && ms % 1000 === 0) return `${ms / 1000}s`;
-  return `${ms}ms`;
-}
-
-function seriesStatus(series: SignalSeries | undefined): {
-  modeLabel: string;
-  countLabel: string;
-  resolutionLabel: string | null;
-  emptyMessage: string | null;
-} {
-  if (!series) {
-    return {
-      modeLabel: "—",
-      countLabel: "no data",
-      resolutionLabel: null,
-      emptyMessage: "No series loaded for this signal yet.",
-    };
-  }
-  if (series.point_count === 0 || series.t.length === 0) {
-    return {
-      modeLabel: series.mode === "envelope" ? "envelope" : "raw",
-      countLabel: "0 pts",
-      resolutionLabel:
-        series.mode === "envelope" ? formatResolution(series.resolution_ms) : null,
-      emptyMessage: "No samples in the visible range.",
-    };
-  }
-  return {
-    modeLabel: series.mode === "envelope" ? "envelope" : "raw",
-    countLabel: `${series.point_count.toLocaleString()} pts`,
-    resolutionLabel:
-      series.mode === "envelope" ? formatResolution(series.resolution_ms) : null,
-    emptyMessage: null,
-  };
 }
 
 export interface AnalysisPlotStackProps {
+  layout: PlotLayout;
   seriesBySignal: SeriesMap;
-  signals: string[];
   range: [number, number];
   onRangeChange: (startMs: number, endMs: number) => void;
+  onAssignSignals: (signals: string[], target: string) => void;
+  onRemoveSignal: (signal: string) => void;
+  onToggleRightAxis: (groupId: string, signal: string) => void;
   theme: "light" | "dark";
 }
 
+/** Explicit px height, percentage fails when the flex body has only min-height (no definite height). */
+const PLOT_STYLE = { width: "100%", height: "180px" } as const;
+
+function totalPoints(group: PlotGroup, seriesBySignal: SeriesMap): number {
+  return group.signals.reduce(
+    (sum, s) => sum + (seriesBySignal[s]?.point_count ?? 0),
+    0,
+  );
+}
+
 function PlotCard({
-  signal,
-  series,
-  color,
+  group,
+  seriesBySignal,
   range,
   isBottom,
   theme,
   onRangeChange,
+  onAssignSignals,
+  onRemoveSignal,
+  onToggleRightAxis,
 }: {
-  signal: string;
-  series: SignalSeries | undefined;
-  color: string;
+  group: PlotGroup;
+  seriesBySignal: SeriesMap;
   range: [number, number];
   isBottom: boolean;
   theme: "light" | "dark";
   onRangeChange: (startMs: number, endMs: number) => void;
+  onAssignSignals: (signals: string[], target: string) => void;
+  onRemoveSignal: (signal: string) => void;
+  onToggleRightAxis: (groupId: string, signal: string) => void;
 }) {
-  const status = seriesStatus(series);
+  const [dragOver, setDragOver] = useState(false);
   const isDark = theme === "dark";
   const chartFont = isDark ? "#e6e8eb" : "#111827";
   const chartGrid = isDark ? "#2c313a" : "#e5e7eb";
+  const rightSet = useMemo(() => new Set(group.rightAxis), [group.rightAxis]);
+  const showAxisBadges = group.signals.length > 1;
 
   const data = useMemo((): Data[] => {
-    if (!series || status.emptyMessage) return [];
-    return buildTraces(signal, series, color);
-  }, [series, signal, color, status.emptyMessage]);
+    return group.signals.flatMap((signal) => {
+      const series = seriesBySignal[signal];
+      if (!series || series.point_count === 0 || series.t.length === 0) return [];
+      return buildTraces(
+        signal,
+        series,
+        plotStroke(signal, theme),
+        rightSet.has(signal) ? "y2" : "y",
+      );
+    });
+  }, [group.signals, seriesBySignal, theme, rightSet]);
+
+  const hasRight = group.signals.some((s) => rightSet.has(s));
 
   const layout = useMemo((): Partial<Layout> => {
-    return {
+    const base: Partial<Layout> = {
       autosize: true,
-      margin: { t: 8, r: 16, b: isBottom ? 36 : 8, l: 52, pad: 2 },
+      margin: {
+        t: 8,
+        r: hasRight ? 52 : PLOT_AREA_MARGIN.right,
+        b: isBottom ? 36 : 8,
+        l: PLOT_AREA_MARGIN.left,
+        pad: 2,
+      },
       hovermode: "x unified",
       showlegend: false,
-      uirevision: signal,
+      uirevision: group.id,
       font: { color: chartFont, size: 11 },
       paper_bgcolor: "rgba(0,0,0,0)",
       plot_bgcolor: "rgba(0,0,0,0)",
@@ -120,13 +114,19 @@ function PlotCard({
         showspikes: true,
         spikemode: "across",
       },
-      yaxis: {
-        zeroline: false,
-        gridcolor: chartGrid,
-        fixedrange: true,
-      },
+      yaxis: { zeroline: false, gridcolor: chartGrid, fixedrange: true },
     };
-  }, [signal, range, isBottom, chartFont, chartGrid]);
+    if (hasRight) {
+      base.yaxis2 = {
+        overlaying: "y",
+        side: "right",
+        zeroline: false,
+        showgrid: false,
+        fixedrange: true,
+      };
+    }
+    return base;
+  }, [group.id, range, isBottom, chartFont, chartGrid, hasRight]);
 
   const config = useMemo(
     (): Partial<Config> => ({
@@ -143,22 +143,78 @@ function PlotCard({
     onRangeChange(next[0], next[1]);
   };
 
+  const points = totalPoints(group, seriesBySignal);
+
   return (
-    <article className="analysis-plot-card" data-signal={signal}>
+    <article
+      className={dragOver ? "analysis-plot-card is-drop-target" : "analysis-plot-card"}
+      data-testid="analysis-plot-card"
+      data-group={group.id}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes(SIGNALS_MIME)) {
+          e.preventDefault();
+          setDragOver(true);
+        }
+      }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const signals = readSignalsPayload(e.dataTransfer);
+        if (signals) onAssignSignals(signals, group.id);
+      }}
+    >
       <header className="analysis-plot-header">
-        <h3 className="analysis-plot-title">{signal}</h3>
-        <div className="analysis-plot-meta">
-          <span className={`analysis-plot-badge is-${status.modeLabel}`}>{status.modeLabel}</span>
-          <span className="analysis-plot-count">{status.countLabel}</span>
-          {status.resolutionLabel && (
-            <span className="analysis-plot-resolution">{status.resolutionLabel}</span>
-          )}
+        <div className="analysis-plot-legend">
+          {group.signals.map((signal) => {
+            const series = seriesBySignal[signal];
+            const mode = series ? series.mode : "none";
+            const onRight = rightSet.has(signal);
+            return (
+              <span
+                key={signal}
+                className="analysis-legend-chip"
+                style={{ borderColor: plotStroke(signal, theme) }}
+                title={`${signal}: ${mode}, ${series?.point_count ?? 0} pts`}
+              >
+                <span
+                  className="analysis-legend-swatch"
+                  style={{ background: plotStroke(signal, theme) }}
+                  aria-hidden="true"
+                />
+                {signal}
+                {showAxisBadges && (
+                  <button
+                    type="button"
+                    className="analysis-legend-axis"
+                    aria-label={
+                      onRight
+                        ? `Move ${signal} to the left axis`
+                        : `Move ${signal} to the right axis`
+                    }
+                    onClick={() => onToggleRightAxis(group.id, signal)}
+                  >
+                    {onRight ? "R" : "L"}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="analysis-legend-remove"
+                  aria-label={`Remove ${signal} from this plot`}
+                  onClick={() => onRemoveSignal(signal)}
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
         </div>
+        <span className="analysis-plot-count">{points.toLocaleString()} pts</span>
       </header>
       <div className="analysis-plot-body">
-        {status.emptyMessage ? (
+        {data.length === 0 ? (
           <div className="analysis-plot-empty" role="status">
-            {status.emptyMessage}
+            No samples in the visible range.
           </div>
         ) : (
           <Plot
@@ -176,20 +232,22 @@ function PlotCard({
   );
 }
 
-/** Explicit px height — percentage fails when the flex body has only min-height (no definite height). */
-const PLOT_STYLE = { width: "100%", height: "180px" } as const;
-
 /**
- * Vertically stacked linked plots: one card per selected signal, shared controlled x-range.
+ * Vertically stacked linked plots: one card per plot group, shared controlled x-range.
  */
 export function AnalysisPlotStack({
+  layout,
   seriesBySignal,
-  signals,
   range,
   onRangeChange,
+  onAssignSignals,
+  onRemoveSignal,
+  onToggleRightAxis,
   theme,
 }: AnalysisPlotStackProps) {
-  if (signals.length === 0) {
+  const [zoneOver, setZoneOver] = useState(false);
+
+  if (layout.length === 0) {
     return (
       <div className="analysis-plot-stack" data-empty="true">
         <div className="analysis-plot-empty" role="status">
@@ -201,18 +259,39 @@ export function AnalysisPlotStack({
 
   return (
     <div className="analysis-plot-stack">
-      {signals.map((signal, index) => (
+      {layout.map((group, index) => (
         <PlotCard
-          key={signal}
-          signal={signal}
-          series={seriesBySignal[signal]}
-          color={signalPlotColor(signal, theme)}
+          key={group.id}
+          group={group}
+          seriesBySignal={seriesBySignal}
           range={range}
-          isBottom={index === signals.length - 1}
+          isBottom={index === layout.length - 1}
           theme={theme}
           onRangeChange={onRangeChange}
+          onAssignSignals={onAssignSignals}
+          onRemoveSignal={onRemoveSignal}
+          onToggleRightAxis={onToggleRightAxis}
         />
       ))}
+      <div
+        className={zoneOver ? "analysis-new-plot-zone is-drop-target" : "analysis-new-plot-zone"}
+        data-testid="analysis-new-plot-zone"
+        onDragOver={(e) => {
+          if (e.dataTransfer.types.includes(SIGNALS_MIME)) {
+            e.preventDefault();
+            setZoneOver(true);
+          }
+        }}
+        onDragLeave={() => setZoneOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setZoneOver(false);
+          const signals = readSignalsPayload(e.dataTransfer);
+          if (signals) onAssignSignals(signals, NEW_PLOT);
+        }}
+      >
+        Drop signals here for a new plot
+      </div>
     </div>
   );
 }
