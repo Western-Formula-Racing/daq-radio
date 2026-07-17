@@ -1,7 +1,13 @@
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { RunRecord, Season, SensorsGroupedResponse, SeriesResponse } from "../types";
+import type {
+  RunRecord,
+  Season,
+  SensorsGroupedResponse,
+  SeriesResponse,
+  StatesResponse,
+} from "../types";
 
 vi.mock("../api", () => ({
   fetchSeasons: vi.fn(),
@@ -13,6 +19,7 @@ vi.mock("../api", () => ({
   updateNote: vi.fn(),
   querySeries: vi.fn(),
   querySensorData: vi.fn(),
+  queryStates: vi.fn(),
 }));
 
 vi.mock("react-plotly.js", () => ({
@@ -84,6 +91,7 @@ import {
   fetchSensors,
   fetchSensorsGrouped,
   querySeries,
+  queryStates,
 } from "../api";
 import { downloadSeriesCsv } from "../analysis/export-csv";
 import { serializeLayout } from "../analysis/plot-layout";
@@ -95,6 +103,7 @@ const fetchSensorsMock = vi.mocked(fetchSensors);
 const fetchSensorsGroupedMock = vi.mocked(fetchSensorsGrouped);
 const fetchScannerStatusMock = vi.mocked(fetchScannerStatus);
 const querySeriesMock = vi.mocked(querySeries);
+const queryStatesMock = vi.mocked(queryStates);
 const downloadSeriesCsvMock = vi.mocked(downloadSeriesCsv);
 
 const seasons: Season[] = [
@@ -173,6 +182,31 @@ function seriesResponse(
   };
 }
 
+function statesResponse(overrides: Partial<StatesResponse> = {}): StatesResponse {
+  return {
+    season: "wfr26",
+    start: "s",
+    end: "e",
+    lanes: [
+      {
+        id: "car",
+        signal: "State",
+        label: "Car",
+        segments: [
+          {
+            start_ms: Date.parse(run.start_utc) + 60_000,
+            end_ms: Date.parse(run.start_utc) + 120_000,
+            value: 4,
+            label: "DRIVE",
+          },
+        ],
+      },
+    ],
+    faults: [],
+    ...overrides,
+  };
+}
+
 function emptySeriesResponse(season: string, signal: string): SeriesResponse {
   return {
     season,
@@ -211,6 +245,7 @@ function stubAppApis() {
     updated_at: null,
   });
   querySeriesMock.mockResolvedValue(seriesResponse("wfr26", "INV_Analog_Input_2", 5));
+  queryStatesMock.mockResolvedValue(statesResponse());
 }
 
 async function flushInitialLoad() {
@@ -351,7 +386,9 @@ describe("AnalysisWorkspace", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     querySeriesMock.mockReset();
+    queryStatesMock.mockReset();
     downloadSeriesCsvMock.mockReset();
+    queryStatesMock.mockResolvedValue(statesResponse());
   });
 
   it("clears prior season plots when remounted with a new season key", async () => {
@@ -721,10 +758,12 @@ describe("multi-plot workspace", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     querySeriesMock.mockReset();
+    queryStatesMock.mockReset();
     downloadSeriesCsvMock.mockReset();
     window.localStorage.clear();
     requestRangeCalls.length = 0;
     stubGenericSeries();
+    queryStatesMock.mockResolvedValue(statesResponse());
   });
 
   it("requests the flattened signal list once for all groups", async () => {
@@ -900,5 +939,133 @@ describe("multi-plot workspace", () => {
     expect(
       screen.getByText(/Select a run window and one or more signals/i),
     ).toBeInTheDocument();
+  });
+});
+
+describe("state timeline wiring", () => {
+  const runsBySeason: Record<string, RunRecord[]> = {
+    WFR26: [run],
+    WFR25: [],
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    querySeriesMock.mockReset();
+    queryStatesMock.mockReset();
+    querySeriesMock.mockResolvedValue(seriesResponse("wfr26", "INV_Analog_Input_2", 5));
+    queryStatesMock.mockResolvedValue(statesResponse());
+  });
+
+  it("fetches states once when a run window is selected, even with no signals", async () => {
+    render(
+      <AnalysisWorkspace
+        season={seasons[0]}
+        runs={[run]}
+        grouped={grouped}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(queryStatesMock).toHaveBeenCalledTimes(1);
+    expect(queryStatesMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        season: "wfr26",
+        start: run.start_utc,
+        end: run.end_utc,
+      }),
+      expect.anything(),
+    );
+    expect(screen.getByTestId("analysis-timeline")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Car DRIVE" })).toBeInTheDocument();
+  });
+
+  it("does not refetch states on zoom", async () => {
+    const zoomSeason: Season = { name: "WFR26", year: 2026, table: "wfr26-states-zoom" };
+    render(
+      <AnalysisWorkspace
+        season={zoomSeason}
+        runs={[run]}
+        grouped={grouped}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_2" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(await screen.findByTestId("plotly-mock")).toBeInTheDocument();
+    expect(queryStatesMock).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId("plotly-zoom"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    // The zoom refires the series request but never the states request.
+    expect(queryStatesMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("zooms the plots when a timeline segment is clicked", async () => {
+    const clickSeason: Season = { name: "WFR26", year: 2026, table: "wfr26-states-click" };
+    render(
+      <AnalysisWorkspace
+        season={clickSeason}
+        runs={[run]}
+        grouped={grouped}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_2" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    querySeriesMock.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Car DRIVE" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    const segStart = new Date(Date.parse(run.start_utc) + 60_000).toISOString();
+    const segEnd = new Date(Date.parse(run.start_utc) + 120_000).toISOString();
+    expect(querySeriesMock).toHaveBeenCalledWith(
+      expect.objectContaining({ start: segStart, end: segEnd }),
+    );
+  });
+
+  it("shows a timeline error without blocking the plots", async () => {
+    const errSeason: Season = { name: "WFR26", year: 2026, table: "wfr26-states-error" };
+    queryStatesMock.mockRejectedValue(new Error("states down"));
+
+    render(
+      <AnalysisWorkspace
+        season={errSeason}
+        runs={[run]}
+        grouped={grouped}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_2" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(await screen.findByTestId("plotly-mock")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(/states down/i);
   });
 });

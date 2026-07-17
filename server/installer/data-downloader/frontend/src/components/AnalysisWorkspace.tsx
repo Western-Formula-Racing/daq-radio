@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { queryStates } from "../api";
 import { findSeasonWithData } from "../analysis/analysis-range";
 import { downloadSeriesCsv, seriesToCsv } from "../analysis/export-csv";
 import {
@@ -14,9 +15,10 @@ import {
 } from "../analysis/plot-layout";
 import type { SeriesMap } from "../analysis/series-cache";
 import { useSeriesData } from "../analysis/use-series-data";
-import type { RunRecord, Season, SensorsGroupedResponse } from "../types";
+import type { RunRecord, Season, SensorsGroupedResponse, StatesResponse } from "../types";
 import { AnalysisPlotStack } from "./AnalysisPlotStack";
 import { AnalysisSignalPicker } from "./AnalysisSignalPicker";
+import { AnalysisStateTimeline } from "./AnalysisStateTimeline";
 import { AnalysisToolbar } from "./AnalysisToolbar";
 
 const layoutStorageKey = (seasonName: string) => `analysis-layout:${seasonName}`;
@@ -89,6 +91,10 @@ export function AnalysisWorkspace({
   const [viewRange, setViewRange] = useState<[number, number] | null>(null);
   const [awaitingFirstResponse, setAwaitingFirstResponse] = useState(false);
   const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
+  const [statesData, setStatesData] = useState<StatesResponse | null>(null);
+  const [statesLoading, setStatesLoading] = useState(false);
+  const [statesError, setStatesError] = useState<string | null>(null);
+  const [statesReloadKey, setStatesReloadKey] = useState(0);
 
   const { seriesBySignal, loadedRequest, loading, error, requestRange, retry } = useSeriesData();
 
@@ -179,6 +185,38 @@ export function AnalysisWorkspace({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seasonTable, signalsKey, viewRange, requestRange, knownSignals]);
 
+  // Fetch the state timeline once per selected window; zoom is display-only.
+  useEffect(() => {
+    if (!fullRange || !isValidRange(fullRange[0], fullRange[1])) {
+      setStatesData(null);
+      setStatesError(null);
+      return;
+    }
+    const controller = new AbortController();
+    setStatesLoading(true);
+    setStatesError(null);
+    queryStates(
+      {
+        season: seasonTable,
+        start: new Date(fullRange[0]).toISOString(),
+        end: new Date(fullRange[1]).toISOString(),
+      },
+      { signal: controller.signal },
+    )
+      .then((response) => {
+        setStatesData(response);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        setStatesData(null);
+        setStatesError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setStatesLoading(false);
+      });
+    return () => controller.abort();
+  }, [seasonTable, fullRange, statesReloadKey]);
+
   // Mark first response complete once loading settles after a request.
   const wasLoadingRef = useRef(false);
   useEffect(() => {
@@ -266,6 +304,14 @@ export function AnalysisWorkspace({
     performExport();
   }, [exportDisabled, exportSeries, performExport]);
 
+  const handleTimelineSelect = useCallback((startMs: number, endMs: number) => {
+    setViewRange([startMs, endMs]);
+  }, []);
+
+  const handleStatesRetry = useCallback(() => {
+    setStatesReloadKey((key) => key + 1);
+  }, []);
+
   const pickerGrouped = grouped ?? EMPTY_GROUPED;
 
   const plotOptions = useMemo(
@@ -319,6 +365,17 @@ export function AnalysisWorkspace({
             </button>
           </div>
         </div>
+      )}
+
+      {fullRange && viewRange && (
+        <AnalysisStateTimeline
+          data={statesData}
+          loading={statesLoading}
+          error={statesError}
+          viewRange={viewRange}
+          onSelectRange={handleTimelineSelect}
+          onRetry={handleStatesRetry}
+        />
       )}
 
       <div className="analysis-grid">
