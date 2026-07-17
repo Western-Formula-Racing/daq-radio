@@ -102,3 +102,37 @@ export interface SensorsGroupedResponse {
   messages: MessageGroup[];
   ungrouped: string[];
 }
+
+export interface StateSegment {
+  start_ms: number;
+  end_ms: number;
+  value: number;
+  label: string;
+}
+
+export interface StateLane {
+  id: string;
+  signal: string;
+  label: string;
+  segments: StateSegment[];
+}
+
+export interface FaultEntry {
+  name: string;
+  source: "post" | "run";
+  segments: { start_ms: number; end_ms: number }[];
+}
+
+export interface StatesRequest {
+  season: string;
+  start: string;
+  end: string;
+}
+
+export interface StatesResponse {
+  season: string;
+  start: string;
+  end: string;
+  lanes: StateLane[];
+  faults: FaultEntry[];
+}
