@@ -136,3 +136,31 @@ export interface StatesResponse {
   lanes: StateLane[];
   faults: FaultEntry[];
 }
+
+export interface SavedConfigPlot {
+  signals: string[];
+  rightAxis: string[];
+}
+
+export interface SavedConfig {
+  id: string;
+  name: string;
+  note: string;
+  author: string;
+  season: string;
+  start: string;
+  end: string;
+  plots: SavedConfigPlot[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateConfigPayload {
+  name: string;
+  note: string;
+  author: string;
+  season: string;
+  start: string;
+  end: string;
+  plots: SavedConfigPlot[];
+}

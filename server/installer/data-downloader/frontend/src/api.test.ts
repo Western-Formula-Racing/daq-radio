@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { querySeries } from "./api";
+import { createAnalysisConfig, deleteAnalysisConfig, fetchAnalysisConfigs, querySeries } from "./api";
 
 describe("querySeries", () => {
   afterEach(() => {
@@ -97,5 +97,63 @@ describe("querySeries", () => {
         target_points: 4000,
       }),
     ).rejects.toThrow("Request failed (500)");
+  });
+});
+
+describe("analysis configs api", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("unwraps the configs array from the list response", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ configs: [{ id: "a", name: "n" }] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const configs = await fetchAnalysisConfigs();
+
+    expect(configs).toEqual([{ id: "a", name: "n" }]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/analysis-configs",
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
+  });
+
+  it("POSTs a create payload and returns the created config", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ id: "x", name: "brake" }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const created = await createAnalysisConfig({
+      name: "brake",
+      note: "",
+      author: "",
+      season: "wfr26",
+      start: "2026-06-20T15:00:00.000Z",
+      end: "2026-06-20T15:05:00.000Z",
+      plots: [{ signals: ["A"], rightAxis: [] }],
+    });
+
+    expect(created.id).toBe("x");
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.method).toBe("POST");
+  });
+
+  it("DELETEs by id", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 204, json: async () => ({}) });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await deleteAnalysisConfig("x");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/analysis-configs/x");
+    expect(init.method).toBe("DELETE");
   });
 });

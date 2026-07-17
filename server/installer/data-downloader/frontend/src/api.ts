@@ -1,6 +1,8 @@
 import {
+  CreateConfigPayload,
   RunRecord,
   RunsResponse,
+  SavedConfig,
   ScannerStatus,
   Season,
   SensorDataResponse,
@@ -115,4 +117,31 @@ export function queryStates(payload: StatesRequest, init?: RequestInit): Promise
     body: JSON.stringify(payload),
     ...init,
   });
+}
+
+export function fetchAnalysisConfigs(): Promise<SavedConfig[]> {
+  return request<{ configs: SavedConfig[] }>("/api/analysis-configs").then((r) => r.configs);
+}
+
+export function createAnalysisConfig(payload: CreateConfigPayload): Promise<SavedConfig> {
+  return request("/api/analysis-configs", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAnalysisConfig(
+  id: string,
+  patch: { name?: string; note?: string },
+): Promise<SavedConfig> {
+  return request(`/api/analysis-configs/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+}
+
+export function deleteAnalysisConfig(id: string): Promise<void> {
+  return request<Record<string, never>>(`/api/analysis-configs/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  }).then(() => undefined);
 }
