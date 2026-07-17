@@ -362,6 +362,60 @@ describe("Analysis workspace tabs (App)", () => {
     expect(staleCalls).toHaveLength(0);
   });
 
+  it("clears the previous season's grouped sensors on a cross-season load so a target-only signal is not pruned before its season's sensor list arrives", async () => {
+    const wfr25OnlySignal = "Brake_Only_WFR25";
+    const wfr25Grouped: SensorsGroupedResponse = {
+      updated_at: null,
+      dbc_source: "github",
+      messages: [],
+      ungrouped: [wfr25OnlySignal],
+    };
+
+    // WFR26's grouped response (the season active before the cross-season load) never
+    // contains the WFR25-only signal, matching the season prefix in the review scenario.
+    fetchSensorsGroupedMock.mockImplementation(async (season?: string) => {
+      if (season === "WFR25") return wfr25Grouped;
+      return grouped;
+    });
+
+    const savedConfig = {
+      id: "cross-1",
+      name: "WFR25 view",
+      note: "",
+      author: "",
+      season: "wfr25",
+      start: "2026-06-20T15:00:00.000Z",
+      end: "2026-06-20T15:05:00.000Z",
+      plots: [{ signals: [wfr25OnlySignal], rightAxis: [] }],
+      created_at: "2026-06-20T15:06:00.000Z",
+      updated_at: "2026-06-20T15:06:00.000Z",
+    };
+    const { fetchAnalysisConfigs } = await import("../api");
+    (fetchAnalysisConfigs as unknown as ReturnType<typeof vi.fn>).mockResolvedValue([savedConfig]);
+
+    render(<App />);
+    await flushInitialLoad();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Analysis" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /saved views/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Load" }));
+    // Cross-season load asks for confirmation before App switches the active season.
+    fireEvent.click(screen.getByRole("button", { name: /switch and load/i }));
+
+    // Season switch remounts AnalysisWorkspace synchronously; let App's async
+    // refetch of WFR25's grouped sensors settle before asserting.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const checkbox = await screen.findByRole("checkbox", { name: wfr25OnlySignal });
+    expect(checkbox).toHaveAttribute("aria-checked", "true");
+  });
+
   it("preserves Downloader local form state across Analysis tab round-trips", async () => {
     render(<App />);
     await flushInitialLoad();

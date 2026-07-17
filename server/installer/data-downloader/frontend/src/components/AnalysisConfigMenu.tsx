@@ -58,7 +58,7 @@ export function AnalysisConfigMenu({
     const q = filter.trim().toLowerCase();
     if (!q) return configs;
     return configs.filter((c) =>
-      [c.name, c.author, c.note, c.season].some((f) => f.toLowerCase().includes(q)),
+      [c.name, c.author, c.note, c.season].some((f) => (f ?? "").toLowerCase().includes(q)),
     );
   }, [configs, filter]);
   const visible = filtered.slice(0, MAX_VISIBLE);

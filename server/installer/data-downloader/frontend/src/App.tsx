@@ -40,6 +40,12 @@ export default function App() {
   const [runs, setRuns] = useState<RunsResponse | null>(null);
   const [sensors, setSensors] = useState<SensorsResponse | null>(null);
   const [sensorsGrouped, setSensorsGrouped] = useState<SensorsGroupedResponse | null>(null);
+  // Season sensorsGrouped was actually fetched for. A season switch remounts the
+  // analysis workspace synchronously in the same render, before loadData's async
+  // refetch resolves; deriving from this (rather than clearing sensorsGrouped in an
+  // effect) keeps the mismatch resolved within that same render, so the workspace's
+  // own mount-time prune effect never sees a signal list from the wrong season.
+  const [sensorsGroupedSeason, setSensorsGroupedSeason] = useState<string>("");
   const [runsBySeason, setRunsBySeason] = useState<Record<string, RunRecord[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -84,6 +90,7 @@ export default function App() {
       setRuns(runsData);
       setSensors(sensorsData);
       setSensorsGrouped(groupedData);
+      setSensorsGroupedSeason(currentSeason);
       if (currentSeason) {
         setRunsBySeason((prev) => ({ ...prev, [currentSeason]: runsData.runs }));
       }
@@ -295,6 +302,14 @@ export default function App() {
   const activeSeason = useMemo(
     () => seasons.find((s) => s.name === selectedSeason) ?? null,
     [seasons, selectedSeason],
+  );
+
+  // Withhold sensorsGrouped from the analysis workspace until it is confirmed to belong
+  // to the currently selected season, so a cross-season remount never hands the child a
+  // signal list from the season it just switched away from.
+  const analysisGrouped = useMemo(
+    () => (sensorsGroupedSeason === selectedSeason ? sensorsGrouped : null),
+    [sensorsGrouped, sensorsGroupedSeason, selectedSeason],
   );
 
   const handleCrossSeasonLoad = useCallback(
@@ -536,7 +551,7 @@ export default function App() {
             key={selectedSeason}
             season={activeSeason}
             runs={runs?.runs ?? []}
-            grouped={sensorsGrouped}
+            grouped={analysisGrouped}
             theme={theme}
             runsBySeason={runsBySeason}
             pendingConfig={pendingConfig}
