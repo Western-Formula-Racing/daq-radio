@@ -684,10 +684,14 @@ body {
 
 .analysis-grid {
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr) 320px;
   gap: 1rem;
   align-items: start;
   min-height: 420px;
+}
+
+.analysis-grid.is-config-collapsed {
+  grid-template-columns: 320px minmax(0, 1fr) auto;
 }
 
 .analysis-rail {
@@ -901,11 +905,13 @@ body {
 }
 
 @media (max-width: 849px) {
-  .analysis-grid {
+  .analysis-grid,
+  .analysis-grid.is-config-collapsed {
     grid-template-columns: 1fr;
   }
 
-  .analysis-rail {
+  .analysis-rail,
+  .analysis-config-rail {
     position: static;
     max-height: 320px;
   }
@@ -1189,32 +1195,80 @@ body {
   font-weight: 600;
 }
 
-.analysis-config-bar {
+.analysis-config-rail {
+  position: sticky;
+  top: 0.75rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  padding: 0.85rem;
+}
+
+.analysis-config-rail.is-collapsed {
+  padding: 0;
+  overflow: hidden;
+  align-self: stretch;
+}
+
+.analysis-config-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
 
-.analysis-config-menu {
-  position: relative;
-  display: inline-block;
+.analysis-config-title {
+  margin: 0;
+  font-size: 0.95rem;
 }
 
-.analysis-config-panel {
-  position: absolute;
-  right: 0;
-  z-index: 20;
-  margin-top: 0.35rem;
-  width: 22rem;
-  /* Never let the dropdown run past the left viewport edge on narrow screens. */
-  max-width: calc(100vw - 2rem);
-  max-height: 26rem;
-  overflow-y: auto;
-  padding: 0.75rem;
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+.analysis-config-collapse {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.analysis-config-collapse:hover {
+  background: var(--surface-hover, rgba(127, 127, 127, 0.12));
+  color: var(--text);
+}
+
+.analysis-config-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  height: 100%;
+  min-height: 8rem;
+  padding: 0.85rem 0.5rem;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--border);
+  border-radius: 12px 0 0 12px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.analysis-config-tab span {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  white-space: nowrap;
+}
+
+.analysis-config-tab:hover {
+  background: var(--surface-hover, rgba(127, 127, 127, 0.08));
 }
 
 .analysis-config-panel-head,

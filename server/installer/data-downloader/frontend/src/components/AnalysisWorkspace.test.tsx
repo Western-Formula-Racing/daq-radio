@@ -398,8 +398,8 @@ describe("Analysis workspace tabs (App)", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Analysis" }));
 
-    fireEvent.click(await screen.findByRole("button", { name: /saved views/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Load" }));
+    // The saved-views box is expanded by default; Load appears once configs load.
+    fireEvent.click(await screen.findByRole("button", { name: "Load" }));
     // Cross-season load asks for confirmation before App switches the active season.
     fireEvent.click(screen.getByRole("button", { name: /switch and load/i }));
 
@@ -1212,8 +1212,8 @@ describe("saved analysis configs", () => {
         onCrossSeasonLoad={onCrossSeasonLoad}
       />,
     );
-    fireEvent.click(await screen.findByRole("button", { name: /saved views/i }));
-    fireEvent.click(screen.getByRole("button", { name: "Load" }));
+    // The saved-views box is expanded by default; Load appears once configs load.
+    fireEvent.click(await screen.findByRole("button", { name: "Load" }));
     // Cross-season load asks for confirmation, then routes up.
     fireEvent.click(screen.getByRole("button", { name: /switch/i }));
     expect(onCrossSeasonLoad).toHaveBeenCalledWith(expect.objectContaining({ id: "c1" }));

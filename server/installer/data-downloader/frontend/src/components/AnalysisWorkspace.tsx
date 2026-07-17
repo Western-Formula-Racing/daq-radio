@@ -24,6 +24,7 @@ import { AnalysisStateTimeline } from "./AnalysisStateTimeline";
 import { AnalysisToolbar } from "./AnalysisToolbar";
 
 const layoutStorageKey = (seasonName: string) => `analysis-layout:${seasonName}`;
+const configCollapsedKey = "analysis-config-collapsed";
 
 function knownSignalsOf(grouped: SensorsGroupedResponse | null): Set<string> | null {
   if (!grouped) return null;
@@ -117,6 +118,13 @@ export function AnalysisWorkspace({
   const [statesReloadKey, setStatesReloadKey] = useState(0);
   const [configs, setConfigs] = useState<SavedConfig[]>([]);
   const [crossSeasonPrompt, setCrossSeasonPrompt] = useState<SavedConfig | null>(null);
+  const [configCollapsed, setConfigCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem(configCollapsedKey) === "1";
+    } catch {
+      return false;
+    }
+  });
 
   const { seriesBySignal, loadedRequest, loading, error, requestRange, retry } = useSeriesData();
 
@@ -242,6 +250,18 @@ export function AnalysisWorkspace({
     if (crossSeasonPrompt) onCrossSeasonLoad?.(crossSeasonPrompt);
     setCrossSeasonPrompt(null);
   }, [crossSeasonPrompt, onCrossSeasonLoad]);
+
+  const handleToggleConfigCollapse = useCallback(() => {
+    setConfigCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem(configCollapsedKey, next ? "1" : "0");
+      } catch {
+        // Ignore persistence failures in restricted environments.
+      }
+      return next;
+    });
+  }, []);
 
   const handleSaveConfig = useCallback(
     (fields: { name: string; note: string; author: string }) => {
@@ -449,17 +469,6 @@ export function AnalysisWorkspace({
         onExport={handleExport}
       />
 
-      <div className="analysis-config-bar">
-        <AnalysisConfigMenu
-          configs={configs}
-          activeSeasonTable={seasonTable}
-          saveDisabled={saveConfigDisabled}
-          onSave={handleSaveConfig}
-          onLoad={handleLoadConfig}
-          onDelete={handleDeleteConfig}
-        />
-      </div>
-
       {crossSeasonPrompt && (
         <div className="analysis-export-confirm" role="status">
           <p>
@@ -506,7 +515,7 @@ export function AnalysisWorkspace({
         </div>
       )}
 
-      <div className="analysis-grid">
+      <div className={`analysis-grid${configCollapsed ? " is-config-collapsed" : ""}`}>
         <aside className="analysis-rail">
           <AnalysisSignalPicker
             grouped={pickerGrouped}
@@ -601,6 +610,17 @@ export function AnalysisWorkspace({
               </div>
             )}
         </section>
+
+        <AnalysisConfigMenu
+          configs={configs}
+          activeSeasonTable={seasonTable}
+          saveDisabled={saveConfigDisabled}
+          collapsed={configCollapsed}
+          onToggleCollapse={handleToggleConfigCollapse}
+          onSave={handleSaveConfig}
+          onLoad={handleLoadConfig}
+          onDelete={handleDeleteConfig}
+        />
       </div>
     </div>
   );

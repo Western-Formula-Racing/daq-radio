@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import type { SavedConfig, SavedConfigPlot } from "../types";
 
@@ -39,6 +40,8 @@ export interface AnalysisConfigMenuProps {
   configs: SavedConfig[];
   activeSeasonTable: string;
   saveDisabled: boolean;
+  collapsed: boolean;
+  onToggleCollapse: () => void;
   onSave: (fields: { name: string; note: string; author: string }) => void;
   onLoad: (config: SavedConfig) => void;
   onDelete: (id: string) => void;
@@ -48,11 +51,12 @@ export function AnalysisConfigMenu({
   configs,
   activeSeasonTable,
   saveDisabled,
+  collapsed,
+  onToggleCollapse,
   onSave,
   onLoad,
   onDelete,
 }: AnalysisConfigMenuProps) {
-  const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
@@ -81,151 +85,161 @@ export function AnalysisConfigMenu({
     setSaving(false);
   };
 
+  if (collapsed) {
+    return (
+      <aside className="analysis-config-rail is-collapsed">
+        <button
+          type="button"
+          className="analysis-config-tab"
+          aria-label="Expand saved views"
+          onClick={onToggleCollapse}
+        >
+          <ChevronLeft size={16} aria-hidden="true" />
+          <span>Saved views ({configs.length})</span>
+        </button>
+      </aside>
+    );
+  }
+
   return (
-    <div className="analysis-config-menu">
-      <button
-        type="button"
-        className="button secondary"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        Saved views ({configs.length})
-      </button>
+    <aside className="analysis-config-rail" aria-label="Saved views">
+      <div className="analysis-config-head">
+        <h3 className="analysis-config-title">Saved views ({configs.length})</h3>
+        <button
+          type="button"
+          className="analysis-config-collapse"
+          aria-label="Collapse saved views"
+          onClick={onToggleCollapse}
+        >
+          <ChevronRight size={18} aria-hidden="true" />
+        </button>
+      </div>
 
-      {open && (
-        <div className="analysis-config-panel" role="dialog" aria-label="Saved views">
-          <p className="analysis-config-notice">
-            Saved views are shared with everyone who can access this page.
-          </p>
-          <div className="analysis-config-panel-head">
-            <button
-              type="button"
-              className="button"
-              disabled={saveDisabled}
-              onClick={() => setSaving((v) => !v)}
-            >
-              Save current view
-            </button>
-            <input
-              type="text"
-              className="selector-input"
-              placeholder="Filter…"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              aria-label="Filter saved views"
-            />
-          </div>
+      <p className="analysis-config-notice">
+        Saved views are shared with everyone who can access this page.
+      </p>
 
-          {saving && (
-            <div className="analysis-config-form">
-              <input
-                type="text"
-                className="selector-input"
-                placeholder="Title (required)"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                aria-label="Config title"
-              />
-              <input
-                type="text"
-                className="selector-input"
-                placeholder="Note (optional)"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                aria-label="Config note"
-              />
-              <input
-                type="text"
-                className="selector-input"
-                placeholder="Saved by (optional)"
-                value={author}
-                onChange={(e) => setAuthor(e.target.value)}
-                aria-label="Config author"
-              />
-              <button
-                type="button"
-                className="button"
-                disabled={name.trim() === ""}
-                onClick={handleSaveSubmit}
-              >
-                Save
-              </button>
-            </div>
-          )}
+      <div className="analysis-config-panel-head">
+        <button
+          type="button"
+          className="button"
+          disabled={saveDisabled}
+          onClick={() => setSaving((v) => !v)}
+        >
+          Save current view
+        </button>
+        <input
+          type="text"
+          className="selector-input"
+          placeholder="Filter…"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          aria-label="Filter saved views"
+        />
+      </div>
 
-          {filtered.length === 0 ? (
-            <p className="analysis-config-empty">No saved views yet.</p>
-          ) : (
-            <ul className="analysis-config-list">
-              {visible.map((cfg) => (
-                <li key={cfg.id} className="analysis-config-row">
-                  <div className="analysis-config-row-main">
-                    <span className="analysis-config-name">{cfg.name}</span>
-                    <span
-                      className={
-                        cfg.season === activeSeasonTable
-                          ? "tag analysis-config-season"
-                          : "tag analysis-config-season is-other"
-                      }
+      {saving && (
+        <div className="analysis-config-form">
+          <input
+            type="text"
+            className="selector-input"
+            placeholder="Title (required)"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            aria-label="Config title"
+          />
+          <input
+            type="text"
+            className="selector-input"
+            placeholder="Note (optional)"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            aria-label="Config note"
+          />
+          <input
+            type="text"
+            className="selector-input"
+            placeholder="Saved by (optional)"
+            value={author}
+            onChange={(e) => setAuthor(e.target.value)}
+            aria-label="Config author"
+          />
+          <button
+            type="button"
+            className="button"
+            disabled={name.trim() === ""}
+            onClick={handleSaveSubmit}
+          >
+            Save
+          </button>
+        </div>
+      )}
+
+      {filtered.length === 0 ? (
+        <p className="analysis-config-empty">No saved views yet.</p>
+      ) : (
+        <ul className="analysis-config-list">
+          {visible.map((cfg) => (
+            <li key={cfg.id} className="analysis-config-row">
+              <div className="analysis-config-row-main">
+                <span className="analysis-config-name">{cfg.name}</span>
+                <span
+                  className={
+                    cfg.season === activeSeasonTable
+                      ? "tag analysis-config-season"
+                      : "tag analysis-config-season is-other"
+                  }
+                >
+                  {cfg.season}
+                </span>
+              </div>
+              {cfg.author && <span className="analysis-config-author">{cfg.author}</span>}
+              {cfg.note && <span className="analysis-config-note">{cfg.note}</span>}
+              <span className="analysis-config-plots">{formatPlotSummary(cfg.plots)}</span>
+              <span className="analysis-config-window">{formatWindow(cfg.start, cfg.end)}</span>
+              <div className="analysis-config-row-actions">
+                <button type="button" className="button secondary" onClick={() => onLoad(cfg)}>
+                  Load
+                </button>
+                {confirmDelete === cfg.id ? (
+                  <>
+                    <button
+                      type="button"
+                      className="button danger"
+                      onClick={() => {
+                        onDelete(cfg.id);
+                        setConfirmDelete(null);
+                      }}
                     >
-                      {cfg.season}
-                    </span>
-                  </div>
-                  {cfg.author && <span className="analysis-config-author">{cfg.author}</span>}
-                  {cfg.note && <span className="analysis-config-note">{cfg.note}</span>}
-                  <span className="analysis-config-plots">{formatPlotSummary(cfg.plots)}</span>
-                  <span className="analysis-config-window">
-                    {formatWindow(cfg.start, cfg.end)}
-                  </span>
-                  <div className="analysis-config-row-actions">
+                      Delete?
+                    </button>
                     <button
                       type="button"
                       className="button secondary"
-                      onClick={() => onLoad(cfg)}
+                      onClick={() => setConfirmDelete(null)}
                     >
-                      Load
+                      Cancel
                     </button>
-                    {confirmDelete === cfg.id ? (
-                      <>
-                        <button
-                          type="button"
-                          className="button danger"
-                          onClick={() => {
-                            onDelete(cfg.id);
-                            setConfirmDelete(null);
-                          }}
-                        >
-                          Delete?
-                        </button>
-                        <button
-                          type="button"
-                          className="button secondary"
-                          onClick={() => setConfirmDelete(null)}
-                        >
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        className="button secondary"
-                        onClick={() => setConfirmDelete(cfg.id)}
-                      >
-                        Delete
-                      </button>
-                    )}
-                  </div>
-                </li>
-              ))}
-              {hiddenCount > 0 && (
-                <li className="analysis-config-more">
-                  {hiddenCount} more — refine the filter to see them.
-                </li>
-              )}
-            </ul>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={() => setConfirmDelete(cfg.id)}
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            </li>
+          ))}
+          {hiddenCount > 0 && (
+            <li className="analysis-config-more">
+              {hiddenCount} more — refine the filter to see them.
+            </li>
           )}
-        </div>
+        </ul>
       )}
-    </div>
+    </aside>
   );
 }
