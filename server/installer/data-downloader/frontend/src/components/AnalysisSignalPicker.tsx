@@ -16,6 +16,7 @@ export interface AnalysisSignalPickerProps {
   grouped: SensorsGroupedResponse;
   selected: ReadonlySet<string>;
   onToggle: (signal: string) => void;
+  onClearAll?: () => void;
   onAssignSignals?: (signals: string[], target: string) => void;
   assignments?: Record<string, number>;
   plotOptions?: Array<{ id: string; label: string }>;
@@ -137,6 +138,7 @@ export function AnalysisSignalPicker({
   grouped,
   selected,
   onToggle,
+  onClearAll,
   onAssignSignals,
   assignments,
   plotOptions,
@@ -185,9 +187,20 @@ export function AnalysisSignalPicker({
         <label className="selector-label" htmlFor="analysis-signal-search">
           Signals
         </label>
-        <p className="selector-meta analysis-signal-picker-count" aria-live="polite">
-          {selected.size} / {maxSelected} selected
-        </p>
+        <div className="analysis-signal-picker-meta">
+          <p className="selector-meta analysis-signal-picker-count" aria-live="polite">
+            {selected.size} / {maxSelected} selected
+          </p>
+          <button
+            type="button"
+            className="button secondary analysis-signal-clear"
+            onClick={onClearAll}
+            disabled={!onClearAll || selected.size === 0}
+            aria-label="Clear all selected signals"
+          >
+            Clear all
+          </button>
+        </div>
       </div>
 
       <input

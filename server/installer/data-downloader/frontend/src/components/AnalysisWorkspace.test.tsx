@@ -476,6 +476,53 @@ describe("AnalysisWorkspace", () => {
     expect(screen.getByTestId("analysis-empty")).toBeInTheDocument();
   });
 
+  it("shows a 'Refreshing' overlay over the previous plots while a refresh is in flight", async () => {
+    const refreshSeason: Season = { name: "WFR26", year: 2026, table: "wfr26-refresh-overlay" };
+    let resolveSecond!: (value: SeriesResponse) => void;
+    querySeriesMock
+      .mockResolvedValueOnce(seriesResponse(refreshSeason.table, "INV_Analog_Input_2", 5))
+      .mockReturnValueOnce(
+        new Promise<SeriesResponse>((resolve) => {
+          resolveSecond = resolve;
+        }),
+      );
+
+    render(
+      <AnalysisWorkspace
+        season={refreshSeason}
+        runs={[run]}
+        grouped={grouped}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "INV_Analog_Input_2" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(await screen.findByTestId("plotly-mock")).toBeInTheDocument();
+
+    // Zoom fires a second /api/series request; the first response stays visible.
+    fireEvent.click(screen.getByTestId("plotly-zoom"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(screen.queryByTestId("analysis-empty")).toBeNull();
+    expect(screen.getByTestId("analysis-refreshing")).toBeInTheDocument();
+    expect(await screen.findByTestId("plotly-mock")).toBeInTheDocument();
+
+    await act(async () => {
+      resolveSecond(emptySeriesResponse(refreshSeason.table, "INV_Analog_Input_2"));
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByTestId("analysis-refreshing")).toBeNull();
+    expect(screen.getByTestId("analysis-empty")).toBeInTheDocument();
+  });
+
   it("asks for inline confirmation before exporting envelope data", async () => {
     const envelopeSeason: Season = { name: "WFR26", year: 2026, table: "wfr26-envelope" };
     querySeriesMock.mockResolvedValue(

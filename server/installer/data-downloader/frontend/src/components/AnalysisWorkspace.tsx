@@ -134,6 +134,10 @@ export function AnalysisWorkspace({
     setPlots((prev) => toggleSignal(prev, signal));
   }, []);
 
+  const handleClearAll = useCallback(() => {
+    setPlots([]);
+  }, []);
+
   const handleAssignSignals = useCallback((signals: string[], target: string) => {
     setPlots((prev) => assignSignals(prev, signals, target));
   }, []);
@@ -277,6 +281,11 @@ export function AnalysisWorkspace({
     viewRange != null &&
     !hasPlottableSeries(seriesBySignal, selectedSignals);
 
+  // True only when we still have plots rendered AND a refresh is in flight
+  // (signal/window change after the first response). Drives the "Refreshing"
+  // overlay instead of letting the plot stack silently redraw.
+  const refreshInFlight = !error && (loading || awaitingFirstResponse) && !showEmpty && (awaitingFirstResponse || hasPlottableSeries(seriesBySignal, selectedSignals) || wrongSeasonHint != null);
+
   const keepPreviousPlots =
     !error &&
     selectedSignals.length > 0 &&
@@ -373,6 +382,7 @@ export function AnalysisWorkspace({
             grouped={pickerGrouped}
             selected={selectedSet}
             onToggle={handleToggleSignal}
+            onClearAll={handleClearAll}
             onAssignSignals={handleAssignSignals}
             assignments={assignments}
             plotOptions={plotOptions}
@@ -420,18 +430,36 @@ export function AnalysisWorkspace({
           )}
 
           {!error && keepPreviousPlots && viewRange && (
-            <AnalysisPlotStack
-              layout={plots}
-              seriesBySignal={seriesBySignal}
-              range={viewRange}
-              onRangeChange={handlePlotRangeChange}
-              onAssignSignals={handleAssignSignals}
-              onRemoveSignal={handleToggleSignal}
-              onToggleRightAxis={handleToggleRightAxis}
-              theme={theme}
-            />
+            <div className="analysis-plot-stack-wrap">
+              <AnalysisPlotStack
+                layout={plots}
+                seriesBySignal={seriesBySignal}
+                range={viewRange}
+                onRangeChange={handlePlotRangeChange}
+                onAssignSignals={handleAssignSignals}
+                onRemoveSignal={handleToggleSignal}
+                onToggleRightAxis={handleToggleRightAxis}
+                theme={theme}
+              />
+              {refreshInFlight && (
+                <div className="analysis-refreshing" role="status" data-testid="analysis-refreshing">
+                  Refreshing…
+                </div>
+              )}
+            </div>
           )}
 
+          {!error &&
+            !awaitingFirstResponse &&
+            !loading &&
+            !showEmpty &&
+            !keepPreviousPlots &&
+            !fullRange && (
+              <div className="analysis-idle" role="status" data-testid="analysis-idle-no-window">
+                <strong>{selectedSignals.length} signal{selectedSignals.length === 1 ? "" : "s"} selected.</strong>
+                <p>Select a run window or time range to plot them.</p>
+              </div>
+            )}
           {!error &&
             !awaitingFirstResponse &&
             !loading &&
