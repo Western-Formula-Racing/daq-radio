@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import type { SavedConfig, SavedConfigPlot } from "../types";
 
@@ -128,14 +128,16 @@ export function AnalysisConfigMenu({
         >
           Save current view
         </button>
-        <input
-          type="text"
-          className="selector-input"
-          placeholder="Filter…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          aria-label="Filter saved views"
-        />
+        <div className="analysis-config-filter">
+          <Search size={14} aria-hidden="true" />
+          <input
+            type="text"
+            placeholder="Filter…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            aria-label="Filter saved views"
+          />
+        </div>
       </div>
 
       {saving && (
