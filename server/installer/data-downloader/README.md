@@ -92,6 +92,7 @@ The Analysis tab is a post-session analytics workspace that lives alongside the 
 - Groups signals into separate plots with independent dual Y-axes, persisted per season in `localStorage`.
 - Renders a vehicle state timeline below the plots showing VCU state, inverter VSM state, and PM100 fault intervals decoded from the CAN bitfields.
 - Exports visible series data to CSV.
+- Saves and loads named "Analysis Views" (season, time window, and plot layout) to a shared JSON store so any user can reload a teammate's plot setup, including across seasons.
 
 ### Architecture
 
@@ -141,6 +142,12 @@ flowchart LR
 | `envelope` | estimated rows per signal >= 100 000 | `t`, `min`, `max`, `avg` |
 
 The `target_points` parameter (default 4 000, max 20 000) controls the bucket count in envelope mode. The client auto-scales `target_points` based on the number of selected signals to stay within a shared 1 M point budget.
+
+### Saved analysis views
+
+The `AnalysisConfigMenu` component (a collapsible box on the right side of the Analysis tab) lets a user save the current season, time window, and plot layout (signal groups + right-axis assignments) as a named view, and reload or delete any previously saved view. Saved views are **shared** across all users of the deployment — they are not per-browser or per-user — and the UI shows a notice to that effect. Loading a view whose `season` differs from the one currently open switches the workspace to that season before applying the layout.
+
+Views are persisted server-side in `data/analysis_configs.json` via `AnalysisConfigsRepository` (`backend/storage.py`), independent of the per-season `localStorage` layout described above.
 
 ---
 
@@ -237,6 +244,36 @@ Response shape:
 
 State lanes are derived by detecting value transitions with a 5-second gap tolerance. Labels come from the DBC `VAL_` definitions when available. Fault segments are decoded from the PM100 `INV_Post_Fault_Lo/Hi` and `INV_Run_Fault_Lo/Hi` bitfields using the Cascadia Motion CAN protocol fault name tables.
 
+### GET /api/analysis-configs
+
+Returns all saved analysis views: `{"configs": [...]}`, newest first.
+
+### POST /api/analysis-configs
+
+Creates a saved view. Request body:
+
+```json
+{
+  "name": "Endurance overheating check",
+  "note": "Motor temp vs pack voltage",
+  "author": "jsmith",
+  "season": "wfr26",
+  "start": "2026-05-10T14:00:00Z",
+  "end": "2026-05-10T14:30:00Z",
+  "plots": [{ "signals": ["Motor_Speed", "Motor_Temp"], "rightAxis": ["Motor_Temp"] }]
+}
+```
+
+`season` must be a known season table, `start` must be before `end`, and each plot needs at least one signal with `rightAxis` a subset of `signals`. Returns the created config (with `id`, `created_at`, `updated_at`) with status 201.
+
+### PATCH /api/analysis-configs/{config_id}
+
+Renames a saved view and/or updates its note (`name`, `note`, both optional). 404 if the id doesn't exist.
+
+### DELETE /api/analysis-configs/{config_id}
+
+Deletes a saved view, returning 204. 404 if the id doesn't exist.
+
 ---
 
 ## Analytics frontend structure
@@ -248,6 +285,7 @@ frontend/src/
 │   ├── export-csv.ts            Series-to-CSV conversion and download trigger
 │   ├── plot-layout.ts           Pure model: groups, signal toggling, assignment, dual axis
 │   ├── plot-traces.ts           Plotly trace and layout builders for raw/envelope data
+│   ├── saved-config.ts          Converts between saved-view API payloads and the plot-layout model
 │   ├── series-cache.ts          LRU cache with a shared 1M point budget
 │   ├── state-timeline.ts        Severity classification, segment box geometry, formatting
 │   └── use-series-data.ts       React hook: debounced fetch, cache, retry, clear
@@ -257,6 +295,7 @@ frontend/src/
 │   ├── AnalysisSignalPicker.tsx  DBC-grouped signal list, click/drag to assign
 │   ├── AnalysisPlotStack.tsx     Plotly multi-plot renderer with drop targets
 │   ├── AnalysisStateTimeline.tsx Collapsible state and fault lane visualization
+│   ├── AnalysisConfigMenu.tsx    Collapsible saved-views box: save/load/rename/delete
 │   ├── PlotAssignMenu.tsx        Accessible combobox for plot reassignment
 │   └── sensor-palette.ts        DJB2-hashed subsystem color palette
 └── types.ts                     Shared TypeScript interfaces
@@ -279,12 +318,15 @@ backend/
 ├── series_queries.py      Validation, density estimation, raw/envelope SQL, point budget
 ├── state_queries.py        State lane assembly, PM100 fault bitfield decoding
 ├── dbc_utils.py            DBC loading, signal grouping, signal_choices() for VAL_ labels
-├── app.py                  FastAPI routes including /api/series and /api/states
+├── storage.py              JSON-backed repositories, incl. AnalysisConfigsRepository (saved views)
+├── app.py                  FastAPI routes including /api/series, /api/states, /api/analysis-configs
 └── tests/
-    ├── test_series_queries.py             12 tests: validation, SQL, envelope shaping
-    ├── test_series_endpoint.py            4 tests: happy path, errors, 503
-    ├── test_state_queries.py              20 tests: segments, gaps, seeds, fault decode
-    ├── test_states_endpoint.py            4 tests: happy path, unknown table, bad window
+    ├── test_series_queries.py             validation, SQL, envelope shaping
+    ├── test_series_endpoint.py            happy path, errors, 503
+    ├── test_state_queries.py              segments, gaps, seeds, fault decode
+    ├── test_states_endpoint.py            happy path, unknown table, bad window
+    ├── test_analysis_configs_repo.py      saved-view repository CRUD
+    ├── test_analysis_configs_endpoint.py  saved-view endpoint validation and CRUD
     └── test_compose_api_env_allowlist.py  Compose env hygiene
 ```
 
@@ -312,7 +354,7 @@ cd server/installer/data-downloader
 .venv/bin/python -m pytest backend/tests/ -v
 ```
 
-48 tests covering series query validation, SQL generation, envelope shaping, state segment assembly (value changes, gap detection, seed injection), PM100 fault decoding (hi/lo word, reserved bits), interval merging, and endpoint integration.
+~50 tests covering series query validation, SQL generation, envelope shaping, state segment assembly (value changes, gap detection, seed injection), PM100 fault decoding (hi/lo word, reserved bits), interval merging, endpoint integration, and the saved analysis-views repository + CRUD endpoint.
 
 ### Frontend
 
@@ -321,14 +363,18 @@ cd server/installer/data-downloader/frontend
 npx vitest run
 ```
 
-130 tests across 14 files covering all pure logic modules and every analysis component. Key coverage areas:
+~140 tests across 16 files covering all pure logic modules and every analysis component. Key coverage areas:
 
-- **AnalysisWorkspace** (21 tests) -- tab switching, season remount, persistence/pruning, refresh overlays, export guards, state timeline wiring, zoom interaction, error recovery
-- **useSeriesData** (13 tests) -- debounce, cache hits, error handling, retry, clear
-- **plot-traces** (12 tests) -- raw and envelope trace building, relayout parsing, axis configuration
-- **series-cache** (8 tests) -- LRU eviction, budget enforcement, oversize rejection
-- **state-timeline** (7 tests) -- severity classification, segment box geometry, formatting, fault overlap
-- **PlotAssignMenu** (6 tests) -- keyboard navigation, selection, accessibility
+- **AnalysisWorkspace** -- tab switching, season remount, persistence/pruning, refresh overlays, export guards, state timeline wiring, zoom interaction, error recovery, cross-season saved-view loads
+- **AnalysisConfigMenu** -- save/load/rename/delete flows, shared-view notice, validation errors
+- **saved-config** -- conversion between saved-view API payloads and the plot-layout model
+- **useSeriesData** -- debounce, cache hits, error handling, retry, clear
+- **plot-traces** -- raw and envelope trace building, relayout parsing, axis configuration
+- **series-cache** -- LRU eviction, budget enforcement, oversize rejection
+- **state-timeline** -- severity classification, segment box geometry, formatting, fault overlap
+- **PlotAssignMenu** -- keyboard navigation, selection, accessibility
+
+Exact counts drift as tests are added; run the suite above for the current numbers.
 
 ---
 
