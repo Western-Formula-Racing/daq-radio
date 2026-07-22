@@ -32,8 +32,8 @@ pending_approvals: dict[str, dict] = {}
 #                         "code": str, "output": str, "error": str,
 #                         "rag_context": str } ] }
 _thread_sessions: dict[str, dict] = {}
-_THREAD_SESSION_TTL = 2 * 3600  # 2 hours
-_THREAD_SESSION_MAX_TURNS = 10  # max conversation turns per thread
+_THREAD_SESSION_TTL = 24 * 3600  # 24 hours
+_THREAD_SESSION_MAX_TURNS = 15  # max conversation turns per thread
 
 
 def _prune_thread_sessions() -> None:
@@ -1042,7 +1042,7 @@ def process_events(client: SocketModeClient, req: SocketModeRequest):
                     send_slack_message(
                         response_channel,
                         text=f"⚠️ <@{user}> This thread has no active `!agent` session "
-                             "(they expire after 2h). Start a new `!agent` command.",
+                             "(they expire after 24h). Start a new `!agent` command.",
                         thread_ts=parent_ts,
                     )
                 else:
