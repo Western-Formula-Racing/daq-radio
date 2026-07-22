@@ -318,7 +318,7 @@ def handle_agent(user, command_full, thread_ts=None, timeout=120, channel=None):
                 text=(
                     "_React with :+1: to save this as a verified example, "
                     "or type `!approve` in this thread._\n"
-                    "_Reply in this thread to refine the result with follow-up instructions._"
+                    "_Type `!reply <instructions>` in this thread to refine the result._"
                 ),
                 thread_ts=thread_ts,
             )
@@ -356,7 +356,7 @@ def handle_agent(user, command_full, thread_ts=None, timeout=120, channel=None):
 
             send_slack_message(
                 channel,
-                text="_Reply in this thread with corrections to try again._",
+                text="_Type `!reply <corrections>` in this thread to try again._",
                 thread_ts=thread_ts,
             )
 
@@ -713,7 +713,7 @@ def handle_agent_followup(user, followup_text, thread_ts, session, channel=None)
             send_slack_message(
                 channel,
                 text=(
-                    "_React with :+1: to save, or keep replying to refine further._"
+                    "_React with :+1: to save, or `!reply <instructions>` to refine further._"
                 ),
                 thread_ts=thread_ts,
             )
@@ -745,7 +745,7 @@ def handle_agent_followup(user, followup_text, thread_ts, session, channel=None)
 
             send_slack_message(
                 channel,
-                text="_Reply with corrections to try again._",
+                text="_Type `!reply <corrections>` to try again._",
                 thread_ts=thread_ts,
             )
             log_interaction(user, f"[followup] {followup_text}", result, "failed", error)
@@ -790,6 +790,8 @@ def handle_help(user, thread_ts=None, channel=None):
         "                              Timeout: 1200s (20 minutes)\n"
         "                              Use for complex analysis or large datasets.\n"
         "                              Automatically retries up to 2 times if code fails.\n"
+        "!reply <instructions>      - Continue an !agent conversation from inside its thread,\n"
+        "                              reusing the prior code, output, and context.\n"
         "!approve                   - Save your most recent successful !agent result as a\n"
         "                              verified example (golden sample) for future queries.\n"
         "!aistats                   - Show AI code-generator observability dashboard:\n"
@@ -801,8 +803,9 @@ def handle_help(user, thread_ts=None, channel=None):
         "```\n"
         "💬 React with :+1: on the result message — same as !approve, just quicker.\n"
         "💬 Verified examples make future !agent queries smarter.\n"
-        "💬 *Reply in any !agent thread* to continue the conversation — the AI remembers\n"
-        "   the prior code, output, and context. No `!` prefix needed for follow-ups.\n"
+        "💬 *`!reply <instructions>` inside an !agent thread* continues the conversation —\n"
+        "   the AI remembers the prior code, output, and context. Plain replies are ignored,\n"
+        "   so teammates can discuss in the thread without triggering the bot.\n"
         "💬 Tip: You can also DM me these commands directly!"
     )
     send_slack_message(channel, text=help_text, thread_ts=thread_ts)
@@ -985,22 +988,9 @@ def process_events(client: SocketModeClient, req: SocketModeRequest):
 
         text = event.get("text", "").strip()
 
-        # ── Follow-up detection: plain-text reply in an agent thread ─────
-        thread_parent_ts = event.get("thread_ts")
-        if thread_parent_ts and not text.startswith("!"):
-            session = _get_thread_session(thread_parent_ts)
-            if session is not None:
-                response_channel = channel if is_dm else DEFAULT_CHANNEL
-                threading.Thread(
-                    target=handle_agent_followup,
-                    args=(user, text, thread_parent_ts, session),
-                    kwargs={"channel": response_channel},
-                    daemon=True,
-                ).start()
-                return
-            # Not an agent thread — ignore non-command messages
-            return
-
+        # Follow-ups now require an explicit `!reply` command (handled in the
+        # dispatch below) so teammates can chat freely in an !agent thread
+        # without the bot responding to every message.
         if not text.startswith("!"):
             return
 
@@ -1030,6 +1020,38 @@ def process_events(client: SocketModeClient, req: SocketModeRequest):
             handle_agent(user, command_full, thread_ts, timeout=120, channel=response_channel)
         elif main_command == "agent-debug":
             handle_agent(user, command_full, thread_ts, timeout=1200, channel=response_channel)
+        elif main_command == "reply":
+            followup_text = command_full[len("reply"):].strip()
+            parent_ts = event.get("thread_ts")
+            if not parent_ts:
+                send_slack_message(
+                    response_channel,
+                    text=f"⚠️ <@{user}> `!reply` only works inside an `!agent` thread — "
+                         "reply to the result message.",
+                    thread_ts=thread_ts,
+                )
+            elif not followup_text:
+                send_slack_message(
+                    response_channel,
+                    text=f"⚠️ <@{user}> Usage: `!reply <your follow-up instruction>`",
+                    thread_ts=parent_ts,
+                )
+            else:
+                session = _get_thread_session(parent_ts)
+                if session is None:
+                    send_slack_message(
+                        response_channel,
+                        text=f"⚠️ <@{user}> This thread has no active `!agent` session "
+                             "(they expire after 2h). Start a new `!agent` command.",
+                        thread_ts=parent_ts,
+                    )
+                else:
+                    threading.Thread(
+                        target=handle_agent_followup,
+                        args=(user, followup_text, parent_ts, session),
+                        kwargs={"channel": response_channel},
+                        daemon=True,
+                    ).start()
         elif main_command == "help":
             handle_help(user, thread_ts, response_channel)
         elif main_command == "approve":
