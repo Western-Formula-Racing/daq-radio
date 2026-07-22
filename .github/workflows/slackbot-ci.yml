@@ -56,6 +56,14 @@ jobs:
               socket_mode_request_listeners = []
           sm_mod.SocketModeClient = _FakeSMC  # type: ignore[attr-defined]
 
+          # slack_bot.py also imports SocketModeRequest / SocketModeResponse at
+          # module level (the former is a process_events annotation), so the
+          # stub submodules must expose them too.
+          req_mod = sys.modules["slack_sdk.socket_mode.request"]
+          req_mod.SocketModeRequest = type("SocketModeRequest", (), {})  # type: ignore[attr-defined]
+          resp_mod = sys.modules["slack_sdk.socket_mode.response"]
+          resp_mod.SocketModeResponse = type("SocketModeResponse", (), {})  # type: ignore[attr-defined]
+
           import requests as _req
           _orig_get = _req.get
           def _no_net(*a, **kw): raise RuntimeError("network disabled in CI")
