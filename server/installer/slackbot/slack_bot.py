@@ -2,6 +2,7 @@ import os
 import base64
 import json
 import datetime
+import tempfile
 import time as _time
 import threading
 from pathlib import Path
@@ -57,8 +58,14 @@ def _get_thread_session(thread_ts: str) -> dict | None:
     return session
 
 # --- Logging Configuration ---
-LOG_DIR = Path("/app/logs")
-LOG_DIR.mkdir(parents=True, exist_ok=True)
+# Defaults to the container's /app/logs; falls back to a temp dir when that
+# path isn't writable (e.g. importing the module on a CI runner).
+LOG_DIR = Path(os.environ.get("SLACKBOT_LOG_DIR", "/app/logs"))
+try:
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    LOG_DIR = Path(tempfile.gettempdir()) / "slackbot-logs"
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 # --- Slack App Configuration ---
 app_token = os.environ["SLACK_APP_TOKEN"]
