@@ -153,3 +153,24 @@ def test_torch_cell_imbalance_tracks_per_module():
     a = r.update(_sig("TORCH_M2_V1",
                       M2_Cell1_Voltage=3.95, M2_Cell2_Voltage=3.7, M2_Cell3_Voltage=3.7, M2_Cell4_Voltage=3.7))
     assert a is not None
+
+
+def test_vcu_state_change_fires_once_per_transition():
+    # VCU_State_Info arrives at bus rate; a MEMO must not re-fire on every
+    # frame that merely repeats the state we already reported.
+    r = VcuStateChangeRule()
+    r.update(_sig("VCU_State_Info", State="STANDBY"))
+    first = r.update(_sig("VCU_State_Info", State="DRIVE"))
+    assert first is not None
+    repeats = [r.update(_sig("VCU_State_Info", State="DRIVE")) for _ in range(5)]
+    assert repeats == [None] * 5
+
+
+def test_inv_vsm_state_fires_once_per_transition():
+    r = InvVsmStateRule()
+    r.update(_sig("M170_Internal_States", INV_VSM_State="idle"))
+    first = r.update(_sig("M170_Internal_States", INV_VSM_State="blink fault code state"))
+    assert first is not None
+    repeats = [r.update(_sig("M170_Internal_States", INV_VSM_State="blink fault code state"))
+               for _ in range(5)]
+    assert repeats == [None] * 5

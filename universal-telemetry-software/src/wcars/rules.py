@@ -93,9 +93,10 @@ class VcuStateChangeRule(BaseRule):
         state = decoded["signals"].get("State")
         if not isinstance(state, str):
             return None
-        if self._prev is not None and state != self._prev and state not in VcuStateFaultRule.FAULT_STATES:
-            return self._alert(Severity.MEMO, f"VCU {state}", f"from {self._prev}", None)
+        prev = self._prev
         self._prev = state
+        if prev is not None and state != prev and state not in VcuStateFaultRule.FAULT_STATES:
+            return self._alert(Severity.MEMO, f"VCU {state}", f"from {prev}", None)
         return None
 
 
@@ -156,9 +157,10 @@ class InvVsmStateRule(BaseRule):
         vsm = decoded["signals"].get("INV_VSM_State")
         if not isinstance(vsm, str):
             return None
-        if self._prev is not None and vsm != self._prev and vsm in self.INTERESTING:
-            return self._alert(Severity.CAUTION, f"INV VSM {vsm}", f"from {self._prev}", None)
+        prev = self._prev
         self._prev = vsm
+        if prev is not None and vsm != prev and vsm in self.INTERESTING:
+            return self._alert(Severity.CAUTION, f"INV VSM {vsm}", f"from {prev}", None)
         return None
 
 
