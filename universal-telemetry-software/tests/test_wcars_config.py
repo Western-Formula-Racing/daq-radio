@@ -52,7 +52,9 @@ def test_merge_config_fills_missing_keys():
                             "audio": {"enabled": True, "volume": 0.5}})
     assert merged == {"thresholds": {"torch_cell_temp_c": 70.0,
                                      "torch_cell_imbalance_v": 0.05,
-                                     "rearm_seconds": 5},
+                                     "rearm_seconds": 5,
+                                     # Not supplied by the caller, backfilled from defaults
+                                     "precharge_timeout_s": 2.0},
                        "audio": {"enabled": True, "volume": 0.5}}
 
 

@@ -1,3 +1,5 @@
+import pytest
+
 from src.wcars.serialization import Severity
 from src.wcars.rules import (
     VcuStateFaultRule,
@@ -7,11 +9,39 @@ from src.wcars.rules import (
     InvVsmStateRule,
     TorchCellTempRule,
     TorchCellImbalanceRule,
+    ImdFaultRule,
+    AmsFaultRule,
+    BspdFaultRule,
+    SafetyLoopOpenRule,
+    HvLossRule,
+    AirFaultRule,
+    PrechargeErrorRule,
 )
 
 
 def _sig(name, **signals):
     return {"message": name, "can_id": 0, "signals": signals}
+
+
+def _pack(*, legacy=True, **overrides):
+    """0x420 PackStatus frame, all relays healthy unless overridden.
+
+    legacy=True uses the backend DBC names (Safetyloop_return / HV_Active);
+    legacy=False uses the pecan DBC names (AIR_Negative_Relay / AIR_Positive_Relay).
+    """
+    neg, pos = ("Safetyloop_return", "HV_Active") if legacy else ("AIR_Negative_Relay", "AIR_Positive_Relay")
+    signals = {
+        "PackCurrent": 12.0, "IMDRelay": 1, "AMSRelay": 1, "BSPDRelay": 1,
+        "LatchRelay": 1, neg: 1, pos: 1, "SOC": 88.0, "PackStatus": "Active", "Fault": 0,
+    }
+    for key, val in overrides.items():
+        if key == "air_negative":
+            signals[neg] = val
+        elif key == "air_positive":
+            signals[pos] = val
+        else:
+            signals[key] = val
+    return _sig("PackStatus", **signals)
 
 
 def test_vcu_state_fault_fires_on_drive_to_device_fault():
@@ -174,3 +204,166 @@ def test_inv_vsm_state_fires_once_per_transition():
     repeats = [r.update(_sig("M170_Internal_States", INV_VSM_State="blink fault code state"))
                for _ in range(5)]
     assert repeats == [None] * 5
+
+
+# Safety loop / shutdown circuit rules (0x420 PackStatus)
+
+RELAY_RULES = [
+    (ImdFaultRule, "IMDRelay", "IMD_FAULT", "IMD FAULT"),
+    (AmsFaultRule, "AMSRelay", "AMS_FAULT", "AMS FAULT"),
+    (BspdFaultRule, "BSPDRelay", "BSPD_FAULT", "BSPD FAULT"),
+    (SafetyLoopOpenRule, "air_negative", "SAFETY_LOOP_OPEN", "SAFETY LOOP OPEN"),
+    (HvLossRule, "air_positive", "HV_LOSS", "HV LOSS"),
+]
+
+
+@pytest.mark.parametrize("cls,signal,rule_id,title", RELAY_RULES)
+@pytest.mark.parametrize("legacy", [True, False])
+def test_relay_rule_fires_on_open_edge(cls, signal, rule_id, title, legacy):
+    r = cls()
+    assert r.update(_pack(legacy=legacy)) is None
+    a = r.update(_pack(legacy=legacy, **{signal: 0}))
+    assert a is not None
+    assert a.rule == rule_id
+    assert a.title == title
+    assert a.severity == Severity.WARNING
+
+
+@pytest.mark.parametrize("cls,signal,rule_id,title", RELAY_RULES)
+@pytest.mark.parametrize("legacy", [True, False])
+def test_relay_rule_does_not_refire_on_repeats(cls, signal, rule_id, title, legacy):
+    r = cls()
+    r.update(_pack(legacy=legacy))
+    assert r.update(_pack(legacy=legacy, **{signal: 0})) is not None
+    repeats = [r.update(_pack(legacy=legacy, **{signal: 0})) for _ in range(5)]
+    assert repeats == [None] * 5
+
+
+@pytest.mark.parametrize("cls,signal,rule_id,title", RELAY_RULES)
+def test_relay_rule_rearms_after_relay_closes(cls, signal, rule_id, title):
+    r = cls()
+    r.update(_pack())
+    r.update(_pack(**{signal: 0}))
+    r.update(_pack())  # relay closes again
+    assert r.update(_pack(**{signal: 0})) is not None
+
+
+@pytest.mark.parametrize("cls,signal,rule_id,title", RELAY_RULES)
+def test_relay_rule_accepts_string_labels(cls, signal, rule_id, title):
+    """A DBC revision could add a VAL_ table and hand back str labels."""
+    r = cls()
+    r.update(_pack(**{signal: "Closed"}))
+    a = r.update(_pack(**{signal: "Open"}))
+    assert a is not None
+    assert a.rule == rule_id
+
+
+@pytest.mark.parametrize("cls,signal,rule_id,title", RELAY_RULES)
+def test_relay_rule_ignores_other_messages(cls, signal, rule_id, title):
+    assert cls().update(_sig("VCU_State_Info", State="DRIVE")) is None
+
+
+def test_relay_rule_does_not_fire_on_first_frame_already_open():
+    """No prior state means no observed edge, so stay quiet."""
+    assert ImdFaultRule().update(_pack(IMDRelay=0)) is None
+
+
+@pytest.mark.parametrize("legacy", [True, False])
+def test_air_fault_fires_when_airs_disagree(legacy):
+    r = AirFaultRule()
+    assert r.update(_pack(legacy=legacy)) is None
+    a = r.update(_pack(legacy=legacy, air_positive=0))
+    assert a is not None
+    assert a.rule == "AIR_FAULT"
+    assert a.severity == Severity.WARNING
+    assert "AIR" in a.detail
+
+
+@pytest.mark.parametrize("legacy", [True, False])
+def test_air_fault_does_not_refire_on_repeats(legacy):
+    r = AirFaultRule()
+    r.update(_pack(legacy=legacy))
+    assert r.update(_pack(legacy=legacy, air_negative=0)) is not None
+    repeats = [r.update(_pack(legacy=legacy, air_negative=0)) for _ in range(5)]
+    assert repeats == [None] * 5
+
+
+def test_air_fault_fires_on_pack_status_fault_label():
+    r = AirFaultRule()
+    r.update(_pack())
+    a = r.update(_pack(PackStatus="Fault", Fault=71))
+    assert a is not None
+    assert "Cell >4.2 V" in a.detail
+
+
+def test_air_fault_fires_on_pack_status_fault_raw_enum():
+    r = AirFaultRule()
+    r.update(_pack(PackStatus=3, Fault=0))
+    a = r.update(_pack(PackStatus=6, Fault=84))
+    assert a is not None
+    assert "CAN Timeout >2s" in a.detail
+
+
+def test_air_fault_quiet_when_both_airs_open_together():
+    """Both AIRs open is a normal shutdown, not a contactor fault."""
+    r = AirFaultRule()
+    r.update(_pack())
+    assert r.update(_pack(air_negative=0, air_positive=0)) is None
+
+
+def test_air_fault_clears_and_rearms():
+    r = AirFaultRule()
+    r.update(_pack())
+    assert r.update(_pack(air_positive=0)) is not None
+    assert r.update(_pack()) is None
+    assert r.update(_pack(air_positive=0)) is not None
+
+
+# Precharge (0x7D3 VCU_Precharge)
+
+def _precharge(enable, ok):
+    return _sig("VCU_Precharge", Precharge_Enable=enable, Precharge_OK=ok)
+
+
+def test_precharge_error_fires_when_enabled_but_not_ok():
+    r = PrechargeErrorRule(timeout_seconds=0.0)
+    a = r.update(_precharge("ON", "OFF"))
+    assert a is not None
+    assert a.rule == "PRECHARGE_ERROR"
+    assert a.severity == Severity.WARNING
+    assert a.title == "PRECHARGE ERROR"
+
+
+def test_precharge_error_accepts_raw_bits():
+    r = PrechargeErrorRule(timeout_seconds=0.0)
+    assert r.update(_precharge(1, 0)) is not None
+
+
+def test_precharge_error_does_not_refire_on_repeats():
+    r = PrechargeErrorRule(timeout_seconds=0.0)
+    assert r.update(_precharge("ON", "OFF")) is not None
+    repeats = [r.update(_precharge("ON", "OFF")) for _ in range(5)]
+    assert repeats == [None] * 5
+
+
+def test_precharge_error_silent_while_within_timeout():
+    r = PrechargeErrorRule(timeout_seconds=60.0)
+    assert r.update(_precharge("ON", "OFF")) is None
+    assert r.update(_precharge("ON", "OFF")) is None
+
+
+def test_precharge_error_silent_when_ok():
+    r = PrechargeErrorRule(timeout_seconds=0.0)
+    assert r.update(_precharge("ON", "ON")) is None
+    assert r.update(_precharge("OFF", "OFF")) is None
+
+
+def test_precharge_error_rearms_after_successful_precharge():
+    r = PrechargeErrorRule(timeout_seconds=0.0)
+    assert r.update(_precharge("ON", "OFF")) is not None
+    r.update(_precharge("ON", "ON"))  # precharge completes
+    assert r.update(_precharge("ON", "OFF")) is not None
+
+
+def test_precharge_error_ignores_other_messages():
+    assert PrechargeErrorRule(timeout_seconds=0.0).update(_pack()) is None

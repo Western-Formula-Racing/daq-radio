@@ -200,6 +200,245 @@ class TorchCellTempRule(BaseRule):
         return None
 
 
+"""Safety loop / shutdown circuit rules on 0x420 PackStatus and 0x7D3 VCU_Precharge.
+
+Two DBC generations name the same two bits on 0x420 differently:
+  bit 20 is 'Safetyloop_return' in secret-dbc/WFR25.dbc and example.dbc (what the
+          backend loads), but 'AIR_Negative_Relay' in the DBCs pecan ships;
+  bit 21 is 'HV_Active' in the former and 'AIR_Positive_Relay' in the latter.
+Same bit, same meaning, different label. Every rule below reads whichever key is
+present so it fires no matter which DBC generation is loaded on the base station.
+"""
+
+AIR_NEGATIVE_SIGNALS = ("Safetyloop_return", "AIR_Negative_Relay")
+AIR_POSITIVE_SIGNALS = ("HV_Active", "AIR_Positive_Relay")
+
+_RELAY_CLOSED_LABELS = {"1", "on", "closed", "true", "ok", "active", "healthy"}
+_RELAY_OPEN_LABELS = {"0", "off", "open", "false", "fault", "tripped", "inactive"}
+
+# 0x420 Fault enum. Carries the specific cause; folded into AIR_FAULT detail text.
+PACK_FAULT_LABELS = {
+    0: "None", 69: "Thermistor >60C", 70: "Cell <2.5 V", 71: "Cell >4.2 V",
+    72: "Cell Delta >0.2V", 73: "Open Cell", 74: "Open Thermistor",
+    75: "LTC DIAGN fail", 76: "LTC AXST fail", 77: "LTC CVST fail",
+    78: "LTC STATST fail", 79: "LTC ADOW fail", 80: "LTC AXOW fail",
+    81: "LTC ADOL fail", 82: "LTC CRC fail", 83: "Current >100A",
+    84: "CAN Timeout >2s", 85: ">96 CAN Errors",
+}
+
+
+def _first_signal(signals: dict, names: tuple[str, ...]) -> Any:
+    for name in names:
+        val = signals.get(name)
+        if val is not None:
+            return val
+    return None
+
+
+def _relay_closed(value: Any) -> bool | None:
+    """True = relay closed/healthy, False = open/tripped, None = unreadable.
+
+    cantools hands back plain ints for these unmapped bits, but a DBC revision
+    could add a VAL_ table at any time and turn them into str labels, so accept both.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        token = value.strip().lower()
+        if token in _RELAY_CLOSED_LABELS:
+            return True
+        if token in _RELAY_OPEN_LABELS:
+            return False
+    return None
+
+
+def _is_enum(value: Any, number: int, label: str) -> bool:
+    """Match a VAL_-mapped signal by raw number or by decoded label."""
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, (int, float)):
+        return int(value) == number
+    if isinstance(value, str):
+        return value.strip().lower() == label.lower()
+    return False
+
+
+def _pack_fault_label(value: Any) -> str | None:
+    """Human label for the 0x420 Fault byte, or None when there is no fault."""
+    if isinstance(value, str):
+        return None if value.strip().lower() == "none" else value
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        code = int(value)
+        if code == 0:
+            return None
+        return PACK_FAULT_LABELS.get(code, f"code {code}")
+    return None
+
+
+class _RelayOpenRule(BaseRule):
+    """Shared body for 'a shutdown-circuit relay went 1 -> 0' rules.
+
+    Relay signals read 1 = closed/healthy, so a fault is the 1 -> 0 edge.
+    """
+    SIGNALS: tuple[str, ...] = ()
+    TITLE = ""
+    DETAIL = ""
+
+    def __init__(self, rule_id: str, rearm_seconds: float = 0.0) -> None:
+        super().__init__(rule_id, rearm_seconds=rearm_seconds)
+        self._prev: bool | None = None
+
+    def update(self, decoded: dict) -> Alert | None:
+        if decoded["message"] != "PackStatus":
+            return None
+        closed = _relay_closed(_first_signal(decoded["signals"], self.SIGNALS))
+        if closed is None:
+            return None
+        prev = self._prev
+        self._prev = closed
+        if prev is True and closed is False:
+            self._mark_fired(self.rule_id)
+            return self._alert(Severity.WARNING, self.TITLE, self.DETAIL, None)
+        return None
+
+
+class ImdFaultRule(_RelayOpenRule):
+    SIGNALS = ("IMDRelay",)
+    TITLE = "IMD FAULT"
+    DETAIL = "insulation monitoring device tripped"
+
+    def __init__(self, rearm_seconds: float = 0.0) -> None:
+        super().__init__("IMD_FAULT", rearm_seconds=rearm_seconds)
+
+
+class AmsFaultRule(_RelayOpenRule):
+    SIGNALS = ("AMSRelay",)
+    TITLE = "AMS FAULT"
+    DETAIL = "accumulator management system tripped"
+
+    def __init__(self, rearm_seconds: float = 0.0) -> None:
+        super().__init__("AMS_FAULT", rearm_seconds=rearm_seconds)
+
+
+class BspdFaultRule(_RelayOpenRule):
+    SIGNALS = ("BSPDRelay",)
+    TITLE = "BSPD FAULT"
+    DETAIL = "brake system plausibility device tripped"
+
+    def __init__(self, rearm_seconds: float = 0.0) -> None:
+        super().__init__("BSPD_FAULT", rearm_seconds=rearm_seconds)
+
+
+class SafetyLoopOpenRule(_RelayOpenRule):
+    SIGNALS = AIR_NEGATIVE_SIGNALS
+    TITLE = "SAFETY LOOP OPEN"
+    DETAIL = "shutdown circuit return lost"
+
+    def __init__(self, rearm_seconds: float = 0.0) -> None:
+        super().__init__("SAFETY_LOOP_OPEN", rearm_seconds=rearm_seconds)
+
+
+class HvLossRule(_RelayOpenRule):
+    SIGNALS = AIR_POSITIVE_SIGNALS
+    TITLE = "HV LOSS"
+    DETAIL = "high voltage no longer active"
+
+    def __init__(self, rearm_seconds: float = 0.0) -> None:
+        super().__init__("HV_LOSS", rearm_seconds=rearm_seconds)
+
+
+class AirFaultRule(BaseRule):
+    """WARNING when the two AIRs disagree, or PackStatus reports Fault.
+
+    Two triggers, because both mean "the pack contactors are not in a state the
+    driver can trust": the AIRs are commanded as a pair, so positive != negative
+    means one is welded shut or failed open; and PackStatus == Fault is the BMS
+    itself declaring the pack unsafe. The specific cause from the Fault byte is
+    folded into the detail text rather than given its own rule ID, because the
+    frontend RULE_PAGE map routes on rule ID and a new ID would not route anywhere.
+
+    Note this can co-fire with HV_LOSS / SAFETY_LOOP_OPEN on a real AIR opening:
+    during the frame where one AIR has dropped and the other has not, the relays
+    genuinely disagree. That is intended - ECAM shows both the cause and the
+    consequence - and all three route to the same LOOP page.
+    """
+
+    def __init__(self, rearm_seconds: float = 0.0) -> None:
+        super().__init__("AIR_FAULT", rearm_seconds=rearm_seconds)
+        self._prev_bad: bool = False
+
+    def update(self, decoded: dict) -> Alert | None:
+        if decoded["message"] != "PackStatus":
+            return None
+        s = decoded["signals"]
+        neg = _relay_closed(_first_signal(s, AIR_NEGATIVE_SIGNALS))
+        pos = _relay_closed(_first_signal(s, AIR_POSITIVE_SIGNALS))
+        pack_fault = _is_enum(s.get("PackStatus"), 6, "Fault")
+        disagree = neg is not None and pos is not None and neg != pos
+        bad = disagree or pack_fault
+        was_bad = self._prev_bad
+        self._prev_bad = bad
+        if bad and not was_bad:
+            self._mark_fired("air")
+            reasons = []
+            if disagree:
+                reasons.append(f"AIR+ {'closed' if pos else 'open'} / AIR- {'closed' if neg else 'open'}")
+            if pack_fault:
+                label = _pack_fault_label(s.get("Fault"))
+                reasons.append(f"pack fault: {label}" if label else "pack status FAULT")
+            return self._alert(Severity.WARNING, "AIR FAULT", "; ".join(reasons), None)
+        return None
+
+
+class PrechargeErrorRule(BaseRule):
+    """WARNING when 0x7D3 Precharge_Enable is ON but Precharge_OK stays OFF.
+
+    Precharge legitimately takes time, so Enable ON with OK OFF is normal for the
+    first moments of every startup. We only fire once the pair has held that way
+    for `timeout_seconds`, then latch until the condition clears (OK comes ON or
+    Enable goes OFF) so a stuck precharge does not re-fire at bus rate.
+
+    Overlaps with VcuStateFaultRule, which emits VCU_STATE_FAULT when the VCU
+    state enum on 0x7D2 reaches PRECHARGE_ERROR. Different signal path, different
+    rule ID, both legitimately fire for one physical event; they are not
+    de-duplicated across messages because neither can observe the other's frame.
+    """
+
+    def __init__(self, timeout_seconds: float = 2.0, rearm_seconds: float = 0.0) -> None:
+        super().__init__("PRECHARGE_ERROR", rearm_seconds=rearm_seconds)
+        self.timeout_seconds = timeout_seconds
+        self._pending_since_ms: int | None = None
+        self._latched: bool = False
+
+    def update(self, decoded: dict) -> Alert | None:
+        if decoded["message"] != "VCU_Precharge":
+            return None
+        s = decoded["signals"]
+        enable = _relay_closed(s.get("Precharge_Enable"))
+        ok = _relay_closed(s.get("Precharge_OK"))
+        if enable is None or ok is None:
+            return None
+        bad = enable and not ok
+        if not bad:
+            self._pending_since_ms = None
+            self._latched = False
+            return None
+        now = _now_ms()
+        if self._pending_since_ms is None:
+            self._pending_since_ms = now
+        elapsed = (now - self._pending_since_ms) / 1000.0
+        latched = self._latched
+        if elapsed >= self.timeout_seconds:
+            self._latched = True
+        if latched or elapsed < self.timeout_seconds:
+            return None
+        self._mark_fired("precharge")
+        return self._alert(Severity.WARNING, "PRECHARGE ERROR",
+                           f"precharge enabled but not OK after {elapsed:.1f}s", None)
+
+
 class TorchCellImbalanceRule(BaseRule):
     """Fires CAUTION if max-min cell voltage in a module exceeds threshold."""
     def __init__(self, threshold_v: float = 0.10, rearm_seconds: float = 10.0) -> None:

@@ -9,6 +9,46 @@ def test_whitelist_contains_expected_messages():
     assert 0xAA in WHITELIST_IDS   # M170_Internal_States
 
 
+def test_whitelist_contains_pack_status():
+    """0x420 is decimal 1056, one past the end of the TORCH cell-temp range(1031, 1056).
+
+    It was silently excluded, so the safety loop was invisible to the engine.
+    """
+    assert 1056 in WHITELIST_IDS
+    assert 0x420 in WHITELIST_IDS
+    assert Decoder().is_whitelisted(0x420)
+
+
+def test_whitelist_contains_safety_and_inverter_messages():
+    for can_id in (2003, 514, 2013, 2000, 160, 162, 165, 166, 167, 172, 192):
+        assert can_id in WHITELIST_IDS, f"missing 0x{can_id:X}"
+
+
+def test_decode_pack_status_relays():
+    """0x420: IMD/AMS/BSPD/Latch relays at bits 16..19, safety loop 20, HV active 21."""
+    dec = Decoder()
+    relay_byte = 0b00111111  # all six relay bits closed
+    sig = dec.decode({"canId": 0x420, "data": [0, 0, relay_byte, 0, 0, 0, 0, 0]})
+    assert sig is not None
+    assert sig["message"] == "PackStatus"
+    s = sig["signals"]
+    assert s["IMDRelay"] == 1
+    assert s["AMSRelay"] == 1
+    assert s["BSPDRelay"] == 1
+    # Dual naming across DBC generations; exactly one of each pair is present
+    assert s.get("Safetyloop_return", s.get("AIR_Negative_Relay")) == 1
+    assert s.get("HV_Active", s.get("AIR_Positive_Relay")) == 1
+
+
+def test_decode_vcu_precharge():
+    dec = Decoder()
+    sig = dec.decode({"canId": 0x7D3, "data": [0b01, 0, 0, 0, 0, 0, 0, 0]})
+    assert sig is not None
+    assert sig["message"] == "VCU_Precharge"
+    assert sig["signals"]["Precharge_Enable"] == "ON"
+    assert sig["signals"]["Precharge_OK"] == "OFF"
+
+
 def test_decode_vcu_state_info():
     dec = Decoder()
     sig = dec.decode(vcu_state_info(4))  # DRIVE

@@ -20,6 +20,13 @@ from .rules import (
     InvVsmStateRule,
     TorchCellTempRule,
     TorchCellImbalanceRule,
+    ImdFaultRule,
+    AmsFaultRule,
+    BspdFaultRule,
+    SafetyLoopOpenRule,
+    HvLossRule,
+    AirFaultRule,
+    PrechargeErrorRule,
 )
 from .serialization import Alert
 
@@ -46,6 +53,13 @@ class WcarsEngine:
             InvVsmStateRule(),
             TorchCellTempRule(threshold_c=float(th["torch_cell_temp_c"]), rearm_seconds=rearm),
             TorchCellImbalanceRule(threshold_v=float(th["torch_cell_imbalance_v"]), rearm_seconds=rearm),
+            ImdFaultRule(),
+            AmsFaultRule(),
+            BspdFaultRule(),
+            SafetyLoopOpenRule(),
+            HvLossRule(),
+            AirFaultRule(),
+            PrechargeErrorRule(timeout_seconds=float(th["precharge_timeout_s"])),
         ]
 
     def feed(self, frame: dict) -> list[Alert]:

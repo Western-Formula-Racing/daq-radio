@@ -21,6 +21,18 @@ WHITELIST_IDS: set[int] = {
     # TORCH cell volts: 1006..1030 (5 modules * 5 cells)
     *range(1006, 1031),
     *range(1031, 1056),
+    1056,  # PackStatus           0x420  safety loop / shutdown circuit
+    2003,  # VCU_Precharge        0x7D3
+    514,   # BMS_Current_Limit    0x202
+    2013,  # VCU_WheelSpeed_Info  0x7DD
+    2000,  # VCU_Pedal_Info       0x7D0  brake pressures
+    160,   # M160_Temperature_Set_1     0x0A0
+    162,   # M162_Temperature_Set_3     0x0A2
+    165,   # M165_Motor_Position_Info   0x0A5
+    166,   # M166_Current_Info          0x0A6
+    167,   # M167_Voltage_Info          0x0A7
+    172,   # M172_Torque_And_Timer_Info 0x0AC
+    192,   # M192_Command_Message       0x0C0
     170,   # M170_Internal_States  0xAA
     171,   # M171_Fault_Codes     0xAB
 }

@@ -14,6 +14,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "torch_cell_temp_c": 55.0,
         "torch_cell_imbalance_v": 0.10,
         "rearm_seconds": 10,
+        # Grace period before PRECHARGE_ERROR fires; precharge is legitimately
+        # slow, so Enable ON with OK OFF is normal for the first moments.
+        # Deliberately not added to decode_config's required-key list: that list
+        # is a hard gate, and requiring a key older frontends do not send would
+        # reject their config uplink. merge_config backfills the default.
+        "precharge_timeout_s": 2.0,
     },
     "audio": {"enabled": True, "volume": 0.5},
 }
