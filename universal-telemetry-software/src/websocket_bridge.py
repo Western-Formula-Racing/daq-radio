@@ -350,7 +350,13 @@ async def redis_listener():
                             payload = f.get("data")
                             if not isinstance(can_id, int) or not isinstance(payload, list):
                                 continue
-                            for alert in engine.feed({"canId": can_id, "data": payload}):
+                            # data.py publishes "time" as epoch ms per frame. Using it
+                            # rather than the wall clock keeps rule timing correct when
+                            # frames arrive late or are replayed.
+                            ts_ms = f.get("time")
+                            if not isinstance(ts_ms, int):
+                                ts_ms = int(time.time() * 1000)
+                            for alert in engine.feed({"canId": can_id, "data": payload}, ts_ms):
                                 frame_out = json.dumps(encode_alert(alert))
                                 if connected_clients:
                                     await asyncio.gather(

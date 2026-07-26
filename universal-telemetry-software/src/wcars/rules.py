@@ -1,14 +1,13 @@
 """Edge-triggered WCARS rules.
 
 Each rule owns its previous-state memory and emits an Alert only on a
-transition into a fault condition. After the condition clears, the rule
-won't re-fire for the same condition within `rearm_seconds` (used only by
-rules that need it; the default re-arm is built into `_is_rearmed`).
+transition into a fault condition. All timing is derived from the CAN frame
+timestamp passed into update(), never from the wall clock, so replaying a
+recorded session produces the same alerts it produced live.
 """
 from __future__ import annotations
 
 import re
-import time
 import uuid
 from typing import Any
 
@@ -17,10 +16,6 @@ from .serialization import Alert, Severity
 
 def _new_id() -> str:
     return uuid.uuid4().hex[:6]
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
 
 
 class BaseRule:

@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import time
 from collections import deque
 from typing import Any
 
@@ -63,14 +62,10 @@ class WcarsEngine:
             PrechargeErrorRule(timeout_seconds=float(th["precharge_timeout_s"])),
         ]
 
-    def feed(self, frame: dict, ts_ms: int | None = None) -> list[Alert]:
+    def feed(self, frame: dict, ts_ms: int) -> list[Alert]:
         decoded = self.decoder.decode(frame)
         if decoded is None:
             return []
-        # Fallback removed in a later task once every caller supplies a frame
-        # timestamp. Kept here so this refactor lands without breaking callers.
-        if ts_ms is None:
-            ts_ms = int(time.time() * 1000)
         emitted: list[Alert] = []
         for rule in self._rules:
             try:
