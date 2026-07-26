@@ -1,6 +1,15 @@
 # universal-telemetry-software/tests/test_wcars_decoder.py
-from src.wcars.decoder import Decoder, WHITELIST_IDS
+from pathlib import Path
+
+import pytest
+
+from src.wcars.decoder import DBC_PATH, Decoder, WHITELIST_IDS
 from tests.wcars_dbc_utils import vcu_state_info, torch_fault, torch_cell_temp
+
+# Keyed on the resolved DBC actually being the private submodule file, not on any
+# "are we in CI" flag, so this stays load-bearing if the pin goes stale and only
+# skips when the submodule itself is absent (e.g. CI, which does not check it out).
+_RESOLVED_DBC_IS_SUBMODULE = "secret-dbc" in Path(DBC_PATH).parts
 
 
 def test_whitelist_contains_expected_messages():
@@ -87,6 +96,15 @@ def test_decode_torch_cell_temp():
     assert any(isinstance(v, (int, float)) for v in sig["signals"].values())
 
 
+@pytest.mark.skipif(
+    not _RESOLVED_DBC_IS_SUBMODULE,
+    reason=(
+        f"WFR_DBC_PATH resolved to {DBC_PATH!r}, not the private secret-dbc "
+        "submodule (it is not checked out here, e.g. in CI). Submodule "
+        "pin freshness cannot be verified against example.dbc, so this "
+        "check is skipped rather than failed."
+    ),
+)
 def test_dbc_has_messages_added_since_the_pinned_submodule():
     # These arrived in the DBC repo after the submodule was last pinned. Later
     # WCARS rules read them, so a stale pin must fail loudly rather than make
