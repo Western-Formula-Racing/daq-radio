@@ -44,6 +44,17 @@ def get_wcars_engine() -> WcarsEngine:
         _wcars_engine = WcarsEngine(load_config(WCARS_CONFIG_PATH))
     return _wcars_engine
 
+
+def _is_valid_frame_ts(ts_ms) -> bool:
+    """True only for a genuine positive-integer epoch-ms timestamp (bool is not an int here)."""
+    return isinstance(ts_ms, int) and not isinstance(ts_ms, bool) and ts_ms > 0
+
+
+# Bus-rate frames (thousands/sec) mean an unthrottled warning could flood the log
+# and become an outage of its own; log at most once every 30s.
+_BAD_FRAME_TS_LOG_INTERVAL_S = 30
+_last_bad_frame_ts_warning = 0.0
+
 # Per-client rate limiting state: websocket -> list of timestamps
 _client_send_times: dict = {}
 
@@ -353,9 +364,23 @@ async def redis_listener():
                             # data.py publishes "time" as epoch ms per frame. Using it
                             # rather than the wall clock keeps rule timing correct when
                             # frames arrive late or are replayed.
-                            ts_ms = f.get("time")
-                            if not isinstance(ts_ms, int):
+                            raw_ts = f.get("time")
+                            if _is_valid_frame_ts(raw_ts):
+                                ts_ms = raw_ts
+                            else:
                                 ts_ms = int(time.time() * 1000)
+                                if "time" in f:
+                                    # Key present but unusable: a real regression upstream,
+                                    # not the expected "old publisher" case. Rate-limited
+                                    # so a bad field can't flood the log at bus rate.
+                                    global _last_bad_frame_ts_warning
+                                    now = time.monotonic()
+                                    if now - _last_bad_frame_ts_warning >= _BAD_FRAME_TS_LOG_INTERVAL_S:
+                                        _last_bad_frame_ts_warning = now
+                                        logger.warning(
+                                            "WCARS: frame has unusable 'time' value %r, falling back to wall clock",
+                                            raw_ts,
+                                        )
                             for alert in engine.feed({"canId": can_id, "data": payload}, ts_ms):
                                 frame_out = json.dumps(encode_alert(alert))
                                 if connected_clients:

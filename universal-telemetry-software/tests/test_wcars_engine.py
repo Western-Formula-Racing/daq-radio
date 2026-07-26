@@ -66,3 +66,44 @@ def test_feed_stamps_alerts_with_the_supplied_timestamp():
     alerts = engine.feed({"canId": 0x7D2, "data": [0, 6, 0, 0, 0, 0, 0, 0]}, 1_700_000_000_250)
     assert alerts, "expected a VCU state transition alert"
     assert all(a.ts == 1_700_000_000_250 for a in alerts)
+
+
+def test_is_valid_frame_ts_accepts_positive_int():
+    from src.websocket_bridge import _is_valid_frame_ts
+    assert _is_valid_frame_ts(1_700_000_000_000) is True
+
+
+def test_is_valid_frame_ts_rejects_negative():
+    from src.websocket_bridge import _is_valid_frame_ts
+    assert _is_valid_frame_ts(-1) is False
+
+
+def test_is_valid_frame_ts_rejects_zero():
+    from src.websocket_bridge import _is_valid_frame_ts
+    assert _is_valid_frame_ts(0) is False
+
+
+def test_is_valid_frame_ts_rejects_bool_true():
+    from src.websocket_bridge import _is_valid_frame_ts
+    assert _is_valid_frame_ts(True) is False
+
+
+def test_is_valid_frame_ts_rejects_bool_false():
+    from src.websocket_bridge import _is_valid_frame_ts
+    assert _is_valid_frame_ts(False) is False
+
+
+def test_is_valid_frame_ts_rejects_float():
+    from src.websocket_bridge import _is_valid_frame_ts
+    assert _is_valid_frame_ts(1_700_000_000_000.0) is False
+
+
+def test_is_valid_frame_ts_rejects_string():
+    from src.websocket_bridge import _is_valid_frame_ts
+    assert _is_valid_frame_ts("1700000000000") is False
+
+
+def test_is_valid_frame_ts_rejects_absent_key():
+    from src.websocket_bridge import _is_valid_frame_ts
+    frame = {}
+    assert _is_valid_frame_ts(frame.get("time")) is False
