@@ -196,14 +196,18 @@ def _load_corpus(path):
 
 
 def test_recorded_corpus_replay_is_deterministic():
-    """Replaying a real recorded session twice must produce identical alerts.
+    """Replaying a real recorded session twice, separated by real time, must produce identical alerts.
 
     Synthetic sessions only exercise the rules the test author thought of; a
     real log exercises whatever the car actually did. The corpus is not in the
     repo, so this skips unless WCARS_REPLAY_CORPUS (or the default download
-    path) points at a raw CAN csv.
+    path) points at a raw CAN csv. A single sleep between the two full runs
+    (not per-frame, the corpus is ~467k rows) gives a wall-clock-reading rule
+    real time to diverge on, the same trick test_replay_is_independent_of_when_it_is_run
+    uses on the synthetic corpus.
     """
     import os
+    import time as _time
     from src.wcars.engine import WcarsEngine
 
     path = os.getenv("WCARS_REPLAY_CORPUS", DEFAULT_CORPUS)
@@ -221,4 +225,7 @@ def test_recorded_corpus_replay_is_deterministic():
     def fingerprint(alerts):
         return [(a.rule, a.severity, a.title, a.detail, a.value, a.ts, a.replay) for a in alerts]
 
-    assert fingerprint(replay()) == fingerprint(replay())
+    first = fingerprint(replay())
+    _time.sleep(0.05)
+    second = fingerprint(replay())
+    assert first == second
