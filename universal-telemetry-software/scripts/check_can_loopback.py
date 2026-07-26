@@ -6,7 +6,9 @@ loopback delivers a transmitted frame to other sockets on the same host.
 Run this on the car Pi before building anything that depends on it.
 
 Usage:  uv run python scripts/check_can_loopback.py [channel]
-Exit:   0 = loopback works, 1 = it does not
+Exit:   0 = loopback works, 1 = probe sent but never seen (loopback does not
+        work), 2 = could not probe at all (missing interface, bus-off, send
+        failure, or other setup error) - not a loopback verdict either way
 """
 import sys
 import time
@@ -16,18 +18,35 @@ import can
 CHANNEL = sys.argv[1] if len(sys.argv) > 1 else "can0"
 PROBE_ID = 0x5AF  # unused in the DBC, so a real ECU cannot be the source
 PROBE_DATA = bytes([0xDE, 0xAD, 0xBE, 0xEF, 0, 0, 0, 0])
+DRAIN_BUDGET_S = 0.5  # a live racecar bus is never idle, so draining cannot wait for empty
 
 
 def main() -> int:
-    reader = can.interface.Bus(channel=CHANNEL, bustype="socketcan")
-    writer = can.interface.Bus(channel=CHANNEL, bustype="socketcan")
+    reader = None
+    writer = None
     try:
-        # Drain anything already queued so we do not match a stale frame.
-        while reader.recv(0.0) is not None:
-            pass
+        try:
+            reader = can.interface.Bus(channel=CHANNEL, bustype="socketcan")
+            writer = can.interface.Bus(channel=CHANNEL, bustype="socketcan")
+        except Exception as exc:
+            print(f"ERROR: could not open {CHANNEL}: {exc}")
+            print("This is not a loopback verdict, the probe never ran.")
+            return 2
 
-        writer.send(can.Message(arbitration_id=PROBE_ID, data=PROBE_DATA,
-                                is_extended_id=False))
+        # Bounded drain: on a busy bus the queue may never report empty, and that is fine.
+        drain_deadline = time.time() + DRAIN_BUDGET_S
+        while time.time() < drain_deadline:
+            if reader.recv(0.0) is None:
+                break
+
+        try:
+            writer.send(can.Message(arbitration_id=PROBE_ID, data=PROBE_DATA,
+                                    is_extended_id=False))
+        except Exception as exc:
+            print(f"ERROR: send failed on {CHANNEL}: {exc}")
+            print("This is not a loopback verdict, the probe was not sent.")
+            return 2
+
         print(f"sent 0x{PROBE_ID:X} on {CHANNEL}")
 
         deadline = time.time() + 2.0
@@ -41,8 +60,10 @@ def main() -> int:
         print("FAIL: transmitted frame was never seen by the reader socket")
         return 1
     finally:
-        reader.shutdown()
-        writer.shutdown()
+        if reader is not None:
+            reader.shutdown()
+        if writer is not None:
+            writer.shutdown()
 
 
 if __name__ == "__main__":
