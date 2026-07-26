@@ -60,10 +60,18 @@ def main() -> int:
         print("FAIL: transmitted frame was never seen by the reader socket")
         return 1
     finally:
+        # Closing a socket is best-effort cleanup, not part of the verdict: one shutdown
+        # raising must not skip the other or mask the return value already decided above.
         if reader is not None:
-            reader.shutdown()
+            try:
+                reader.shutdown()
+            except Exception:
+                pass
         if writer is not None:
-            writer.shutdown()
+            try:
+                writer.shutdown()
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":
