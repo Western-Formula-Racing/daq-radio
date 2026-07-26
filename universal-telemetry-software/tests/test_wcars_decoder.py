@@ -85,3 +85,14 @@ def test_decode_torch_cell_temp():
     # Should expose the temp in degrees C as a signal named "T1" (or similar)
     # We don't assert the exact name — just that some numeric signal decodes
     assert any(isinstance(v, (int, float)) for v in sig["signals"].values())
+
+
+def test_dbc_has_messages_added_since_the_pinned_submodule():
+    # These arrived in the DBC repo after the submodule was last pinned. Later
+    # WCARS rules read them, so a stale pin must fail loudly rather than make
+    # every rule silently return None.
+    from src.wcars.decoder import _load_db
+    db = _load_db()
+    ids = {m.frame_id for m in db.messages}
+    for frame_id in (0x422, 0x423, 0x424, 0x425, 0x426, 0x427, 0x428, 0x429):
+        assert frame_id in ids, f"0x{frame_id:X} missing - secret-dbc submodule is stale"
