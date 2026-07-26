@@ -29,14 +29,17 @@ class BaseRule:
         self.rearm_seconds = rearm_seconds
         self._last_fired_ms: dict[str, int] = {}
 
-    def _is_rearmed(self, key: str) -> bool:
-        last = self._last_fired_ms.get(key, 0)
-        return (_now_ms() - last) >= self.rearm_seconds * 1000
+    def _is_rearmed(self, key: str, ts_ms: int) -> bool:
+        last = self._last_fired_ms.get(key)
+        if last is None:
+            return True
+        return (ts_ms - last) >= self.rearm_seconds * 1000
 
-    def _mark_fired(self, key: str) -> None:
-        self._last_fired_ms[key] = _now_ms()
+    def _mark_fired(self, key: str, ts_ms: int) -> None:
+        self._last_fired_ms[key] = ts_ms
 
-    def _alert(self, severity: Severity, title: str, detail: str, value: float | None) -> Alert:
+    def _alert(self, severity: Severity, title: str, detail: str,
+               value: float | None, ts_ms: int) -> Alert:
         return Alert(
             id=_new_id(),
             rule=self.rule_id,
@@ -44,11 +47,11 @@ class BaseRule:
             title=title,
             detail=detail,
             value=value,
-            ts=_now_ms(),
+            ts=ts_ms,
             replay=False,
         )
 
-    def update(self, decoded: dict) -> Alert | None:
+    def update(self, decoded: dict, ts_ms: int) -> Alert | None:
         raise NotImplementedError
 
 
@@ -66,7 +69,7 @@ class VcuStateFaultRule(BaseRule):
         super().__init__("VCU_STATE_FAULT", rearm_seconds=rearm_seconds)
         self._prev: str | None = None
 
-    def update(self, decoded: dict) -> Alert | None:
+    def update(self, decoded: dict, ts_ms: int) -> Alert | None:
         if decoded["message"] != "VCU_State_Info":
             return None
         state = decoded["signals"].get("State")
@@ -75,9 +78,9 @@ class VcuStateFaultRule(BaseRule):
         prev = self._prev
         self._prev = state
         if prev is not None and state in self.FAULT_STATES and state != prev:
-            self._mark_fired("vcu")
+            self._mark_fired("vcu", ts_ms)
             title = self._FAULT_TITLES.get(state, state.replace("_", " "))
-            return self._alert(Severity.WARNING, f"VCU {title}", f"from {prev}", None)
+            return self._alert(Severity.WARNING, f"VCU {title}", f"from {prev}", None, ts_ms)
         return None
 
 
@@ -87,7 +90,7 @@ class VcuStateChangeRule(BaseRule):
         super().__init__("VCU_STATE_CHANGE", rearm_seconds=rearm_seconds)
         self._prev: str | None = None
 
-    def update(self, decoded: dict) -> Alert | None:
+    def update(self, decoded: dict, ts_ms: int) -> Alert | None:
         if decoded["message"] != "VCU_State_Info":
             return None
         state = decoded["signals"].get("State")
@@ -96,7 +99,7 @@ class VcuStateChangeRule(BaseRule):
         prev = self._prev
         self._prev = state
         if prev is not None and state != prev and state not in VcuStateFaultRule.FAULT_STATES:
-            return self._alert(Severity.MEMO, f"VCU {state}", f"from {prev}", None)
+            return self._alert(Severity.MEMO, f"VCU {state}", f"from {prev}", None, ts_ms)
         return None
 
 
@@ -105,7 +108,7 @@ class TorchFaultRule(BaseRule):
         super().__init__("TORCH_FAULT", rearm_seconds=rearm_seconds)
         self._prev_state: dict[tuple[str, Any], bool] = {}
 
-    def update(self, decoded: dict) -> Alert | None:
+    def update(self, decoded: dict, ts_ms: int) -> Alert | None:
         if decoded["message"] != "TORCH_FAULT":
             return None
         s = decoded["signals"]
@@ -119,7 +122,7 @@ class TorchFaultRule(BaseRule):
             self._prev_state[key] = True
             return self._alert(Severity.WARNING, f"TORCH {module} FAULT",
                                f"err={err} cell_faults={sum(1 for i in range(12) if s.get(f'Cell_{i}_status') == 'Fault')}",
-                               None)
+                               None, ts_ms)
         if not bad:
             self._prev_state[key] = False
         return None
@@ -131,14 +134,14 @@ class InvFaultRule(BaseRule):
         super().__init__("INV_FAULT", rearm_seconds=rearm_seconds)
         self._prev_nonzero: bool = False
 
-    def update(self, decoded: dict) -> Alert | None:
+    def update(self, decoded: dict, ts_ms: int) -> Alert | None:
         if decoded["message"] != "M171_Fault_Codes":
             return None
         s = decoded["signals"]
         nonzero = any(isinstance(v, (int, float)) and v != 0 for v in s.values())
         if nonzero and not self._prev_nonzero:
             self._prev_nonzero = True
-            return self._alert(Severity.WARNING, "INVERTER FAULT", f"hi={s.get('INV_Run_Fault_Hi', 0)} post={s.get('INV_Post_Fault_Hi', 0)}", None)
+            return self._alert(Severity.WARNING, "INVERTER FAULT", f"hi={s.get('INV_Run_Fault_Hi', 0)} post={s.get('INV_Post_Fault_Hi', 0)}", None, ts_ms)
         if not nonzero:
             self._prev_nonzero = False
         return None
@@ -151,7 +154,7 @@ class InvVsmStateRule(BaseRule):
         super().__init__("INV_VSM_STATE", rearm_seconds=rearm_seconds)
         self._prev: str | None = None
 
-    def update(self, decoded: dict) -> Alert | None:
+    def update(self, decoded: dict, ts_ms: int) -> Alert | None:
         if decoded["message"] != "M170_Internal_States":
             return None
         vsm = decoded["signals"].get("INV_VSM_State")
@@ -160,7 +163,7 @@ class InvVsmStateRule(BaseRule):
         prev = self._prev
         self._prev = vsm
         if prev is not None and vsm != prev and vsm in self.INTERESTING:
-            return self._alert(Severity.CAUTION, f"INV VSM {vsm}", f"from {prev}", None)
+            return self._alert(Severity.CAUTION, f"INV VSM {vsm}", f"from {prev}", None, ts_ms)
         return None
 
 
@@ -177,7 +180,7 @@ class TorchCellTempRule(BaseRule):
         self.threshold = threshold_c
         self._prev: dict[tuple[str, int], float] = {}
 
-    def update(self, decoded: dict) -> Alert | None:
+    def update(self, decoded: dict, ts_ms: int) -> Alert | None:
         if not decoded["message"].startswith("TORCH_"):
             return None
         s = decoded["signals"]
@@ -189,13 +192,13 @@ class TorchCellTempRule(BaseRule):
             therm = int(m.group(2))
             key = (decoded["message"], therm)
             prev = self._prev.get(key, 0.0)
-            if val > self.threshold and prev <= self.threshold and self._is_rearmed(f"{decoded['message']}.{therm}"):
+            if val > self.threshold and prev <= self.threshold and self._is_rearmed(f"{decoded['message']}.{therm}", ts_ms):
                 self._prev[key] = val
-                self._mark_fired(f"{decoded['message']}.{therm}")
+                self._mark_fired(f"{decoded['message']}.{therm}", ts_ms)
                 return self._alert(Severity.WARNING,
                                    f"TORCH {module} CELL TEMP",
                                    f"Thermistor {therm} at {val:.1f}C (limit {self.threshold:.0f})",
-                                   float(val))
+                                   float(val), ts_ms)
             self._prev[key] = val
         return None
 
@@ -290,7 +293,7 @@ class _RelayOpenRule(BaseRule):
         super().__init__(rule_id, rearm_seconds=rearm_seconds)
         self._prev: bool | None = None
 
-    def update(self, decoded: dict) -> Alert | None:
+    def update(self, decoded: dict, ts_ms: int) -> Alert | None:
         if decoded["message"] != "PackStatus":
             return None
         closed = _relay_closed(_first_signal(decoded["signals"], self.SIGNALS))
@@ -299,8 +302,8 @@ class _RelayOpenRule(BaseRule):
         prev = self._prev
         self._prev = closed
         if prev is True and closed is False:
-            self._mark_fired(self.rule_id)
-            return self._alert(Severity.WARNING, self.TITLE, self.DETAIL, None)
+            self._mark_fired(self.rule_id, ts_ms)
+            return self._alert(Severity.WARNING, self.TITLE, self.DETAIL, None, ts_ms)
         return None
 
 
@@ -369,7 +372,7 @@ class AirFaultRule(BaseRule):
         super().__init__("AIR_FAULT", rearm_seconds=rearm_seconds)
         self._prev_bad: bool = False
 
-    def update(self, decoded: dict) -> Alert | None:
+    def update(self, decoded: dict, ts_ms: int) -> Alert | None:
         if decoded["message"] != "PackStatus":
             return None
         s = decoded["signals"]
@@ -381,14 +384,14 @@ class AirFaultRule(BaseRule):
         was_bad = self._prev_bad
         self._prev_bad = bad
         if bad and not was_bad:
-            self._mark_fired("air")
+            self._mark_fired("air", ts_ms)
             reasons = []
             if disagree:
                 reasons.append(f"AIR+ {'closed' if pos else 'open'} / AIR- {'closed' if neg else 'open'}")
             if pack_fault:
                 label = _pack_fault_label(s.get("Fault"))
                 reasons.append(f"pack fault: {label}" if label else "pack status FAULT")
-            return self._alert(Severity.WARNING, "AIR FAULT", "; ".join(reasons), None)
+            return self._alert(Severity.WARNING, "AIR FAULT", "; ".join(reasons), None, ts_ms)
         return None
 
 
@@ -412,7 +415,7 @@ class PrechargeErrorRule(BaseRule):
         self._pending_since_ms: int | None = None
         self._latched: bool = False
 
-    def update(self, decoded: dict) -> Alert | None:
+    def update(self, decoded: dict, ts_ms: int) -> Alert | None:
         if decoded["message"] != "VCU_Precharge":
             return None
         s = decoded["signals"]
@@ -425,7 +428,7 @@ class PrechargeErrorRule(BaseRule):
             self._pending_since_ms = None
             self._latched = False
             return None
-        now = _now_ms()
+        now = ts_ms
         if self._pending_since_ms is None:
             self._pending_since_ms = now
         elapsed = (now - self._pending_since_ms) / 1000.0
@@ -434,9 +437,9 @@ class PrechargeErrorRule(BaseRule):
             self._latched = True
         if latched or elapsed < self.timeout_seconds:
             return None
-        self._mark_fired("precharge")
+        self._mark_fired("precharge", ts_ms)
         return self._alert(Severity.WARNING, "PRECHARGE ERROR",
-                           f"precharge enabled but not OK after {elapsed:.1f}s", None)
+                           f"precharge enabled but not OK after {elapsed:.1f}s", None, ts_ms)
 
 
 class TorchCellImbalanceRule(BaseRule):
@@ -446,7 +449,7 @@ class TorchCellImbalanceRule(BaseRule):
         self.threshold = threshold_v
         self._prev_bad: dict[str, bool] = {}
 
-    def update(self, decoded: dict) -> Alert | None:
+    def update(self, decoded: dict, ts_ms: int) -> Alert | None:
         if not decoded["message"].startswith("TORCH_"):
             return None
         s = decoded["signals"]
@@ -463,13 +466,13 @@ class TorchCellImbalanceRule(BaseRule):
         voltages = [v for _, v in vals]
         delta = max(voltages) - min(voltages)
         was_bad = self._prev_bad.get(decoded["message"], False)
-        if delta > self.threshold and not was_bad and self._is_rearmed(decoded["message"]):
+        if delta > self.threshold and not was_bad and self._is_rearmed(decoded["message"], ts_ms):
             self._prev_bad[decoded["message"]] = True
-            self._mark_fired(decoded["message"])
+            self._mark_fired(decoded["message"], ts_ms)
             return self._alert(Severity.CAUTION,
                                f"TORCH {module} CELL IMBALANCE",
                                f"delta {delta:.3f}V (limit {self.threshold:.2f})",
-                               float(delta))
+                               float(delta), ts_ms)
         if delta <= self.threshold:
             self._prev_bad[decoded["message"]] = False
         return None
