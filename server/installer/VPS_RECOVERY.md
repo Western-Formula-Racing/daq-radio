@@ -99,7 +99,6 @@ Expected running containers:
 | Container | Notes |
 |---|---|
 | timescaledb | Should show `(healthy)` |
-| timescaledb-explorer | TimescaleDB UI |
 | grafana | Dashboard |
 | grafana-bridge | Grafana API bridge |
 | file-uploader | |
@@ -110,7 +109,6 @@ Expected running containers:
 | sandbox | |
 | code-generator | |
 | slackbot | Exits cleanly if `ENABLE_SLACK=false` |
-| startup-data-loader | Runs once then exits — normal |
 
 > `lap-detector` is tabled until GPS hardware is available and is intentionally disabled. To run it: `docker compose --profile disabled up lap-detector -d`
 
@@ -153,18 +151,23 @@ journalctl --vacuum-size=200M
 
 ## Preventing OOM crashes
 
-Memory limits are now set in `docker-compose.yml`. Key limits:
+CPU and memory limits are set per-service in `docker-compose.yml`, sized for the permanent 12GB/6-core VPS:
 
-| Service | Limit |
-|---|---|
-| timescaledb | 4096M |
-| file-uploader | 1536M |
-| data-downloader-api | 1024M |
-| sandbox | 1024M |
-| grafana | 512M |
-| others | 128–512M |
+| Service | CPUs | Memory |
+|---|---|---|
+| timescaledb | 3 | 4096M |
+| grafana | 1.5 | 2048M |
+| file-uploader | 2 | 1536M |
+| data-downloader-api | 1.5 | 1024M |
+| sandbox | 1.5 | 1024M |
+| code-generator | 1.5 | 1024M |
+| data-downloader-scanner | 1 | 512M |
+| slackbot | 1 | 256M |
+| grafana-bridge | 1 | 256M |
+| health-monitor | 0.5 | 256M |
+| data-downloader-frontend | 0.5 | 128M |
 
-**Total ceiling: ~9GB** across all services (server has 8GB RAM + 8GB swap).
+**Total ceiling: ~12GB memory** across all normally-running services (`lap-detector` is disabled by default and not counted). CPU limits sum to more than 6 cores by design — they're per-container ceilings, not reservations, since services rarely all peak simultaneously.
 
 If OOM happens again, check which container hit its limit:
 ```bash
@@ -185,8 +188,7 @@ crontab -l  # shows: 0 4 * * * docker compose restart
 
 | Service | Port |
 |---|---|
-| TimescaleDB | 9000 |
-| TimescaleDB Explorer | 8888 |
+| TimescaleDB | 5432 |
 | Grafana | 8087 (also via Cloudflare tunnel) |
 | Grafana Bridge | 3001 |
 | File Uploader | 8084 |

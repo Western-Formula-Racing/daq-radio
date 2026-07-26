@@ -21,7 +21,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
 
 # 4. Stamp the current git hash into the service file
-sed -i "s/GIT_HASH=unknown/GIT_HASH=$(git rev-parse --short HEAD)/" deploy/car-telemetry.service
+sed -i "s/GIT_HASH=.*/GIT_HASH=$(git rev-parse --short HEAD)/" deploy/car-telemetry.service
 
 # 5. Install and enable the systemd service
 sudo cp deploy/car-telemetry.service /etc/systemd/system/
@@ -82,7 +82,7 @@ The car sends UDP to `REMOTE_IP=10.71.1.20` (hardcoded in `car-telemetry.service
 |------|----------|---------|
 | 5005 | UDP | CAN data stream → base |
 | 5006 | TCP | Packet resend server (base pulls missing batches) |
-| 8080 | HTTP | Status page (`/`, `/version`, `/set-time`) |
+| 8080 | HTTP | Status page (`/health`, `/relay-info`, `/dbc-info`, static files under `status/`) |
 | 8081 | HTTP | Video quality control — `POST /video/quality` (when `ENABLE_VIDEO=true`) |
 | 9080 | WS | PECAN WebSocket (direct connection when hotspotted) |
 

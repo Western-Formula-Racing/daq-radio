@@ -35,7 +35,7 @@ This directory contains the Docker Compose deployment used to run the full telem
    docker compose down -v
    ```
 
-The first boot seeds TimescaleDB with the sample CAN data in `startup-data-loader/data/`. Subsequent restarts skip the import unless you remove the volumes.
+TimescaleDB starts with an empty database; use the file-uploader (`http://localhost:8084`) to import CAN CSV data.
 
 ## Environment variables
 
@@ -43,19 +43,19 @@ All secrets and tokens are defined in `.env`. The defaults provided in `.env.exa
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `DBC_FILE_PATH` | Path to the CAN DBC file used by startup-data-loader and file-uploader and other services | `example.dbc` |
+| `DBC_FILE_PATH` | Path to the CAN DBC file used by file-uploader and other services | `example.dbc` |
 | `POSTGRES_DSN` | DSN used by services to connect to TimescaleDB | `postgresql://wfr:wfr_password@timescaledb:5432/wfr` |
 | `POSTGRES_USER` / `POSTGRES_PASSWORD` | Bootstraps the initial admin user | `wfr` / `wfr_password` |
-| `POSTGRES_PASSWORD` | Database password shared by services that use DSN auth | `wfr_password` |
-| `GRAFANA_ADMIN_PASSWORD` | Grafana administrator password | `dev-grafana-password` |
-| `EXPLORER_SESSION_SECRET` | Secret for the TimescaleDB Explorer UI | `dev-explorer-session-key` |
+| `GRAFANA_ADMIN_PASSWORD` | Grafana administrator password | `admin` |
 | `ENABLE_SLACK` | Gate to disable Slack-specific services | `false` |
 | `SLACK_BOT_TOKEN` / `SLACK_APP_TOKEN` | Credentials for the Slack bot (optional) | empty |
 | `SLACK_WEBHOOK_URL` | Incoming webhook for notifications (optional) | empty |
 | `SLACK_DEFAULT_CHANNEL` | Default Slack channel ID for outbound messages | `C0123456789` |
+| `SLACKBOT_LOG_DIR` | Directory for the Slack bot's per-request interaction logs | `/app/logs` |
 | `FILE_UPLOADER_WEBHOOK_URL` | Webhook invoked after uploads complete | inherits `SLACK_WEBHOOK_URL` |
-| `COHERE_API_KEY` | Cohere API key for AI-powered code generation | empty |
-| `COHERE_MODEL` | Cohere model to use | `command-a-03-2025` |
+| `ANTHROPIC_API_KEY` | API key for the code-generator's LLM (Anthropic-compatible; MiniMax by default) | empty |
+| `ANTHROPIC_BASE_URL` | Base URL for the Anthropic-compatible endpoint | `https://api.minimaxi.com/anthropic` |
+| `ANTHROPIC_MODEL` | Model name to use | `MiniMax-M3` |
 | `MAX_RETRIES` | Maximum retries for failed code execution | `2` |
 | `DEFAULT_SEASON_TABLE` | Default season table for telemetry queries | `wfr26` |
 | `DEBUG` | Enables verbose logging for selected services | `0` |
@@ -74,10 +74,9 @@ All secrets and tokens are defined in `.env`. The defaults provided in `.env.exa
 | `file-uploader` | `8084` | Web UI for uploading CAN CSV archives and streaming them into TimescaleDB. |
 | `slackbot` | n/a | Socket-mode Slack bot for notifications and automation (optional). Integrates with code-generator for AI queries. |
 | `sandbox` | n/a | Custom Python execution environment for running AI-generated code and TimescaleDB queries. |
-| `code-generator` | `3030` (internal) | AI-powered code generation service using Cohere. Generates Python code from natural language. |
+| `code-generator` | `3030` (internal) | AI-powered code generation service (MiniMax via an Anthropic-compatible API by default). Generates Python code from natural language. |
 | `health-monitor` | n/a | Monitors container health and scanner status. |
-| `lap-detector` | `8050` | Dash-based lap analysis web application, tabled until GPS hardware is available. |
-| `startup-data-loader` | n/a | Seeds TimescaleDB with sample CAN frames on first boot. |
+| `lap-detector` | `8050` | Dash-based lap analysis web application, disabled by default until GPS hardware is available (`docker compose --profile disabled up lap-detector -d`). |
 
 ## Deployment & updates
 
@@ -97,8 +96,7 @@ commands, and the `deploy-service-changes` skill for the manual flow.
 
 ## Data and DBC files
 
-- `startup-data-loader/data/` ships with `2025-01-01-00-00-00.csv`, a csv file to exercise the import pipeline without exposing production telemetry.
-- Both the loader and the uploader share `example.dbc`, a minimal CAN database that defines two demo messages. Replace this file with your team’s CAN definition when working with real data.
+- `example.dbc` is a minimal CAN database used as the fallback DBC (via `DBC_FILE_PATH`) when no custom DBC is uploaded through the file-uploader UI. Replace it with your team's CAN definition when working with real data.
 
 ## Observability
 
@@ -107,9 +105,8 @@ commands, and the `deploy-service-changes` skill for the manual flow.
 ## Troubleshooting tips
 
 - **Service fails to connect to TimescaleDB** – Confirm `POSTGRES_DSN`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` in `.env` are correct. Regenerate the volumes with `docker compose down -v` if you rotate credentials.
-- **Re-import sample data** – Run `docker compose down -v` and restart the stack to re-trigger the data loader.
 - **Slack services are optional** – Leave Slack variables empty or set `ENABLE_SLACK=false` to skip starting the bot during development.
-- **AI code generation not working** – Ensure `COHERE_API_KEY` is set in `.env`. Check logs with `docker compose logs code-generator`.
+- **AI code generation not working** – Ensure `ANTHROPIC_API_KEY` is set in `.env`. Check logs with `docker compose logs code-generator`.
 - **Sandbox execution fails** – Verify sandbox container is running with `docker ps | grep sandbox`. Check logs with `docker compose logs sandbox`.
 
 ## AI-Powered Code Generation
@@ -121,18 +118,23 @@ The stack includes an AI-powered code generation service that allows natural lan
 !agent plot battery voltage over the last hour
 !agent show me motor temperature correlation with RPM
 !agent analyze inverter efficiency
+!reply <instructions>   # continue the conversation inside the result thread
+!approve                # save the last result as a verified example
+!aistats                # code-generator observability dashboard
 ```
 
 **Features:**
-- Automatic code generation from natural language using Cohere AI
+- Automatic code generation from natural language using an Anthropic-compatible LLM (MiniMax-M3 by default)
+- RAG context (ChromaDB) over sensor metadata, past runs, and verified golden samples
 - Self-correcting retry mechanism (up to 2 retries on failure)
+- Multi-turn follow-up conversations via `!reply` (24h/15-turn session limit)
 - Secure sandboxed execution environment
 - Auto-generation of plots and visualizations
 - Direct TimescaleDB access for telemetry queries
 
 **Setup:**
-1. Add `COHERE_API_KEY` to your `.env` file
-2. Optional: Configure `COHERE_MODEL` and `MAX_RETRIES`
+1. Add `ANTHROPIC_API_KEY` to your `.env` file
+2. Optional: Configure `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`, and `MAX_RETRIES`
 3. Services start automatically with the stack
 
 See `sandbox/README.md` for detailed documentation.

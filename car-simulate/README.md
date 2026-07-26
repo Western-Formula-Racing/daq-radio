@@ -30,10 +30,5 @@ This is the simulator that has been used for hosted demos.
 
 ### 2. Root `car-simulate` Docker Compose
 
-At the root of `car-simulate/` there is a minimal `docker-compose.yml`:
-
-- Provides a simple container scaffolding for experiments
-- Reuses the simulators, CSVs, and DBC data in this directory
-
-This is primarily intended for local development and ad‑hoc testing. For any long‑running demo or shared environment, prefer the **persistent broadcast** setup described above, since it has the full standard + extended CAN simulators wired in.
+At the root of `car-simulate/` there is a minimal `docker-compose.yml` (`build: .`, `network_mode: host`, `privileged: true`). **It currently has no matching `Dockerfile` in this directory, so `docker compose up` here will fail to build.** Treat it as unfinished scaffolding rather than a working setup — for any local run or demo, use the **persistent broadcast** setup described above instead, since it has the full standard + extended CAN simulators wired in and actually builds.
 

@@ -1,5 +1,7 @@
 # PECAN CAN Log Format Decision
 
+> **Implementation update:** The `.pecan` session container below was planned as `version: 1` with named-object frames. The shipped implementation (`src/utils/pecanSerializer.ts`, `src/utils/replayParser.ts`, `src/types/replay.ts`) instead uses **`version: 2`**, a more compact tuple-based encoding (`frames: [[tRelMs, canId, flags, dataHex], ...]` with a `columns` field documenting the tuple order, and `isExtended`/`direction` packed into a single `flags` bitfield rather than separate fields) — described as "~7x smaller than the v1 named-object format." The parser explicitly rejects `version: 1` files with a message directing users to re-export as v2. Decode-metadata field names in code are camelCase (`dbcName`, `dbcHashSha256`, `importFormat`, `dbcEmbedded`), not the snake_case shown in the Phase 4 spec below. The Phase 1 CSV format and Phase 2/3 import-adapter notes are otherwise still accurate (see the Migration Note update below for one exception: BLF import already shipped, ahead of the planned Vector ASC adapter, which is not yet implemented).
+
 ## Decision Summary
 
 Use a machine-readable raw frame format as the canonical PECAN replay format.
@@ -59,6 +61,8 @@ Add import support for common external logs by mapping into PECAN CSV v1 interna
 
 - Vector ASC (text) first.
 - Optionally BLF/MF4 later (likely via backend/worker + heavier parser path).
+
+**Status:** implemented in the reverse order — BLF import (including zlib-decompressed TSMaster variants) shipped first (`src/utils/replayParser.ts`), wired into the file picker (`.pecan,.json,.csv,.blf,...`). Vector ASC import is not implemented yet. MF4/Parquet (Phase 3) also remain unimplemented.
 
 ### Phase 3: Optional analytics format
 
@@ -162,17 +166,7 @@ export interface ReplayFrame {
 
 ## Migration Note (Current Trace CSV)
 
-Current export in `src/pages/Trace.tsx` uses:
-
-- human-formatted `Timestamp`
-- `Delta_ms`
-- `CAN_ID`
-- `Direction`
-- `DLC`
-- `Data`
-- `Message`
-
-This is good for human inspection, but not ideal as deterministic replay input. Add machine columns (`t_rel_ms` and/or `t_epoch_ms`) for replay and treat decoded text columns as optional/non-canonical.
+**Status: done.** `exportCsv()` in `src/pages/Trace.tsx` now emits both the machine-readable Phase 1 columns (`t_rel_ms`, `t_epoch_ms`, `can_id`, `is_extended`, `direction`, `dlc`, `data_hex`, `source`) and human-friendly extras (`message_name`, `index`, `timestamp`, `delta_ms`, `can_id_display`, `data_display`) in the same CSV export. The purely human-formatted columns (`Timestamp`, `DLC`, `Data`, `Message`) still exist, but only in the on-screen trace table UI, not in the CSV export.
 
 ## Acceptance Criteria
 

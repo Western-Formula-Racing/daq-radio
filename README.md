@@ -165,6 +165,12 @@ Convenience deployment for the PECAN WebSocket broadcast server. The dashboard i
 
 [📖 Deployment Guide](./ws-backend/README.md)
 
+### Livestream Overlay (`/livestream`)
+
+Browser-based OBS overlay for streaming races: renders live telemetry (via WebSocket) and camera feeds as an on-screen HUD, plus a settings panel for configuring the WebSocket URL and MediaMTX video source. Mounted directly into the UTS base-station stack's `stream-overlay` service (`media` profile) as static HTML/JSX served with in-browser Babel — no build step.
+
+[📖 Setup Guide](./livestream/OBS-SETUP.md)
+
 ## Quick Start
 
 ### Prerequisites
@@ -196,7 +202,7 @@ The car runs the telemetry stack natively through systemd, without Docker or Red
 ```bash
 cd /home/car/data-acquisition/universal-telemetry-software
 uv sync
-sed -i "s/GIT_HASH=unknown/GIT_HASH=$(git rev-parse --short HEAD)/" deploy/car-telemetry.service
+sed -i "s/GIT_HASH=.*/GIT_HASH=$(git rev-parse --short HEAD)/" deploy/car-telemetry.service
 sudo cp deploy/car-telemetry.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable car-telemetry
@@ -304,6 +310,7 @@ data-acquisition/
 ├── flight-recorder/   # React data recording PWA
 ├── car-simulate/      # CAN data simulators (CSV playback, WebSocket broadcast)
 ├── ws-backend/        # WebSocket broadcast server for PECAN
+├── livestream/        # OBS browser overlay for race streams
 ├── server/            # VPS server stack (TimescaleDB, Grafana, data APIs)
 │   └── installer/      # Docker Compose stack for server
 │       ├── timescaledb/   # DB init scripts and schema
@@ -312,7 +319,8 @@ data-acquisition/
 │       ├── data-downloader/ # FastAPI query builder
 │       ├── file-uploader/  # CSV upload web UI
 │       ├── health-monitor/ # Container health monitoring
-│       ├── sandbox/        # Python execution sandbox
+│       ├── lap-detector/   # Dash lap analysis app (disabled by default)
+│       ├── sandbox/        # Python execution sandbox + AI code generator
 │       └── slackbot/       # Slack bot
 ├── secret-dbc/        # Git submodule: private DBC files (restricted)
 ├── kvaser-bridge/     # Kvaser CAN adapter GUI

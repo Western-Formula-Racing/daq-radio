@@ -18,7 +18,7 @@ services:
     networks:
       - datalink
 
-  # Code generator - Cohere integration
+  # Code generator - MiniMax/Anthropic integration
   code-generator:
     build:
       context: .
@@ -27,8 +27,9 @@ services:
     ports:
       - "3030:3030"
     environment:
-      COHERE_API_KEY: ${COHERE_API_KEY}
-      COHERE_MODEL: ${COHERE_MODEL:-command-r-plus}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://api.minimaxi.com/anthropic}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-MiniMax-M3}
       SANDBOX_URL: "http://sandbox:8080"
       MAX_RETRIES: ${MAX_RETRIES:-2}
       CODE_GEN_PORT: 3030

@@ -193,7 +193,7 @@ npm run test:ui
 
 #### Test Coverage
 
-The test suite includes **42 tests** covering:
+The test suite includes **150+ tests** (run `npm test` for the current count) covering:
 
 - ✅ CAN log line parsing (CSV format)
 - ✅ CAN message decoding with DBC files
@@ -202,6 +202,8 @@ The test suite includes **42 tests** covering:
 - ✅ Batch message processing
 - ✅ DBC file loading and caching
 - ✅ Error handling for invalid messages
+- ✅ Replay/session parsing and category configuration
+- ✅ Cursor reads, page lock, and remote config hooks
 
 **Critical components tested:**
 - `parseCanLogLine()` - CSV to CAN message conversion
@@ -242,15 +244,19 @@ Tests must pass before deployment proceeds, ensuring CAN parsing reliability.
 ```
 pecan/
 ├── src/
-│   ├── components/     # React components
+│   ├── components/     # React components (see src/components/README.md)
 │   ├── pages/          # Page components
-│   ├── services/       # WebSocket service
+│   ├── services/       # WebSocket, serial, DBC, telemetry, and Grafana services
+│   ├── context/        # React context providers
+│   ├── config/         # Category configuration parsing
+│   ├── types/           # Shared TypeScript types
 │   ├── utils/          # CAN processing utilities
 │   │   ├── canProcessor.ts      # Main CAN parsing logic
 │   │   ├── canProcessor.test.ts # Unit tests
 │   │   └── parsePhysValue.test.ts # Helper tests
 │   ├── assets/         # DBC files and static assets
 │   └── lib/            # Data store
+├── docs/               # Design decision docs (e.g. CAN log/session format)
 ├── public/             # Static files
 └── dist/               # Build output
 ```

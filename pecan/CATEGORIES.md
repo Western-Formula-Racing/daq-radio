@@ -14,7 +14,7 @@ CategoryName,TailwindColorClass,MessageIDs
 
 ### Components
 
-- **CategoryName**: Display name for the category (e.g., "VCU", "BMS", "TEST MSG")
+- **CategoryName**: Display name for the category (e.g., "VCU", "BMS", "ACCU")
 - **TailwindColorClass**: Tailwind CSS background color class (e.g., "bg-purple-500", "bg-sky-400")
 - **MessageIDs**: Comma-separated list of CAN message IDs or ranges
 
@@ -30,20 +30,20 @@ Lines starting with `#` are treated as comments and ignored.
 
 ## Example Configuration
 
+This mirrors the current `src/assets/categories.txt`:
+
 ```txt
 # CAN Message Category Configuration
+# Format: CategoryName,TailwindColorClass,MessageIDs
+# Message IDs can be individual numbers or ranges (e.g., 100-110)
+# Lines starting with # are comments
 
-# Test messages
-TEST MSG,bg-purple-500,256,512
-
-# Vehicle Control Unit messages
-VCU,bg-sky-400,170,171,172,173
-
-# Battery Management System messages
-BMS,bg-orange-400,168,176,177,192
-
-# Inverter messages with range
-INV,bg-green-400,163,180-190
+VCU,bg-sky-400,192-194
+BMS,bg-orange-400,512,513
+INV,bg-green-400,256,257
+SENSORS,bg-purple-500,768
+COOLING,bg-blue-600,1280
+ACCU,bg-red-500,1006-1055
 ```
 
 ## Tailwind Color Classes

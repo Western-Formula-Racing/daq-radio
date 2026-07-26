@@ -6,8 +6,11 @@ A lightweight Socket Mode Slack bot that listens to a single channel and respond
 Features
 --------
 - Connects to Slack using the official `slack_sdk` client in Socket Mode.
-- Responds to `!help`, `!location`, `!testimage`, and `!agent` commands posted in the configured channel.
-- Persists `!agent` instructions to a text file and runs a configurable subprocess to kick off downstream automation.
+- Responds to `!help`, `!wx`, `!location`, `!testimage`, `!agent`, `!agent-debug`, `!reply`, `!approve`, `!aistats`, and `!stats` commands posted in the configured channel (or DMed directly).
+- Supports multi-turn `!agent` follow-up conversations inside a thread via `!reply`, backed by the code-generator's `/api/generate-code-followup` endpoint. Threads expire after 24 hours or 15 follow-up turns.
+- Lets users promote a successful `!agent` result to a verified "golden sample" via `!approve` or a `:+1:` reaction on the result message.
+- Posts a daily DAQ activity report (rows logged, CAN messages, testing duration) automatically at 9 AM ET, in addition to on-demand via `!stats`.
+- Forwards `!agent`/`!agent-debug` instructions to the code-generator service for AI-driven Python code generation and execution.
 - Exposes the helper functions `send_slack_message` and `send_slack_image` so other modules can send messages or images through the same Slack client.
 
 Requirements
@@ -26,6 +29,8 @@ Set the following environment variables before running the bot:
 - `SLACK_DEFAULT_CHANNEL` (optional): Channel ID the bot monitors and posts to. Defaults to `C08NTG6CXL5`.
 - `SLACK_BOT_USER_ID` (optional): Bot user ID. Used to avoid responding to itself. Default is `U08P8KS8K25`.
 - `CODE_GENERATOR_URL` (optional): URL of the code-generator service. Defaults to `http://code-generator:3030`.
+- `POSTGRES_DSN` (optional): TimescaleDB connection string used by `!stats` and the daily report. Defaults to `postgresql://wfr:wfr_password@timescaledb:5432/wfr`.
+- `SLACKBOT_LOG_DIR` (optional): Directory where per-request interaction logs are written. Defaults to `/app/logs`; falls back to a temp directory if that path isn't writable (e.g. running outside the container).
 
 Local Development
 -----------------
@@ -64,6 +69,9 @@ Slack Commands
 - `!help`  
   Display the list of supported commands and short descriptions.
 
+- `!wx [ICAO]`  
+  Post METAR + TAF weather for the given airport (defaults to CYXU, London Intl).
+
 - `!location`  
   Fetch the current vehicle location from `http://lap-detector-server:8050/api/track?type=location` and post a Google Maps link plus raw coordinates.
 
@@ -75,6 +83,18 @@ Slack Commands
 
 - `!agent-debug <instructions>`  
   Extended version of `!agent` with 1200 second (20 minute) timeout. Automatically retries up to 2 times if code fails. Use for complex analysis or large datasets.
+
+- `!reply <instructions>` (posted inside an `!agent`/`!agent-debug` thread)  
+  Continues that conversation, reusing the prior code, output, and RAG context via `/api/generate-code-followup`. Plain replies without `!reply` are ignored so teammates can discuss in-thread without triggering the bot. Sessions expire after 24 hours or 15 follow-up turns.
+
+- `!approve` (or a `:+1:` reaction on a result message)  
+  Saves the most recent successful `!agent` result as a verified golden sample, improving future RAG-assisted code generation.
+
+- `!aistats`  
+  Show the AI code-generator observability dashboard: cache hit rate, success rate, sandbox execution duration, retry distribution, and RAG vector space stats.
+
+- `!stats`  
+  Show DAQ activity (rows logged, CAN messages, testing duration) for today and the past 7 days. Also posted automatically every day at 9 AM ET.
 
 Agent Workflow
 --------------

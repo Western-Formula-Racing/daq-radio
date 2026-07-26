@@ -101,7 +101,7 @@ graph TB
 - **Port:** `9080` (plain) / `9443` (TLS-terminated)
 - **Frame type:** Text frames (JSON)
 - **Encoding:** UTF-8
-- **Max message size:** 64 KB
+- **Max message size:** no application-level limit is configured; the effective ceiling is the `websockets` library's default (1 MiB) since neither `websocket_bridge.py` nor `broadcast_server.py` pass a `max_size` argument
 
 ### 2.1 Connection URL
 
@@ -233,6 +233,67 @@ Sent when the server encounters an error processing a client message.
 | `code` | `string` | Yes | Machine-readable error code (see section 7) |
 | `message` | `string` | Yes | Human-readable description |
 
+### 4.5 `page_lock_state` — Page Lock Snapshot
+
+Broadcast to all clients whenever a page lock changes (acquired/released), and sent to a single client in response to an uplink `page_lock` query (§5.4).
+
+```jsonc
+{
+  "type": "page_lock_state",
+  "locks": {
+    "can-transmitter": { "holder": "client-abc", "name": "Alice" }
+  },
+  "clientId": "client-abc"          // only present on a direct query response
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | `"page_lock_state"` | Yes | Message discriminator |
+| `locks` | `object` | Yes | Map of locked page name -> `{holder, name}`. Pages with no active lock are omitted. |
+| `clientId` | `string` | No | This client's own connection id; only included on a direct `query` response |
+
+### 4.6 `page_lock_result` — Page Lock Acquire Result
+
+Sent to the requesting client in response to an uplink `page_lock` acquire.
+
+```jsonc
+{
+  "type": "page_lock_result",
+  "page": "can-transmitter",
+  "success": false,
+  "holder": "client-xyz",
+  "name": "Bob"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | `"page_lock_result"` | Yes | Message discriminator |
+| `page` | `string` | Yes | The page name the client tried to lock |
+| `success` | `boolean` | Yes | Whether the lock was granted |
+| `clientId` | `string` | No | Present on success; this client's connection id |
+| `holder` | `string` | No | Present on failure; the connection id currently holding the lock |
+| `name` | `string` | No | Present on failure; display name of the current holder |
+
+### 4.7 Link Diagnostics (`link_diagnostics` channel passthrough)
+
+The base station's WebSocket bridge subscribes to the `link_diagnostics` Redis channel (published by `src/link_diagnostics.py`) and forwards every message straight to connected clients, unmodified. Three `type` values are published on this channel:
+
+```jsonc
+{ "type": "ping", "rtt_ms": 23.4, "ts": 1732650000000 }
+{ "type": "throughput", "mbps": 41.2, "loss_pct": 0.0, "sent": 200, "received": 200, "ts": 1732650000000 }
+{ "type": "radio", "rssi_dbm": -62, "tx_mbps": 130.0, "rx_mbps": 86.0, "ccq_pct": 92.5, "ts": 1732650000000 }
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `"ping" \| "throughput" \| "radio"` | Diagnostic message discriminator — **note this `"ping"` is unrelated to the client-initiated uplink `ping` in §5.3; it is a server-side ICMP RTT sample forwarded downlink.** |
+| `rtt_ms` | `number\|null` | (`ping`) Round-trip time to the car, or `null` if unreachable |
+| `mbps` / `loss_pct` / `sent` / `received` | `number` | (`throughput`) Periodic UDP throughput burst test results |
+| `rssi_dbm` / `tx_mbps` / `rx_mbps` / `ccq_pct` | `number` | (`radio`) Scraped from the Ubiquiti radio's status page; may be replaced by an `error` field instead if the scrape fails |
+| `ts` | `number` | Epoch milliseconds |
+
 ---
 
 ## 5. Uplink Messages (Client -> Server)
@@ -313,6 +374,25 @@ Server responds with:
 }
 ```
 
+### 5.4 `page_lock` — Acquire/Release/Query a Page Lock
+
+Lets a client claim exclusive editing rights to a sensitive page (e.g. the CAN transmitter or throttle mapper) so two teammates don't send conflicting commands at once.
+
+```jsonc
+{ "type": "page_lock", "action": "acquire", "page": "can-transmitter", "name": "Alice" }
+{ "type": "page_lock", "action": "release", "page": "can-transmitter" }
+{ "type": "page_lock", "action": "query" }
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | `"page_lock"` | Yes | Message discriminator |
+| `action` | `"acquire" \| "release" \| "query"` | Yes | Requested operation |
+| `page` | `string` | For `acquire`/`release` | Must be one of the server's allow-listed page names (currently `can-transmitter`, `throttle-mapper`) |
+| `name` | `string` | No | Display name shown to other clients while the lock is held (max 50 chars) |
+
+Server responds with `page_lock_result` (§4.6) for `acquire`, and `page_lock_state` (§4.5) for `query`; a successful `acquire`/`release` also triggers a `page_lock_state` broadcast to all clients. An unknown `page` or `action` returns an `error` with code `INVALID_PAGE` or `INVALID_ACTION` respectively (see §7).
+
 ---
 
 ## 6. Deployment Modes and Redis Channels
@@ -331,6 +411,8 @@ In car mode, downlink frames can also be broadcast from an in-process queue, so 
 | `can_messages` | Downlink | Base `data.py` | WS Bridge | JSON array of `{time, canId, data}` |
 | `system_stats` | Downlink | Base `data.py` | WS Bridge | JSON object `{received, missing, recovered}` |
 | `can_uplink` | Uplink | WS Bridge | Base `data.py` | JSON object (see below) |
+| `link_diagnostics` | Downlink | Base `link_diagnostics.py` | WS Bridge | JSON object, forwarded as-is to clients (see §4.7) |
+| `telemetry_heartbeat` | Downlink | Base `data.py`/`heartbeat.py` | WS Bridge (filtered, not forwarded to clients) | Internal liveness signal |
 
 ### 6.1 `can_uplink` Channel Format
 
@@ -361,6 +443,8 @@ For batch messages, each CAN frame in the batch is published as a separate Redis
 | `UPLINK_DISABLED` | Uplink is not enabled on this server instance |
 | `UNKNOWN_TYPE` | Unrecognized message `type` |
 | `CAN_WRITE_FAILED` | Car mode only: `python-can` failed to write to `can0` |
+| `INVALID_PAGE` | `page_lock` targets a page not in the server's allow-list |
+| `INVALID_ACTION` | `page_lock` action is not `acquire`, `release`, or `query` |
 
 ---
 
@@ -507,7 +591,9 @@ sequenceDiagram
 
 ---
 
-## Appendix A: CAN IDs Reference (from example.dbc)
+## Appendix A: CAN IDs Reference (from `server/installer/example.dbc`)
+
+There are two different `example.dbc` files in this repo — this table matches `server/installer/example.dbc`. `universal-telemetry-software/example.dbc` and `car-simulate/example.dbc` (byte-identical to each other) instead use `M192_Command_Message`/`BMS_Current_Limit`/`TORCH_*`-style names; consult that file directly if you're working with the UTS/car-simulate stack instead of the server stack.
 
 | CAN ID | Name | Direction | Description |
 |--------|------|-----------|-------------|
@@ -519,9 +605,8 @@ sequenceDiagram
 | 512 | BMS_Status | Downlink | Pack voltage, current, SOC |
 | 513 | BMS_Cell_Stats | Downlink | Cell voltage statistics |
 | 768 | Wheel_Speeds | Downlink | Four wheel speed sensors |
+| 1024 | IMU_Data | Downlink | Accelerometer and gyro |
 | 1280 | Cooling_Status | Downlink | Coolant temps, pump/fan speed |
-| 2048 | IMU_Data | Downlink | Accelerometer and gyro |
-| 1006–1055 | TORCH_* | Downlink | BMS cell voltages and temps |
 
 ---
 

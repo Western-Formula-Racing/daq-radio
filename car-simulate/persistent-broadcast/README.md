@@ -153,7 +153,7 @@ asyncio.run(connect())
 
 ## Data Format
 
-The server broadcasts batches of 100 CAN messages at 5 Hz. Each message has the following format:
+By default (CSV replay disabled) the server runs three independent simulators on their own cadences: `StandardCanSimulator` at 20 Hz, `ChargerSimulator` at 5 Hz, and `AccumulatorSimulator` at 10 Hz — each emitting a variable number of messages per tick. Only when `ENABLE_CSV=true` does it replay the CSV in batches of 100 messages at 5 Hz. Each message has the following format:
 
 ```json
 {
@@ -184,8 +184,8 @@ docker-compose up -d --build
 
 ## Port Configuration
 
-- **8080**: WebSocket (ws://) - unencrypted
-- **8443**: Secure WebSocket (wss://) - encrypted
+- **9080**: WebSocket (ws://) - unencrypted
+- **9443**: Secure WebSocket (wss://) - encrypted
 
 ## Troubleshooting
 
@@ -207,9 +207,11 @@ docker-compose up -d --build
 
 You can customize the following variables in `docker-compose.yml`:
 
-- `WS_PORT`: WebSocket port (default: 8080)
-- `WSS_PORT`: Secure WebSocket port (default: 8443)
-- `CSV_FILE`: Path to CSV data file
+- `WS_PORT`: WebSocket port (default: 9080)
+- `WSS_PORT`: Secure WebSocket port (default: 9443)
+- `ENABLE_CSV`: Replay a CSV file instead of running the live simulators (default: false)
+- `CSV_FILE`: Path to CSV data file (used only when `ENABLE_CSV=true`)
+- `ENABLE_ACCU`: Toggle the accumulator simulator (default: true)
 - `SSL_CERT`: Path to SSL certificate
 - `SSL_KEY`: Path to SSL private key
 - `DOMAIN`: Domain name for the service

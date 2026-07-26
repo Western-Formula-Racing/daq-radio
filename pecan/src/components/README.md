@@ -1,16 +1,12 @@
 # PECAN Components Documentation
 
-This directory contains reusable React components for the PECAN dashboard.
+This directory contains reusable React components for the PECAN dashboard. Only `TracePanel` is documented in detail below — the directory has grown substantially since this doc was written and now also includes (undocumented here): top-level components like `Sidebar`, `DataCard`, `DataRow`, `PlotManager`, `TimelineBar`, `FloatingTools`, `DbcSelector`, `SettingsModal`, `AuthModal`, and the game/banner components, plus the `TxPage/`, `TxSidebar/`, `accumulator/`, and `comms/` subdirectories. Contributions to document those are welcome.
 
 ## TracePanel
 
 The `TracePanel` component is a floating, draggable, and resizable window designed to monitor CAN traffic in real-time. It is highly reusable and can be integrated into any page within the application to provide a compact view of the CAN bus.
 
-#### Use Case: Throttle Mapper
-In the `ThrottleMapper` page, the `TracePanel` could be used to:
-- Monitor the `TX` messages being sent to the ECU.
-- Verify that the `RX` signals from sensors are being received as expected.
-- Debug the interaction between the mapper logic and the physical/simulated CAN bus without navigating away from the tuning interface.
+Currently used in `FloatingTools` and `Dashboard`.
 
 ### Functionality and Props
 

@@ -236,7 +236,7 @@ cd /home/car/data-acquisition/universal-telemetry-software
 Install dependencies and the native systemd service:
 ```bash
 uv sync
-sed -i "s/GIT_HASH=unknown/GIT_HASH=$(git rev-parse --short HEAD)/" deploy/car-telemetry.service
+sed -i "s/GIT_HASH=.*/GIT_HASH=$(git rev-parse --short HEAD)/" deploy/car-telemetry.service
 sudo cp deploy/car-telemetry.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable car-telemetry
@@ -322,10 +322,7 @@ Images are built for both `linux/amd64` and `linux/arm64` (Raspberry Pi).
 | `RELAY_REQUIRE_TOKEN_ON_LAN` | `false` | Require token for LAN clients too, not just loopback/public clients |
 | `RTSP_PORT` | `8554` | Port on base station where MediaMTX accepts RTSP push |
 | `VIDEO_STREAM_NAME` | `car-camera` | RTSP/WebRTC stream path name |
-| `VIDEO_WIDTH` | `848` | Capture width (overridden by quality preset) |
-| `VIDEO_HEIGHT` | `480` | Capture height (overridden by quality preset) |
-| `VIDEO_FPS` | `30` | Frame rate |
-| `VIDEO_BITRATE` | `800` | Encoder bitrate in kbps (overridden by quality preset) |
+| `VIDEO_BITRATE` | `2000` | Encoder bitrate in kbps for the GStreamer fallback source only (the primary ffmpeg path takes width/height/fps/bitrate entirely from the active quality preset in `src/video.py`, not from env vars) |
 | `VIDEO_CONTROL_PORT` | `8081` | HTTP port for runtime quality control on car |
 
 ### Ports

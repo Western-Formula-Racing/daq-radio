@@ -4,7 +4,7 @@
 
 | Jack | Color | GPIO | Function |
 |------|-------|------|----------|
-| — | Blue | 3 | CAN activity |
+| — | Blue | 26 | CAN activity |
 | DATA LAN | Yellow | 6 | CAN telemetry process |
 | DATA LAN | Green | 10 | WebSocket bridge |
 | RADIO LAN | Yellow | 7 | Audio streaming |
@@ -12,7 +12,7 @@
 
 ## Normal Operation
 
-### CAN Activity (Blue, GPIO 3)
+### CAN Activity (Blue, GPIO 26)
 
 | Role | Condition | LED |
 |------|-----------|-----|
