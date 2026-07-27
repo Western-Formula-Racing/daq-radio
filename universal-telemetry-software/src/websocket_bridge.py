@@ -23,6 +23,7 @@ from src.heartbeat import pump_pubsub_with_heartbeat
 from src.wcars.engine import WcarsEngine
 from src.wcars.serialization import encode_alert, encode_backlog, encode_config_ack, decode_config
 from src.wcars.config import load_config, save_config
+from src.frame_time import is_valid_frame_ts as _is_valid_frame_ts
 from pathlib import Path
 
 logger = logging.getLogger("WebSocketBridge")
@@ -43,11 +44,6 @@ def get_wcars_engine() -> WcarsEngine:
     if _wcars_engine is None:
         _wcars_engine = WcarsEngine(load_config(WCARS_CONFIG_PATH))
     return _wcars_engine
-
-
-def _is_valid_frame_ts(ts_ms) -> bool:
-    """True only for a genuine positive-integer epoch-ms timestamp (bool is not an int here)."""
-    return isinstance(ts_ms, int) and not isinstance(ts_ms, bool) and ts_ms > 0
 
 
 # Bus-rate frames (thousands/sec) mean an unthrottled warning could flood the log
