@@ -144,6 +144,40 @@ def test_rules_without_id_get_one_assigned_at_load(tmp_path, db):
     assert [r["id"] for r in store.list()] == [ids[0], ids[2]]
 
 
+def test_id_assigned_at_load_is_persisted_across_restart(tmp_path, db):
+    # broken/broken_reason already correct, as they would be after any prior
+    # restart, so revalidate() itself has nothing to write here: the id fix
+    # is the only thing that can make this rule's id stable.
+    legacy = draft() | {"broken": False, "broken_reason": None}
+    _write_rules_file(tmp_path, [legacy])
+    (assigned,) = RuleStore(tmp_path, db).list()
+    first_id = assigned["id"]
+    (reloaded,) = RuleStore(tmp_path, db).list()
+    assert reloaded["id"] == first_id
+
+
+def test_duplicate_id_is_reassigned_and_persisted(tmp_path, db):
+    # broken/broken_reason preset so revalidate() has nothing to write, same
+    # as the normal-restart condition described for the missing-id case.
+    dup_a = draft() | {"id": "dup", "name": "A", "broken": False, "broken_reason": None}
+    dup_b = draft() | {"id": "dup", "name": "B", "broken": False, "broken_reason": None}
+    _write_rules_file(tmp_path, [dup_a, dup_b])
+    ids_first = [r["id"] for r in RuleStore(tmp_path, db).list()]
+    assert len(set(ids_first)) == 2
+
+    # Restart again before any explicit mutation forces a write of its own;
+    # the reassigned id for the second rule must be the same one, not a
+    # fresh one minted on every boot.
+    store = RuleStore(tmp_path, db)
+    ids_second = [r["id"] for r in store.list()]
+    assert ids_second == ids_first
+
+    # Both rules must now be reachable through _find, the whole point of
+    # reassigning rather than leaving the collision in place.
+    store.delete(ids_second[1], by="a")
+    assert [r["id"] for r in store.list()] == [ids_second[0]]
+
+
 def test_legacy_rule_is_listed_with_an_integer_rev(tmp_path, db):
     legacy = draft() | {"id": "legacy-1", "message": "OVERTEMP"}
     legacy.pop("rev", None)
@@ -252,6 +286,17 @@ def test_store_refuses_to_start_if_it_cannot_quarantine(tmp_path, db, monkeypatc
         RuleStore(tmp_path, db)
     # Refusing to come up is the whole point: the file is still there to save.
     assert (tmp_path / "rules.json").read_text() == "{not json"
+
+
+def test_absent_rules_file_is_not_quarantined(tmp_path, db):
+    RuleStore(tmp_path, db)
+    assert list(tmp_path.glob("rules.json.corrupt.*")) == []
+
+
+def test_empty_rules_list_is_not_quarantined(tmp_path, db):
+    _write_rules_file(tmp_path, [])
+    RuleStore(tmp_path, db)
+    assert list(tmp_path.glob("rules.json.corrupt.*")) == []
 
 
 def test_quarantine_names_do_not_collide_when_the_clock_repeats(tmp_path, db):

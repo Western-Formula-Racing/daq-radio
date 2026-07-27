@@ -80,10 +80,20 @@ class RuleStore:
         self._rules_path = data_dir / "rules.json"
         self._audit_path = data_dir / "audit.jsonl"
         data_dir.mkdir(parents=True, exist_ok=True)
+        self._ids_assigned_at_load = False
         self._rules = self._load()
         # A DBC swap between service runs can orphan stored rules; mark them
         # instead of deleting so nobody's work silently disappears.
-        self.revalidate()
+        wrote = self.revalidate()
+        if self._ids_assigned_at_load and not wrote:
+            # Persist the ids _load minted so they are stable across restarts;
+            # a hand-edited or legacy rules.json must not mint a new id every
+            # boot, or every rule identity held by a client goes stale.
+            try:
+                self._write()
+            except OSError as exc:
+                logger.warning("could not persist assigned ids to %s (%s); "
+                               "serving in-memory ids for this run", self._rules_path, exc)
 
     def _load(self) -> list[dict]:
         if not self._rules_path.exists():
@@ -99,15 +109,27 @@ class RuleStore:
             # same "the next write destroys it" hazard as an unparseable file.
             self._quarantine(ValueError("no 'rules' list at the top level"))
             return []
+        non_dict_count = sum(1 for r in rules if not isinstance(r, dict))
+        if non_dict_count:
+            logger.warning("dropped %d non-object entr%s from the 'rules' list in %s",
+                           non_dict_count, "y" if non_dict_count == 1 else "ies",
+                           self._rules_path)
         rules = [r for r in rules if isinstance(r, dict)]
+        seen_ids: set[str] = set()
         for rule in rules:
-            # A rule without an id can never be found, updated or deleted, so
-            # it would be stuck in the file forever; give it one rather than
-            # dropping somebody's work.
-            if not (isinstance(rule.get("id"), str) and rule["id"]):
+            # A rule without an id, or one that collides with an id already
+            # seen in this file, can never be found, updated or deleted
+            # unambiguously, so it would be stuck forever; give it a fresh
+            # one rather than dropping somebody's work.
+            current_id = rule.get("id")
+            has_usable_id = isinstance(current_id, str) and current_id
+            if not has_usable_id or current_id in seen_ids:
+                reason = "a duplicate id" if has_usable_id else "no usable id"
                 rule["id"] = str(uuid.uuid4())
-                logger.info("assigned id %s to a rule with no usable id in %s",
-                            rule["id"], self._rules_path)
+                self._ids_assigned_at_load = True
+                logger.warning("assigned id %s to a rule with %s in %s",
+                               rule["id"], reason, self._rules_path)
+            seen_ids.add(rule["id"])
             # Backfill so every document the store hands out carries an int rev
             # and no caller has to know out of band that a missing rev means 0.
             rule["rev"] = self._rev_of(rule)
@@ -125,11 +147,15 @@ class RuleStore:
             f"{self._rules_path.name}.corrupt.{uuid.uuid4().hex}")
         try:
             os.replace(self._rules_path, dest)
-            _fsync_dir(self._rules_path.parent)
         except OSError:
+            # Only the move itself is a failure to preserve the file; a
+            # directory-fsync failure after a successful move must not be
+            # reported as "could not move it aside" or the journal misleads
+            # whoever reads it later.
             logger.error("could not read %s (%s) and could not move it aside",
-                         self._rules_path, exc)
+                         self._rules_path, exc, exc_info=True)
             raise
+        _fsync_dir(self._rules_path.parent)
         logger.error("could not read %s (%s); moved aside to %s and starting empty",
                      self._rules_path, exc, dest)
 
@@ -191,7 +217,7 @@ class RuleStore:
         self._audit("toggle", current, by)
         return copy.deepcopy(current)
 
-    def revalidate(self) -> None:
+    def revalidate(self) -> bool:
         changed = False
         for rule in self._rules:
             errors = validate_rule_doc(rule, self._db)
@@ -202,6 +228,7 @@ class RuleStore:
                 changed = True
         if changed:
             self._write()
+        return changed
 
     @staticmethod
     def _rev_of(rule: dict) -> int:
