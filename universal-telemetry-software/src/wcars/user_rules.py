@@ -152,43 +152,58 @@ class UserRule(BaseRule):
         self._last_ts: int | None = None
 
     def update(self, decoded: dict, ts_ms: int) -> Alert | None:
-        # A source switch or a replay restart can move frame time backwards;
-        # negative durations would satisfy any hold and block rearm forever.
-        if self._last_ts is not None and ts_ms < self._last_ts:
+        # Only a source switch or a replay restart is worth wiping state for.
+        # Frame time stepping back by less than the staleness window is ordinary
+        # out-of-order UDP arrival, and resetting on that would restart every
+        # hold and clear the fired timestamp, turning reordering into spam.
+        if self._last_ts is not None and self._last_ts - ts_ms > STALENESS_MS:
             self._reset_timing()
-        self._last_ts = ts_ms
+            self._last_ts = ts_ms
+        else:
+            self._last_ts = ts_ms if self._last_ts is None \
+                else max(self._last_ts, ts_ms)
+        # Timing runs on the high-water mark: a late frame must never rewind a
+        # hold or a rearm window, since negative durations would stall any hold
+        # and block rearm forever.
+        now = self._last_ts
         msg_name = decoded["message"]
         touched = False
         for cond in self.doc["conditions"]:
             key = (cond["message"], cond["signal"])
             if cond["message"] == msg_name and cond["signal"] in decoded["signals"]:
                 prev = self._latest.get(key)
+                # A late frame carries an older reading than the one already
+                # held, so newest sample wins and the stale one is discarded.
+                if prev is not None and ts_ms < prev[1]:
+                    continue
                 # A gap in this signal means the hold was never observed to be
-                # continuous, so nothing before the gap may count toward it.
+                # continuous, so nothing before the gap may count toward it, and
+                # an unobserved stretch is not evidence the condition held.
                 if prev is not None and ts_ms - prev[1] > STALENESS_MS:
                     self._satisfied_since = None
+                    self._false_since_fire = True
                 self._latest[key] = (decoded["signals"][cond["signal"]], ts_ms)
                 touched = True
         # Unrelated frames still matter once a hold is in progress: their
         # timestamps are how a now-stale condition gets noticed and reset.
         if not touched and self._satisfied_since is None:
             return None
-        if not all(self._cond_true(c, ts_ms) for c in self.doc["conditions"]):
+        if not all(self._cond_true(c, now) for c in self.doc["conditions"]):
             self._satisfied_since = None
             self._false_since_fire = True
             return None
         if self._satisfied_since is None:
-            self._satisfied_since = ts_ms
-        if ts_ms - self._satisfied_since < self._for_ms:
+            self._satisfied_since = now
+        if now - self._satisfied_since < self._for_ms:
             return None
         if self._fired_ts is not None and (
                 not self._false_since_fire
-                or ts_ms - self._fired_ts < self.rearm_seconds * 1000):
+                or now - self._fired_ts < self.rearm_seconds * 1000):
             return None
-        self._fired_ts = ts_ms
+        self._fired_ts = now
         self._false_since_fire = False
         return self._alert(self._severity, self.doc["message"], self.doc["name"],
-                           self._trigger_value(), ts_ms)
+                           self._trigger_value(), now)
 
     def _reset_timing(self) -> None:
         """Drop every timestamped memory so the rule starts as if newly built."""

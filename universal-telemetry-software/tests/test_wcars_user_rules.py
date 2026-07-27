@@ -310,8 +310,16 @@ class TestUserRule:
         assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 0) is None
         # the link drops and resumes a minute later with the condition still true
         assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 60000) is None
-        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 65000) is None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 64000) is None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 68000) is None
         assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 70000) is not None
+
+    def test_total_outage_allows_refire(self):
+        # nothing at all arrives during the gap, so the rule cannot have watched
+        # the fault clear and come back; the gap is not evidence it held
+        rule = UserRule(make_doc())
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 1000) is not None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 61000) is not None
 
     def test_for_seconds_with_rearm_seconds(self):
         rule = UserRule(make_doc(for_seconds=2.0, rearm_seconds=10.0))
@@ -332,3 +340,28 @@ class TestUserRule:
         assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 1000) is None
         assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 2500) is None
         assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 3000) is not None
+
+    def test_large_backwards_step_clears_the_fired_timestamp(self):
+        rule = UserRule(make_doc(rearm_seconds=60.0))
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 100000) is not None
+        # a replay restart is a new source, so the old fire must not gate it
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 1000) is not None
+
+    def test_small_backwards_step_does_not_reset_hold(self):
+        # the RF link delivers out-of-order and gap-recovered datagrams as a
+        # matter of course, and a hold longer than the reordering must survive
+        rule = UserRule(make_doc(for_seconds=10.0))
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 10000) is None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 14800) is None
+        # a recovered datagram arrives 200 ms late
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 14600) is None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 18000) is None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 20000) is not None
+
+    def test_small_backwards_step_does_not_bypass_rearm(self):
+        rule = UserRule(make_doc(rearm_seconds=10.0))
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 10000) is not None
+        rule.update(frame("TEST_MSG", {"Temp": 50.0}), 11000)
+        # reordering must not drop the fired timestamp and let the rule respam
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 10800) is None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 12000) is None
