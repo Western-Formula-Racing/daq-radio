@@ -36,6 +36,9 @@ def validate_rule_doc(doc: Any, db) -> list[str]:
     db is a cantools Database used for message/signal existence and enum
     choices. Structural checks and DBC checks are both collected so the form
     can show every problem in one pass.
+
+    A lowercase 'message' is accepted here on purpose: the rule store
+    uppercases it before validating, so case is not this function's job.
     """
     if not isinstance(doc, dict):
         return ["rule must be a JSON object"]
@@ -90,14 +93,19 @@ def _validate_condition(cond: Any, i: int, db) -> list[str]:
         errors.append(f"{label}: signal '{sig_name}' not in message '{msg_name}'")
         return errors
     value = cond.get("value")
+    choices = {str(c) for c in (sig.choices or {}).values()}
     if isinstance(value, str):
         if op not in _EQUALITY_OPS:
             errors.append(f"{label}: text values only allowed with == or !=")
-        choices = {str(c) for c in (sig.choices or {}).values()}
         if value not in choices:
             errors.append(f"{label}: '{value}' is not a named value of {sig_name}")
     elif isinstance(value, bool) or not isinstance(value, (int, float)):
         errors.append(f"{label}: value must be a number or a named enum value")
+    elif choices:
+        # The decoder unwraps VAL_-mapped signals to their name, so a numeric
+        # comparison on an enum can never match and the rule would be dead.
+        errors.append(f"{label}: {sig_name} is an enum; use one of "
+                      f"{sorted(choices)} instead of a number")
     return errors
 
 
@@ -141,13 +149,24 @@ class UserRule(BaseRule):
         self._satisfied_since: int | None = None
         self._fired_ts: int | None = None
         self._false_since_fire = True
+        self._last_ts: int | None = None
 
     def update(self, decoded: dict, ts_ms: int) -> Alert | None:
+        # A source switch or a replay restart can move frame time backwards;
+        # negative durations would satisfy any hold and block rearm forever.
+        if self._last_ts is not None and ts_ms < self._last_ts:
+            self._reset_timing()
+        self._last_ts = ts_ms
         msg_name = decoded["message"]
         touched = False
         for cond in self.doc["conditions"]:
             key = (cond["message"], cond["signal"])
             if cond["message"] == msg_name and cond["signal"] in decoded["signals"]:
+                prev = self._latest.get(key)
+                # A gap in this signal means the hold was never observed to be
+                # continuous, so nothing before the gap may count toward it.
+                if prev is not None and ts_ms - prev[1] > STALENESS_MS:
+                    self._satisfied_since = None
                 self._latest[key] = (decoded["signals"][cond["signal"]], ts_ms)
                 touched = True
         # Unrelated frames still matter once a hold is in progress: their
@@ -170,6 +189,13 @@ class UserRule(BaseRule):
         self._false_since_fire = False
         return self._alert(self._severity, self.doc["message"], self.doc["name"],
                            self._trigger_value(), ts_ms)
+
+    def _reset_timing(self) -> None:
+        """Drop every timestamped memory so the rule starts as if newly built."""
+        self._latest.clear()
+        self._satisfied_since = None
+        self._fired_ts = None
+        self._false_since_fire = True
 
     def _cond_true(self, cond: dict, ts_ms: int) -> bool:
         entry = self._latest.get((cond["message"], cond["signal"]))

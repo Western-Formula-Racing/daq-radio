@@ -56,8 +56,15 @@ def make_doc(**overrides):
     return doc
 
 
-def frame(message, signals):
-    return {"message": message, "can_id": 256, "signals": signals}
+_CAN_IDS = {"TEST_MSG": 256, "OTHER_MSG": 257}
+
+
+def frame(message, signals, can_id=None):
+    return {
+        "message": message,
+        "can_id": _CAN_IDS[message] if can_id is None else can_id,
+        "signals": signals,
+    }
 
 
 class TestValidation:
@@ -128,6 +135,50 @@ class TestValidation:
 
     def test_not_a_dict(self, db):
         assert validate_rule_doc([], db) == ["rule must be a JSON object"]
+
+    def test_negative_rearm_seconds(self, db):
+        errors = validate_rule_doc(make_doc(rearm_seconds=-1), db)
+        assert any("rearm_seconds" in e for e in errors)
+
+    def test_condition_not_a_dict(self, db):
+        errors = validate_rule_doc(make_doc(conditions=["nope"]), db)
+        assert any("must be an object" in e for e in errors)
+
+    def test_condition_missing_message(self, db):
+        cond = {"signal": "Temp", "op": ">", "value": 1}
+        errors = validate_rule_doc(make_doc(conditions=[cond]), db)
+        assert any("message and signal are required" in e for e in errors)
+
+    def test_condition_missing_signal(self, db):
+        cond = {"message": "TEST_MSG", "op": ">", "value": 1}
+        errors = validate_rule_doc(make_doc(conditions=[cond]), db)
+        assert any("message and signal are required" in e for e in errors)
+
+    def test_value_must_be_number_or_named_value(self, db):
+        cond = {"message": "TEST_MSG", "signal": "Temp", "op": ">", "value": None}
+        errors = validate_rule_doc(make_doc(conditions=[cond]), db)
+        assert any("number or a named enum value" in e for e in errors)
+
+    def test_bool_value_rejected(self, db):
+        cond = {"message": "TEST_MSG", "signal": "Temp", "op": ">", "value": True}
+        errors = validate_rule_doc(make_doc(conditions=[cond]), db)
+        assert any("number or a named enum value" in e for e in errors)
+
+    def test_numeric_value_on_enum_signal_rejected(self, db):
+        # the decoder always hands enums to rules as their name, so a numeric
+        # comparison would validate clean and then never fire
+        cond = {"message": "TEST_MSG", "signal": "Mode", "op": "==", "value": 2}
+        errors = validate_rule_doc(make_doc(conditions=[cond]), db)
+        assert any("Mode is an enum" in e for e in errors)
+
+    def test_numeric_inequality_on_enum_signal_rejected(self, db):
+        cond = {"message": "TEST_MSG", "signal": "Mode", "op": ">=", "value": 2}
+        errors = validate_rule_doc(make_doc(conditions=[cond]), db)
+        assert any("Mode is an enum" in e for e in errors)
+
+    def test_numeric_value_on_plain_signal_allowed(self, db):
+        cond = {"message": "TEST_MSG", "signal": "Temp", "op": ">", "value": 2}
+        assert validate_rule_doc(make_doc(conditions=[cond]), db) == []
 
 
 class TestFrameIds:
@@ -223,3 +274,61 @@ class TestUserRule:
     def test_unrelated_frame_ignored(self):
         rule = UserRule(make_doc())
         assert rule.update(frame("OTHER_MSG", {"Speed": 1.0}), 1000) is None
+
+    def test_sample_exactly_at_staleness_window_is_still_fresh(self):
+        doc = make_doc(conditions=[
+            {"message": "TEST_MSG", "signal": "Temp", "op": ">", "value": 100},
+            {"message": "OTHER_MSG", "signal": "Speed", "op": ">", "value": 5},
+        ])
+        rule = UserRule(doc)
+        rule.update(frame("OTHER_MSG", {"Speed": 10.0}), 1000)
+        assert rule.update(
+            frame("TEST_MSG", {"Temp": 130.0}), 1000 + STALENESS_MS) is not None
+
+    def test_unrelated_frame_past_staleness_resets_hold(self):
+        # single condition, so this also pins staleness on a one-condition rule
+        rule = UserRule(make_doc(for_seconds=2.0))
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 1000) is None
+        assert rule.update(
+            frame("OTHER_MSG", {"Speed": 1.0}), 1000 + STALENESS_MS + 1) is None
+        # the hold restarts from the returning sample instead of completing
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 7000) is None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 8000) is None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 9000) is not None
+
+    def test_unrelated_frame_notices_staleness_and_allows_refire(self):
+        # after a fire, only unrelated traffic is seen; the lapse of the rule's
+        # own signal is what re-arms it, and only an unrelated frame can show it
+        rule = UserRule(make_doc())
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 1000) is not None
+        assert rule.update(
+            frame("OTHER_MSG", {"Speed": 1.0}), 1000 + STALENESS_MS + 1) is None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 20000) is not None
+
+    def test_long_observation_gap_does_not_satisfy_hold(self):
+        rule = UserRule(make_doc(for_seconds=10.0))
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 0) is None
+        # the link drops and resumes a minute later with the condition still true
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 60000) is None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 65000) is None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 70000) is not None
+
+    def test_for_seconds_with_rearm_seconds(self):
+        rule = UserRule(make_doc(for_seconds=2.0, rearm_seconds=10.0))
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 1000) is None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 3000) is not None
+        rule.update(frame("TEST_MSG", {"Temp": 50.0}), 4000)
+        # hold not met yet after the condition came back
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 5000) is None
+        # hold met, but the rearm window since the fire at 3000 has not elapsed
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 8000) is None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 12000) is None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 13500) is not None
+
+    def test_timestamp_going_backwards_resets_timing(self):
+        rule = UserRule(make_doc(for_seconds=2.0))
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 100000) is None
+        # replay restart or source switch: frame time jumps back
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 1000) is None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 2500) is None
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 3000) is not None
