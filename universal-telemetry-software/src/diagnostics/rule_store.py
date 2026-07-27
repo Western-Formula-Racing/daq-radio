@@ -5,12 +5,16 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ..wcars.user_rules import validate_rule_doc
+
+logger = logging.getLogger("RuleStore")
 
 
 class RuleStoreError(Exception):
@@ -35,7 +39,29 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _fsync_dir(path: Path) -> None:
+    """Persist a rename or create in the directory entry itself.
+
+    Without this the file contents are durable but the name may not be, so a
+    power cut can leave the pre-rename directory and lose an acknowledged write.
+    """
+    dirfd = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(dirfd)
+    finally:
+        os.close(dirfd)
+
+
 class RuleStore:
+    """Owns rules.json for one data_dir.
+
+    Single-instance contract: exactly one RuleStore may exist per data_dir, and
+    the service must therefore run single-process (one uvicorn worker). _write
+    dumps the whole in-memory list without a file lock and without re-reading,
+    so a second instance on the same directory would silently overwrite the
+    first instance's rules with its own stale snapshot.
+    """
+
     def __init__(self, data_dir: Path, db) -> None:
         self._db = db
         self._rules_path = data_dir / "rules.json"
@@ -51,12 +77,35 @@ class RuleStore:
             return []
         try:
             raw = json.loads(self._rules_path.read_text())
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError) as exc:
+            self._quarantine(exc)
             return []
         rules = raw.get("rules") if isinstance(raw, dict) else None
         if not isinstance(rules, list):
             return []
-        return [r for r in rules if isinstance(r, dict)]
+        rules = [r for r in rules if isinstance(r, dict)]
+        # A rule without an id can never be found, updated or deleted, so it
+        # would be stuck in the file forever; drop it loudly instead.
+        usable = [r for r in rules if isinstance(r.get("id"), str) and r["id"]]
+        dropped = len(rules) - len(usable)
+        if dropped:
+            logger.warning("dropped %d rule(s) with no usable id from %s",
+                           dropped, self._rules_path)
+        return usable
+
+    def _quarantine(self, exc: Exception) -> None:
+        """Move an unreadable rules.json aside so the next write cannot destroy it."""
+        dest = self._rules_path.with_name(
+            f"{self._rules_path.name}.corrupt.{int(time.time())}")
+        try:
+            os.replace(self._rules_path, dest)
+            _fsync_dir(self._rules_path.parent)
+        except OSError:
+            logger.error("could not read %s (%s) and could not move it aside",
+                         self._rules_path, exc)
+            return
+        logger.error("could not read %s (%s); moved aside to %s and starting empty",
+                     self._rules_path, exc, dest)
 
     def list(self) -> list[dict]:
         # Deep copy: conditions is a list of dicts, and a caller mutating a
@@ -71,6 +120,7 @@ class RuleStore:
         doc["id"] = str(uuid.uuid4())
         doc["created_by"] = by
         doc["updated_at"] = _now_iso()
+        doc["rev"] = 1
         doc["broken"] = False
         doc["broken_reason"] = None
         self._rules.append(doc)
@@ -78,10 +128,13 @@ class RuleStore:
         self._audit("create", doc, by)
         return copy.deepcopy(doc)
 
-    def update(self, rule_id: str, doc: dict, expected_updated_at: str, by: str) -> dict:
+    def update(self, rule_id: str, doc: dict, expected_rev: int, by: str) -> dict:
         current = self._find(rule_id)
-        if current["updated_at"] != expected_updated_at:
-            raise ConflictError(f"rule changed at {current['updated_at']}")
+        # rev, not updated_at: this Pi's clock runs badly skewed before NTP
+        # settles, so timestamps are not monotonic and could hide a stale write.
+        current_rev = self._rev_of(current)
+        if current_rev != expected_rev:
+            raise ConflictError(f"rule is at rev {current_rev}")
         doc = self._normalize(doc)
         errors = validate_rule_doc(doc, self._db)
         if errors:
@@ -89,6 +142,7 @@ class RuleStore:
         doc["id"] = rule_id
         doc["created_by"] = current.get("created_by", by)
         doc["updated_at"] = _now_iso()
+        doc["rev"] = current_rev + 1
         doc["broken"] = False
         doc["broken_reason"] = None
         self._rules[self._rules.index(current)] = doc
@@ -106,6 +160,7 @@ class RuleStore:
         current = self._find(rule_id)
         current["enabled"] = bool(enabled)
         current["updated_at"] = _now_iso()
+        current["rev"] = self._rev_of(current) + 1
         self._write()
         self._audit("toggle", current, by)
         return copy.deepcopy(current)
@@ -122,10 +177,21 @@ class RuleStore:
         if changed:
             self._write()
 
+    @staticmethod
+    def _rev_of(rule: dict) -> int:
+        # A rule written before rev existed is treated as rev 0 and picks one up
+        # on its next mutation.
+        rev = rule.get("rev")
+        if isinstance(rev, bool) or not isinstance(rev, int):
+            return 0
+        return rev
+
     def _normalize(self, doc: dict) -> dict:
         if not isinstance(doc, dict):
             raise ValidationError(["rule must be a JSON object"])
-        doc = dict(doc)
+        # Deep copy: the caller keeps its own dict, and a later mutation of its
+        # conditions must not reach the store's rule unvalidated and unaudited.
+        doc = copy.deepcopy(doc)
         doc["message"] = str(doc.get("message", "")).upper()
         return doc
 
@@ -144,9 +210,16 @@ class RuleStore:
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, self._rules_path)
+        _fsync_dir(self._rules_path.parent)
 
     def _audit(self, action: str, doc: dict, by: str) -> None:
         entry = {"ts": _now_iso(), "action": action,
                  "rule_id": doc.get("id"), "rule_name": doc.get("name"), "by": by}
+        if action == "delete":
+            # The audit line is the only remaining record of a deleted rule, so
+            # keep the whole body to make an accidental delete recoverable.
+            entry["rule"] = copy.deepcopy(doc)
         with open(self._audit_path, "a") as f:
             f.write(json.dumps(entry) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
