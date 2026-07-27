@@ -1,5 +1,6 @@
 """RuleStore tests: persistence, audit trail, optimistic-concurrency conflicts,
 and broken-rule marking when the DBC changes underneath stored rules."""
+import errno
 import json
 import os
 
@@ -62,6 +63,7 @@ def test_create_assigns_id_and_uppercases_message(tmp_path, db):
 
 def test_create_persists_across_reload(tmp_path, db):
     RuleStore(tmp_path, db).create(draft(), by="a")
+    assert not (tmp_path / "rules.json.tmp").exists()
     (doc,) = RuleStore(tmp_path, db).list()
     # A stricter validate_rule_doc would mark every rule broken on every
     # restart, which must fail here rather than pass silently.
@@ -130,10 +132,25 @@ def test_legacy_rule_missing_updated_at_conflicts_not_crashes(tmp_path, db):
         store.update("legacy-1", draft(), 7, by="b")
 
 
-def test_rules_without_id_are_dropped_at_load(tmp_path, db):
+def test_rules_without_id_get_one_assigned_at_load(tmp_path, db):
     keep = draft() | {"id": "keeper", "message": "OVERTEMP"}
     _write_rules_file(tmp_path, [keep, draft(), draft() | {"id": ""}])
-    assert [r["id"] for r in RuleStore(tmp_path, db).list()] == ["keeper"]
+    store = RuleStore(tmp_path, db)
+    ids = [r["id"] for r in store.list()]
+    assert ids[0] == "keeper"
+    assert len(ids) == 3 and all(ids) and len(set(ids)) == 3
+    # The point of assigning an id is that the rule stops being stuck.
+    store.delete(ids[1], by="a")
+    assert [r["id"] for r in store.list()] == [ids[0], ids[2]]
+
+
+def test_legacy_rule_is_listed_with_an_integer_rev(tmp_path, db):
+    legacy = draft() | {"id": "legacy-1", "message": "OVERTEMP"}
+    legacy.pop("rev", None)
+    _write_rules_file(tmp_path, [legacy])
+    (doc,) = RuleStore(tmp_path, db).list()
+    assert "rev" in doc
+    assert doc["rev"] == 0
 
 
 def test_delete_and_toggle(tmp_path, db):
@@ -166,24 +183,18 @@ def test_delete_audit_entry_carries_full_rule_body(tmp_path, db):
     assert "rule" not in lines[0]
 
 
-def test_failed_rename_leaves_previous_rules_file_intact(tmp_path, db):
+def test_failed_rename_leaves_previous_rules_file_intact(tmp_path, db, monkeypatch):
     store = RuleStore(tmp_path, db)
-    first = store.create(draft(), by="a")
+    store.create(draft(), by="a")
     before = (tmp_path / "rules.json").read_text()
 
     def boom(*args, **kwargs):
         raise OSError("no rename for you")
 
-    original = os.replace
-    os.replace = boom
-    try:
-        with pytest.raises(OSError):
-            store.create(draft() | {"name": "Second"}, by="b")
-    finally:
-        os.replace = original
-    raw = json.loads((tmp_path / "rules.json").read_text())
+    monkeypatch.setattr(os, "replace", boom)
+    with pytest.raises(OSError):
+        store.create(draft() | {"name": "Second"}, by="b")
     assert (tmp_path / "rules.json").read_text() == before
-    assert [r["id"] for r in raw["rules"]] == [first["id"]]
 
 
 def test_dbc_change_marks_broken_not_deleted(tmp_path, db):
@@ -218,3 +229,79 @@ def test_corrupt_rules_file_is_moved_aside_not_destroyed(tmp_path, db):
     assert len(saved) == 1
     assert saved[0].read_text() == "{not json"
     assert (tmp_path / "rules.json").read_text() != "{not json"
+
+
+@pytest.mark.parametrize("body", ['{"rules": null}', '[{"id": "a"}]', '{"schema": 2}'])
+def test_wrong_shaped_rules_file_is_moved_aside_not_destroyed(tmp_path, db, body):
+    (tmp_path / "rules.json").write_text(body)
+    store = RuleStore(tmp_path, db)
+    store.create(draft(), by="a")
+    saved = list(tmp_path.glob("rules.json.corrupt.*"))
+    assert len(saved) == 1
+    assert saved[0].read_text() == body
+
+
+def test_store_refuses_to_start_if_it_cannot_quarantine(tmp_path, db, monkeypatch):
+    (tmp_path / "rules.json").write_text("{not json")
+
+    def boom(*args, **kwargs):
+        raise OSError("read-only filesystem")
+
+    monkeypatch.setattr(os, "replace", boom)
+    with pytest.raises(OSError):
+        RuleStore(tmp_path, db)
+    # Refusing to come up is the whole point: the file is still there to save.
+    assert (tmp_path / "rules.json").read_text() == "{not json"
+
+
+def test_quarantine_names_do_not_collide_when_the_clock_repeats(tmp_path, db):
+    for _ in range(3):
+        (tmp_path / "rules.json").write_text("{not json")
+        RuleStore(tmp_path, db)
+    assert len(list(tmp_path.glob("rules.json.corrupt.*"))) == 3
+
+
+def test_audit_log_creation_is_directory_synced(tmp_path, db, monkeypatch):
+    synced = []
+    import src.diagnostics.rule_store as rule_store
+
+    monkeypatch.setattr(rule_store, "_fsync_dir", lambda p: synced.append(p))
+    store = RuleStore(tmp_path, db)
+    doc = store.create(draft(), by="a")
+    # Once for rules.json, once for the newly created audit.jsonl.
+    assert synced == [tmp_path, tmp_path]
+    synced.clear()
+    # Only the create of audit.jsonl needs the directory entry synced.
+    store.toggle(doc["id"], enabled=False, by="b")
+    assert synced == [tmp_path]
+
+
+@pytest.mark.parametrize("err", [errno.EINVAL, errno.ENOTSUP])
+def test_unsupported_directory_fsync_does_not_fail_a_committed_write(tmp_path, db,
+                                                                    monkeypatch, err):
+    real_fsync = os.fsync
+    store = RuleStore(tmp_path, db)
+
+    def picky_fsync(fd):
+        if os.fstat(fd).st_mode & 0o040000:
+            raise OSError(err, os.strerror(err))
+        return real_fsync(fd)
+
+    monkeypatch.setattr(os, "fsync", picky_fsync)
+    doc = store.create(draft(), by="a")
+    assert doc["rev"] == 1
+    assert [r["id"] for r in RuleStore(tmp_path, db).list()] == [doc["id"]]
+
+
+def test_unrelated_directory_fsync_error_still_propagates(tmp_path, db, monkeypatch):
+    real_fsync = os.fsync
+    store = RuleStore(tmp_path, db)
+
+    def picky_fsync(fd):
+        if os.fstat(fd).st_mode & 0o040000:
+            raise OSError(errno.EIO, "I/O error")
+        return real_fsync(fd)
+
+    monkeypatch.setattr(os, "fsync", picky_fsync)
+    with pytest.raises(OSError):
+        store.create(draft(), by="a")

@@ -4,10 +4,10 @@ DBC no longer contains what a stored rule references."""
 from __future__ import annotations
 
 import copy
+import errno
 import json
 import logging
 import os
-import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -48,6 +48,14 @@ def _fsync_dir(path: Path) -> None:
     dirfd = os.open(path, os.O_RDONLY)
     try:
         os.fsync(dirfd)
+    except OSError as exc:
+        # The rename has already committed by the time we get here, so a
+        # filesystem that cannot fsync a directory must not turn a successful
+        # write into a 500 the caller would retry against an advanced rev.
+        if exc.errno not in (errno.EINVAL, errno.ENOTSUP):
+            raise
+        logger.warning("directory fsync unsupported on %s (%s); write is not "
+                       "crash-durable on this filesystem", path, exc)
     finally:
         os.close(dirfd)
 
@@ -63,6 +71,11 @@ class RuleStore:
     """
 
     def __init__(self, data_dir: Path, db) -> None:
+        """Raises OSError if an unreadable rules.json could not be moved aside.
+
+        Refusing to come up is deliberate: the first write would otherwise
+        overwrite a file we failed to preserve a copy of.
+        """
         self._db = db
         self._rules_path = data_dir / "rules.json"
         self._audit_path = data_dir / "audit.jsonl"
@@ -82,28 +95,41 @@ class RuleStore:
             return []
         rules = raw.get("rules") if isinstance(raw, dict) else None
         if not isinstance(rules, list):
+            # Parseable but wrong-shaped (schema drift, a bare top-level list):
+            # same "the next write destroys it" hazard as an unparseable file.
+            self._quarantine(ValueError("no 'rules' list at the top level"))
             return []
         rules = [r for r in rules if isinstance(r, dict)]
-        # A rule without an id can never be found, updated or deleted, so it
-        # would be stuck in the file forever; drop it loudly instead.
-        usable = [r for r in rules if isinstance(r.get("id"), str) and r["id"]]
-        dropped = len(rules) - len(usable)
-        if dropped:
-            logger.warning("dropped %d rule(s) with no usable id from %s",
-                           dropped, self._rules_path)
-        return usable
+        for rule in rules:
+            # A rule without an id can never be found, updated or deleted, so
+            # it would be stuck in the file forever; give it one rather than
+            # dropping somebody's work.
+            if not (isinstance(rule.get("id"), str) and rule["id"]):
+                rule["id"] = str(uuid.uuid4())
+                logger.info("assigned id %s to a rule with no usable id in %s",
+                            rule["id"], self._rules_path)
+            # Backfill so every document the store hands out carries an int rev
+            # and no caller has to know out of band that a missing rev means 0.
+            rule["rev"] = self._rev_of(rule)
+        return rules
 
     def _quarantine(self, exc: Exception) -> None:
-        """Move an unreadable rules.json aside so the next write cannot destroy it."""
+        """Move an unusable rules.json aside so the next write cannot destroy it.
+
+        Raises if the move fails: coming up empty would let the first write
+        overwrite the only copy of everyone's rules.
+        """
+        # uuid, not a timestamp: this Pi's clock can jump backward before NTP
+        # settles, and os.replace onto an existing name is a silent clobber.
         dest = self._rules_path.with_name(
-            f"{self._rules_path.name}.corrupt.{int(time.time())}")
+            f"{self._rules_path.name}.corrupt.{uuid.uuid4().hex}")
         try:
             os.replace(self._rules_path, dest)
             _fsync_dir(self._rules_path.parent)
         except OSError:
             logger.error("could not read %s (%s) and could not move it aside",
                          self._rules_path, exc)
-            return
+            raise
         logger.error("could not read %s (%s); moved aside to %s and starting empty",
                      self._rules_path, exc, dest)
 
@@ -219,7 +245,12 @@ class RuleStore:
             # The audit line is the only remaining record of a deleted rule, so
             # keep the whole body to make an accidental delete recoverable.
             entry["rule"] = copy.deepcopy(doc)
+        is_new = not self._audit_path.exists()
         with open(self._audit_path, "a") as f:
             f.write(json.dumps(entry) + "\n")
             f.flush()
             os.fsync(f.fileno())
+        if is_new:
+            # The contents are durable but the name is not until the directory
+            # is synced, so a power cut could lose the whole audit log.
+            _fsync_dir(self._audit_path.parent)
