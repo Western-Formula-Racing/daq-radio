@@ -358,7 +358,23 @@ class TestUserRule:
         assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 18000) is None
         assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 20000) is not None
 
-    def test_small_backwards_step_does_not_bypass_rearm(self):
+    def test_alert_ts_is_the_firing_frame_not_the_high_water_mark(self):
+        rule = UserRule(make_doc())
+        # advances the high-water mark without touching the rule's own signal
+        assert rule.update(frame("OTHER_MSG", {"Speed": 1.0}), 5000) is None
+        # a late frame for the rule's signal, well behind the high-water mark
+        alert = rule.update(frame("TEST_MSG", {"Temp": 130.0}), 3000)
+        assert alert is not None
+        assert alert.ts == 3000
+
+    def test_late_sample_older_than_stored_reading_does_not_fire(self):
+        rule = UserRule(make_doc())
+        # a newer, non-triggering reading is stored first
+        assert rule.update(frame("TEST_MSG", {"Temp": 50.0}), 5000) is None
+        # a late-arriving frame with a fault value, but older than what is stored
+        assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 3000) is None
+
+    def test_small_backwards_step_does_not_clear_fired_timestamp(self):
         rule = UserRule(make_doc(rearm_seconds=10.0))
         assert rule.update(frame("TEST_MSG", {"Temp": 130.0}), 10000) is not None
         rule.update(frame("TEST_MSG", {"Temp": 50.0}), 11000)

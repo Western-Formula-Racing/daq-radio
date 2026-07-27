@@ -163,8 +163,8 @@ class UserRule(BaseRule):
             self._last_ts = ts_ms if self._last_ts is None \
                 else max(self._last_ts, ts_ms)
         # Timing runs on the high-water mark: a late frame must never rewind a
-        # hold or a rearm window, since negative durations would stall any hold
-        # and block rearm forever.
+        # hold or a rearm window, since a negative duration would stall any
+        # hold and delay rearm until real time caught back up.
         now = self._last_ts
         msg_name = decoded["message"]
         touched = False
@@ -203,7 +203,7 @@ class UserRule(BaseRule):
         self._fired_ts = now
         self._false_since_fire = False
         return self._alert(self._severity, self.doc["message"], self.doc["name"],
-                           self._trigger_value(), now)
+                           self._trigger_value(), ts_ms)
 
     def _reset_timing(self) -> None:
         """Drop every timestamped memory so the rule starts as if newly built."""
