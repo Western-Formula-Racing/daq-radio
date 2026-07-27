@@ -229,3 +229,74 @@ def test_recorded_corpus_replay_is_deterministic():
     _time.sleep(0.05)
     second = fingerprint(replay())
     assert first == second
+
+
+def _encodable_user_signal():
+    """Pick a non-whitelisted, non-enum, non-muxed signal from the loaded DBC
+    and produce a frame plus its decoded value, so the test works no matter
+    whether secret-dbc or example.dbc is active."""
+    from src.wcars.decoder import load_db, WHITELIST_IDS
+    db = load_db()
+    for msg in db.messages:
+        if msg.is_multiplexed():
+            continue
+        if msg.frame_id in WHITELIST_IDS or (msg.frame_id & 0x7FFFFFFF) in WHITELIST_IDS:
+            continue
+        for sig in msg.signals:
+            if sig.choices:
+                continue
+            try:
+                payload = msg.encode({s.name: 0 for s in msg.signals}, strict=False)
+            except Exception:
+                break
+            value = msg.decode(bytes(payload))[sig.name]
+            if not isinstance(value, (int, float)):
+                continue
+            return msg, sig, list(payload), float(value)
+    pytest.skip("no encodable non-whitelisted signal in this DBC")
+
+
+def _user_doc(msg, sig, value):
+    return {
+        "id": "eng-test-1",
+        "name": "Engine test rule",
+        "enabled": True,
+        "severity": "CAUTION",
+        "message": "USER TEST",
+        "conditions": [
+            {"message": msg.name, "signal": sig.name, "op": ">=", "value": value - 1.0},
+        ],
+        "for_seconds": 0.0,
+        "rearm_seconds": 0.0,
+        "created_by": "test",
+        "updated_at": "2026-07-26T00:00:00Z",
+    }
+
+
+class TestUserRulesInEngine:
+    def test_user_rule_fires_through_feed(self):
+        msg, sig, payload, value = _encodable_user_signal()
+        engine = WcarsEngine({}, user_rule_docs=[_user_doc(msg, sig, value)])
+        alerts = engine.feed({"canId": msg.frame_id & 0x7FFFFFFF, "data": payload}, 1000)
+        assert any(a.rule == "USER:eng-test-1" for a in alerts)
+
+    def test_without_doc_frame_is_invisible(self):
+        msg, sig, payload, value = _encodable_user_signal()
+        engine = WcarsEngine({})
+        assert engine.feed({"canId": msg.frame_id & 0x7FFFFFFF, "data": payload}, 1000) == []
+
+    def test_disabled_and_broken_docs_excluded(self):
+        msg, sig, payload, value = _encodable_user_signal()
+        disabled = _user_doc(msg, sig, value) | {"enabled": False}
+        broken = _user_doc(msg, sig, value) | {"id": "eng-test-2", "broken": True}
+        engine = WcarsEngine({}, user_rule_docs=[disabled, broken])
+        assert engine.feed({"canId": msg.frame_id & 0x7FFFFFFF, "data": payload}, 1000) == []
+
+    def test_set_user_rules_swaps_live(self):
+        msg, sig, payload, value = _encodable_user_signal()
+        engine = WcarsEngine({})
+        engine.set_user_rules([_user_doc(msg, sig, value)])
+        alerts = engine.feed({"canId": msg.frame_id & 0x7FFFFFFF, "data": payload}, 1000)
+        assert any(a.rule == "USER:eng-test-1" for a in alerts)
+        engine.set_user_rules([])
+        assert engine.feed({"canId": msg.frame_id & 0x7FFFFFFF, "data": payload}, 2000) == []

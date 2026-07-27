@@ -114,3 +114,16 @@ def test_dbc_has_messages_added_since_the_pinned_submodule():
     ids = {m.frame_id for m in db.messages}
     for frame_id in (0x422, 0x423, 0x424, 0x425, 0x426, 0x427, 0x428, 0x429):
         assert frame_id in ids, f"0x{frame_id:X} missing - secret-dbc submodule is stale"
+
+
+class TestExtraIds:
+    def test_extra_id_widens_whitelist(self):
+        from src.wcars.decoder import Decoder, WHITELIST_IDS, load_db
+        db = load_db()
+        extra = next((m.frame_id & 0x7FFFFFFF for m in db.messages
+                      if m.frame_id not in WHITELIST_IDS
+                      and (m.frame_id & 0x7FFFFFFF) not in WHITELIST_IDS), None)
+        if extra is None:
+            pytest.skip("every DBC message is already whitelisted")
+        assert not Decoder().is_whitelisted(extra)
+        assert Decoder(extra_ids={extra}).is_whitelisted(extra)

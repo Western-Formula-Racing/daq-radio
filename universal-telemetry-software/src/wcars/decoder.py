@@ -45,6 +45,11 @@ def _load_db() -> cantools.database.Database:
     return cantools.database.load_file(DBC_PATH, strict=False)
 
 
+def load_db() -> cantools.database.Database:
+    """Public accessor for the cached DBC database."""
+    return _load_db()
+
+
 def _msg_id_map() -> dict[int, str]:
     db = _load_db()
     return {m.frame_id: m.name for m in db.messages}
@@ -61,10 +66,10 @@ def _resolve_frame_id(can_id: int) -> int | None:
 
 
 class Decoder:
-    def __init__(self) -> None:
+    def __init__(self, extra_ids: set[int] | None = None) -> None:
         self._db = _load_db()
         self._id_to_msg = {m.frame_id: m for m in self._db.messages}
-        self._whitelist = WHITELIST_IDS
+        self._whitelist = WHITELIST_IDS | (extra_ids or set())
 
     def is_whitelisted(self, can_id: int) -> bool:
         if can_id in self._whitelist:

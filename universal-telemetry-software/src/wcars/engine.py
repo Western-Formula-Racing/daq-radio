@@ -11,7 +11,8 @@ from collections import deque
 from typing import Any
 
 from .config import merge_config
-from .decoder import Decoder
+from .decoder import Decoder, load_db
+from .user_rules import UserRule, frame_ids_for_docs
 from .rules import (
     VcuStateFaultRule,
     VcuStateChangeRule,
@@ -35,10 +36,16 @@ logger = logging.getLogger("wcars.engine")
 RING_BUFFER_SIZE = 200
 
 
+def _active_docs(docs: list[dict] | None) -> list[dict]:
+    return [d for d in (docs or []) if d.get("enabled") and not d.get("broken")]
+
+
 class WcarsEngine:
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any],
+                 user_rule_docs: list[dict] | None = None) -> None:
         self.config = merge_config(config)
-        self.decoder = Decoder()
+        self._user_docs = _active_docs(user_rule_docs)
+        self.decoder = Decoder(extra_ids=frame_ids_for_docs(self._user_docs, load_db()))
         self._ring: deque[Alert] = deque(maxlen=RING_BUFFER_SIZE)
         self._rules = self._build_rules()
 
@@ -60,7 +67,7 @@ class WcarsEngine:
             HvLossRule(),
             AirFaultRule(),
             PrechargeErrorRule(timeout_seconds=float(th["precharge_timeout_s"])),
-        ]
+        ] + [UserRule(d) for d in self._user_docs]
 
     def feed(self, frame: dict, ts_ms: int) -> list[Alert]:
         decoded = self.decoder.decode(frame)
@@ -85,4 +92,10 @@ class WcarsEngine:
 
     def set_config(self, new_config: dict[str, Any]) -> None:
         self.config = merge_config(new_config)
+        self._rules = self._build_rules()
+
+    def set_user_rules(self, docs: list[dict]) -> None:
+        """Swap the user rule set. Rule state resets, matching set_config."""
+        self._user_docs = _active_docs(docs)
+        self.decoder = Decoder(extra_ids=frame_ids_for_docs(self._user_docs, load_db()))
         self._rules = self._build_rules()
