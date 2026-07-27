@@ -1,12 +1,14 @@
 """Frame source tests: pure parsing of bridge messages, and the reconnecting
 WebSocket client against a real local websockets server."""
 import asyncio
+import contextlib
 import json
+import logging
 import time
 
-import pytest
 import websockets
 
+from src.diagnostics import frame_source
 from src.diagnostics.frame_source import parse_frames, frame_stream
 
 
@@ -29,6 +31,15 @@ class TestParseFrames:
         assert parse_frames(json.dumps({"canId": "x", "data": []})) == []
         assert parse_frames("not json at all") == []
 
+    def test_non_byte_data_elements_rejected(self):
+        # Would reach the decoder and raise there instead of being dropped here.
+        assert parse_frames(json.dumps({"canId": 1, "data": ["ff"], "time": 5})) == []
+        assert parse_frames(json.dumps({"canId": 1, "data": [1, None], "time": 5})) == []
+        assert parse_frames(json.dumps({"canId": 1, "data": [300], "time": 5})) == []
+        assert parse_frames(json.dumps({"canId": 1, "data": [-1], "time": 5})) == []
+        assert parse_frames(json.dumps({"canId": 1, "data": [True], "time": 5})) == []
+        assert len(parse_frames(json.dumps({"canId": 1, "data": [0, 255], "time": 5}))) == 1
+
     def test_bad_time_falls_back_to_wall_clock(self):
         before = int(time.time() * 1000)
         ((_, ts),) = parse_frames(json.dumps({"canId": 1, "data": [], "time": -3}))
@@ -38,6 +49,20 @@ class TestParseFrames:
         before = int(time.time() * 1000)
         ((_, ts),) = parse_frames(json.dumps({"canId": 1, "data": []}))
         assert ts >= before
+
+    def test_present_but_unusable_time_warns_and_is_rate_limited(self, caplog, monkeypatch):
+        monkeypatch.setattr(frame_source, "_last_bad_frame_ts_warning", 0.0)
+        caplog.set_level(logging.WARNING, logger="diagnostics.frames")
+        parse_frames(json.dumps({"canId": 1, "data": [], "time": -3}))
+        parse_frames(json.dumps({"canId": 1, "data": [], "time": "x"}))
+        warnings = [r for r in caplog.records if "unusable 'time'" in r.getMessage()]
+        assert len(warnings) == 1
+
+    def test_absent_time_does_not_warn(self, caplog, monkeypatch):
+        monkeypatch.setattr(frame_source, "_last_bad_frame_ts_warning", 0.0)
+        caplog.set_level(logging.WARNING, logger="diagnostics.frames")
+        parse_frames(json.dumps({"canId": 1, "data": []}))
+        assert not [r for r in caplog.records if "unusable 'time'" in r.getMessage()]
 
 
 class TestFrameStream:
@@ -57,18 +82,71 @@ class TestFrameStream:
             if sent == 1:
                 await ws.close()
             else:
-                await asyncio.sleep(30)
+                await shutdown.wait()
 
         shutdown = asyncio.Event()
         async with websockets.serve(handler, "127.0.0.1", 0) as server:
             port = server.sockets[0].getsockname()[1]
             got = []
-            async for frame, ts in frame_stream(f"ws://127.0.0.1:{port}", shutdown):
-                got.append((frame["canId"], ts))
-                if len(got) == 2:
-                    shutdown.set()
-                    break
+            async with contextlib.aclosing(
+                    frame_stream(f"ws://127.0.0.1:{port}", shutdown)) as stream:
+                async for frame, ts in stream:
+                    got.append((frame["canId"], ts))
+                    if len(got) == 2:
+                        shutdown.set()
+                        break
         assert got == [(10, 100), (20, 200)]
+
+    async def test_shutdown_observed_while_bridge_is_silent(self):
+        # The car keyed off means no frames at all; shutdown must still land.
+        # The server holds on its own event so the client cannot escape by
+        # way of the socket closing underneath it.
+        server_hold = asyncio.Event()
+
+        async def handler(ws):
+            await server_hold.wait()
+
+        shutdown = asyncio.Event()
+        async with websockets.serve(handler, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+
+            async def consume():
+                async with contextlib.aclosing(
+                        frame_stream(f"ws://127.0.0.1:{port}", shutdown)) as stream:
+                    async for _ in stream:
+                        pass
+
+            task = asyncio.create_task(consume())
+            await asyncio.sleep(0.15)  # let the client connect and park on recv
+            shutdown.set()
+            try:
+                await asyncio.wait_for(task, timeout=0.5)
+            finally:
+                server_hold.set()
+
+    async def test_backoff_escalates_when_bridge_accepts_then_closes(self, caplog, monkeypatch):
+        # A crash-looping bridge accepts the handshake and drops it; resetting
+        # the backoff on connect alone would spin at reconnect rate forever.
+        monkeypatch.setattr(frame_source, "RECONNECT_MIN_S", 0.01)
+        caplog.set_level(logging.WARNING, logger="diagnostics.frames")
+        shutdown = asyncio.Event()
+        attempts = 0
+
+        async def handler(ws):
+            nonlocal attempts
+            attempts += 1
+            if attempts >= 4:
+                shutdown.set()
+            await ws.close(code=1011, reason="crash-loop")
+
+        async with websockets.serve(handler, "127.0.0.1", 0) as server:
+            port = server.sockets[0].getsockname()[1]
+            async with contextlib.aclosing(
+                    frame_stream(f"ws://127.0.0.1:{port}", shutdown)) as stream:
+                async for _ in stream:
+                    pass
+        delays = [r.args[1] for r in caplog.records if "retrying in" in r.msg]
+        assert delays[:3] == [0.01, 0.02, 0.04]
 
 
 def test_bridge_alias_still_exists():
