@@ -1092,6 +1092,42 @@ describe("state timeline wiring", () => {
     expect(screen.getByRole("button", { name: "Car DRIVE" })).toBeInTheDocument();
   });
 
+  it("shows a droppable plot zone (not the run-window prompt) once a range is set", async () => {
+    render(
+      <AnalysisWorkspace
+        season={seasons[0]}
+        runs={[run]}
+        grouped={grouped}
+        theme="light"
+        runsBySeason={runsBySeason}
+      />,
+    );
+
+    expect(screen.getByTestId("analysis-idle-no-selection")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Run window/i), { target: { value: run.key } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(screen.queryByTestId("analysis-idle-no-selection")).toBeNull();
+    expect(screen.queryByText(/Select a run window and one or more signals/i)).toBeNull();
+    expect(
+      screen.getByText(/Select or drop one or more signals to load linked plots/i),
+    ).toBeInTheDocument();
+
+    const dt = {
+      types: ["application/x-wfr-signals"],
+      getData: () => JSON.stringify({ signals: ["INV_Analog_Input_2"] }),
+    } as unknown as DataTransfer;
+    fireEvent.drop(screen.getByTestId("analysis-new-plot-zone"), { dataTransfer: dt });
+
+    expect(screen.getByRole("checkbox", { name: "INV_Analog_Input_2" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+
   it("does not refetch states on zoom", async () => {
     const zoomSeason: Season = { name: "WFR26", year: 2026, table: "wfr26-states-zoom" };
     render(

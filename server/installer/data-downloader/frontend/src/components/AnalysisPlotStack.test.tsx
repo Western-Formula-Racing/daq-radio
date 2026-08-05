@@ -141,10 +141,19 @@ describe("AnalysisPlotStack groups", () => {
     expect(onAssignSignals).not.toHaveBeenCalled();
   });
 
-  it("shows the empty-stack message when the layout has no groups", () => {
-    render(<AnalysisPlotStack {...baseProps} layout={[]} />);
-    expect(screen.getByText(/select one or more signals to plot/i)).toBeInTheDocument();
+  it("shows a droppable empty-stack zone when the layout has no groups", () => {
+    const onAssignSignals = vi.fn();
+    render(
+      <AnalysisPlotStack {...baseProps} onAssignSignals={onAssignSignals} layout={[]} />,
+    );
+    expect(
+      screen.getByText(/select or drop one or more signals to load linked plots/i),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("analysis-plot-card")).toBeNull();
+    fireEvent.drop(screen.getByTestId("analysis-new-plot-zone"), {
+      dataTransfer: makeDataTransfer({ signals: ["S1"] }),
+    });
+    expect(onAssignSignals).toHaveBeenCalledWith(["S1"], NEW_PLOT);
   });
 
   it("passes Plotly an explicit 180px height (not percentage) so plots stay in-card", () => {

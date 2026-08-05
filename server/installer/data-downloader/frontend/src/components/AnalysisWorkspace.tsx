@@ -588,12 +588,37 @@ export function AnalysisWorkspace({
             </div>
           )}
 
+          {/* Range selected, no signals yet: show a droppable plot area instead of
+              the "select a run window" idle prompt (window is already chosen). */}
           {!error &&
             !awaitingFirstResponse &&
             !loading &&
             !showEmpty &&
             !keepPreviousPlots &&
-            !fullRange && (
+            fullRange &&
+            viewRange &&
+            selectedSignals.length === 0 && (
+              <div className="analysis-plot-stack-wrap">
+                <AnalysisPlotStack
+                  layout={[]}
+                  seriesBySignal={seriesBySignal}
+                  range={viewRange}
+                  onRangeChange={handlePlotRangeChange}
+                  onAssignSignals={handleAssignSignals}
+                  onRemoveSignal={handleToggleSignal}
+                  onToggleRightAxis={handleToggleRightAxis}
+                  theme={theme}
+                />
+              </div>
+            )}
+
+          {!error &&
+            !awaitingFirstResponse &&
+            !loading &&
+            !showEmpty &&
+            !keepPreviousPlots &&
+            !fullRange &&
+            selectedSignals.length > 0 && (
               <div className="analysis-idle" role="status" data-testid="analysis-idle-no-window">
                 <strong>{selectedSignals.length} signal{selectedSignals.length === 1 ? "" : "s"} selected.</strong>
                 <p>Select a run window or time range to plot them.</p>
@@ -604,8 +629,9 @@ export function AnalysisWorkspace({
             !loading &&
             !showEmpty &&
             !keepPreviousPlots &&
+            !fullRange &&
             selectedSignals.length === 0 && (
-              <div className="analysis-idle" role="status">
+              <div className="analysis-idle" role="status" data-testid="analysis-idle-no-selection">
                 Select a run window and one or more signals to load linked plots.
               </div>
             )}

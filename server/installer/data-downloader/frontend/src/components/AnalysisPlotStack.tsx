@@ -232,6 +232,49 @@ function PlotCard({
   );
 }
 
+/** Drop target that creates a new plot group from the dragged signals. */
+function NewPlotDropZone({
+  onAssignSignals,
+  label,
+  empty,
+}: {
+  onAssignSignals: (signals: string[], target: string) => void;
+  label: string;
+  empty?: boolean;
+}) {
+  const [zoneOver, setZoneOver] = useState(false);
+  return (
+    <div
+      className={
+        zoneOver
+          ? empty
+            ? "analysis-idle is-drop-target"
+            : "analysis-new-plot-zone is-drop-target"
+          : empty
+            ? "analysis-idle"
+            : "analysis-new-plot-zone"
+      }
+      data-testid="analysis-new-plot-zone"
+      role="status"
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes(SIGNALS_MIME)) {
+          e.preventDefault();
+          setZoneOver(true);
+        }
+      }}
+      onDragLeave={() => setZoneOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setZoneOver(false);
+        const signals = readSignalsPayload(e.dataTransfer);
+        if (signals) onAssignSignals(signals, NEW_PLOT);
+      }}
+    >
+      {label}
+    </div>
+  );
+}
+
 /**
  * Vertically stacked linked plots: one card per plot group, shared controlled x-range.
  */
@@ -245,14 +288,14 @@ export function AnalysisPlotStack({
   onToggleRightAxis,
   theme,
 }: AnalysisPlotStackProps) {
-  const [zoneOver, setZoneOver] = useState(false);
-
   if (layout.length === 0) {
     return (
       <div className="analysis-plot-stack" data-empty="true">
-        <div className="analysis-plot-empty" role="status">
-          Select one or more signals to plot.
-        </div>
+        <NewPlotDropZone
+          onAssignSignals={onAssignSignals}
+          empty
+          label="Select or drop one or more signals to load linked plots."
+        />
       </div>
     );
   }
@@ -273,25 +316,10 @@ export function AnalysisPlotStack({
           onToggleRightAxis={onToggleRightAxis}
         />
       ))}
-      <div
-        className={zoneOver ? "analysis-new-plot-zone is-drop-target" : "analysis-new-plot-zone"}
-        data-testid="analysis-new-plot-zone"
-        onDragOver={(e) => {
-          if (e.dataTransfer.types.includes(SIGNALS_MIME)) {
-            e.preventDefault();
-            setZoneOver(true);
-          }
-        }}
-        onDragLeave={() => setZoneOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setZoneOver(false);
-          const signals = readSignalsPayload(e.dataTransfer);
-          if (signals) onAssignSignals(signals, NEW_PLOT);
-        }}
-      >
-        Drop signals here for a new plot
-      </div>
+      <NewPlotDropZone
+        onAssignSignals={onAssignSignals}
+        label="Drop signals here for a new plot"
+      />
     </div>
   );
 }

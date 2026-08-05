@@ -976,7 +976,8 @@ body {
 }
 
 .analysis-plot-card.is-drop-target,
-.analysis-new-plot-zone.is-drop-target {
+.analysis-new-plot-zone.is-drop-target,
+.analysis-idle.is-drop-target {
   border-color: var(--accent, #2563eb);
   background: var(--surface-2);
 }
