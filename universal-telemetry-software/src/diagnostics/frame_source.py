@@ -92,28 +92,38 @@ async def frame_stream(url: str, shutdown: asyncio.Event) -> AsyncIterator[tuple
                     logger.info("Connected to bridge at %s", url)
                     while True:
                         recv_task = asyncio.ensure_future(ws.recv())
-                        done, _ = await asyncio.wait(
-                            {recv_task, shutdown_task},
-                            return_when=asyncio.FIRST_COMPLETED)
-                        if recv_task not in done:
-                            # Shutdown won the race: a silent bridge must not
-                            # keep us parked on recv() until cancellation.
-                            recv_task.cancel()
-                            with contextlib.suppress(BaseException):
-                                await recv_task
-                            return
                         try:
-                            message = recv_task.result()
-                        except ConnectionClosedOK:
-                            break  # bridge restart, expected; reconnect quietly
-                        # Backoff resets only once the bridge has actually
-                        # delivered something, so an accept-then-close
-                        # crash-loop still escalates instead of spinning.
-                        delay = RECONNECT_MIN_S
-                        for pair in parse_frames(message):
-                            yield pair
-                        if shutdown.is_set():
-                            return
+                            done, _ = await asyncio.wait(
+                                {recv_task, shutdown_task},
+                                return_when=asyncio.FIRST_COMPLETED)
+                            if recv_task not in done:
+                                # Shutdown won the race: a silent bridge must
+                                # not keep us parked on recv() until
+                                # cancellation.
+                                return
+                            try:
+                                message = recv_task.result()
+                            except ConnectionClosedOK:
+                                break  # bridge restart, expected; reconnect quietly
+                            # Backoff resets only once the bridge has actually
+                            # delivered something, so an accept-then-close
+                            # crash-loop still escalates instead of spinning.
+                            delay = RECONNECT_MIN_S
+                            for pair in parse_frames(message):
+                                yield pair
+                            if shutdown.is_set():
+                                return
+                        finally:
+                            # asyncio.wait() never cancels its member futures,
+                            # including when the wait itself is cancelled (the
+                            # consumer cancelling while parked here). Without
+                            # this, an abandoned recv_task's ConnectionClosed
+                            # surfaces later as an unretrieved-exception
+                            # traceback instead of just going away.
+                            if not recv_task.done():
+                                recv_task.cancel()
+                                with contextlib.suppress(asyncio.CancelledError, Exception):
+                                    await recv_task
             except asyncio.CancelledError:
                 raise
             except Exception as exc:

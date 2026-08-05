@@ -124,6 +124,55 @@ class TestFrameStream:
             finally:
                 server_hold.set()
 
+    async def test_cancel_while_parked_does_not_leak_recv_task(self):
+        # asyncio.wait() does not cancel its member futures when the wait
+        # itself is cancelled, so cancelling the consumer while parked on
+        # recv() must not abandon recv_task with an unretrieved exception
+        # (that surfaces later as a spurious "exception was never retrieved"
+        # traceback dumped into the diagnostics log).
+        server_hold = asyncio.Event()
+
+        async def handler(ws):
+            await server_hold.wait()
+
+        loop = asyncio.get_running_loop()
+        leaked = []
+        prior_handler = loop.get_exception_handler()
+
+        def capturing_handler(loop, context):
+            if "never retrieved" in context.get("message", ""):
+                leaked.append(context)
+            elif prior_handler is not None:
+                prior_handler(loop, context)
+
+        loop.set_exception_handler(capturing_handler)
+        try:
+            shutdown = asyncio.Event()
+            async with websockets.serve(handler, "127.0.0.1", 0) as server:
+                port = server.sockets[0].getsockname()[1]
+
+                async def consume():
+                    async with contextlib.aclosing(
+                            frame_stream(f"ws://127.0.0.1:{port}", shutdown)) as stream:
+                        async for _ in stream:
+                            pass
+
+                task = asyncio.create_task(consume())
+                await asyncio.sleep(0.15)  # let the client connect and park on recv
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+                server_hold.set()
+                # The leak (if any) surfaces on the abandoned task's own
+                # finalization, not synchronously with the await above.
+                import gc
+                gc.collect()
+                await asyncio.sleep(0)
+                await asyncio.sleep(0)
+        finally:
+            loop.set_exception_handler(prior_handler)
+        assert leaked == []
+
     async def test_backoff_escalates_when_bridge_accepts_then_closes(self, caplog, monkeypatch):
         # A crash-looping bridge accepts the handshake and drops it; resetting
         # the backoff on connect alone would spin at reconnect rate forever.
