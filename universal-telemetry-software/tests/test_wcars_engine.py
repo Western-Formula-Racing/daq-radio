@@ -2,7 +2,7 @@ import pytest
 
 from src.wcars.engine import WcarsEngine
 from src.wcars.serialization import Severity
-from tests.wcars_dbc_utils import vcu_state_info
+from tests.wcars_dbc_utils import vcu_state_info, encodable_user_signal as _encodable_user_signal
 
 
 def test_engine_emits_alert_on_state_change():
@@ -229,31 +229,6 @@ def test_recorded_corpus_replay_is_deterministic():
     _time.sleep(0.05)
     second = fingerprint(replay())
     assert first == second
-
-
-def _encodable_user_signal():
-    """Pick a non-whitelisted, non-enum, non-muxed signal from the loaded DBC
-    and produce a frame plus its decoded value, so the test works no matter
-    whether secret-dbc or example.dbc is active."""
-    from src.wcars.decoder import load_db, WHITELIST_IDS
-    db = load_db()
-    for msg in db.messages:
-        if msg.is_multiplexed():
-            continue
-        if msg.frame_id in WHITELIST_IDS or (msg.frame_id & 0x7FFFFFFF) in WHITELIST_IDS:
-            continue
-        for sig in msg.signals:
-            if sig.choices:
-                continue
-            try:
-                payload = msg.encode({s.name: 0 for s in msg.signals}, strict=False)
-            except Exception:
-                break
-            value = msg.decode(bytes(payload))[sig.name]
-            if not isinstance(value, (int, float)):
-                continue
-            return msg, sig, list(payload), float(value)
-    pytest.skip("no encodable non-whitelisted signal in this DBC")
 
 
 def _user_doc(msg, sig, value):
