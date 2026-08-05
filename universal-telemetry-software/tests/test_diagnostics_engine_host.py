@@ -2,7 +2,6 @@
 persistence. Frames are built dynamically from the loaded DBC so the tests
 pass with either secret-dbc or example.dbc."""
 import asyncio
-import contextlib
 import json
 
 import pytest
@@ -70,12 +69,12 @@ async def test_apply_config_persists(host, tmp_path):
     h, _ = host
     cfg = h.apply_config({"thresholds": {"torch_cell_temp_c": 60.0}})
     assert cfg["thresholds"]["torch_cell_temp_c"] == 60.0
-    assert (tmp_path / "wcars_config.json").exists()
+    on_disk = json.loads((tmp_path / "wcars_config.json").read_text())
+    assert on_disk["thresholds"]["torch_cell_temp_c"] == 60.0
 
 
 async def test_run_returns_on_shutdown_while_bridge_is_silent(host):
-    # Regression for run() abandoning frame_stream() without aclosing: a
-    # silent bridge must not prevent shutdown from landing.
+    # A silent bridge must not prevent shutdown from landing.
     h, _ = host
     server_hold = asyncio.Event()
 
@@ -92,3 +91,42 @@ async def test_run_returns_on_shutdown_while_bridge_is_silent(host):
             await asyncio.wait_for(task, timeout=0.5)
         finally:
             server_hold.set()
+
+
+class _Bail(BaseException):
+    """Not an Exception subclass, so run()'s `except Exception` cannot swallow it."""
+
+
+async def test_run_aclosing_closes_socket_when_loop_exits_abnormally(host):
+    # Regression for run() abandoning frame_stream() without aclosing: when
+    # the loop body raises something except Exception won't catch, the
+    # generator is left parked at its yield with the socket still open unless
+    # something forces its cleanup. aclosing forces frame_stream's finally
+    # blocks (and the websocket close) to run synchronously as run() unwinds,
+    # instead of waiting on the asyncgen finalizer/GC to get around to it.
+    h, _ = host
+    closed_event = asyncio.Event()
+
+    async def handler(ws):
+        await ws.send(json.dumps([{"canId": 1, "data": [0], "time": 1000}]))
+        await ws.wait_closed()
+        closed_event.set()
+
+    def boom(frame, ts_ms):
+        raise _Bail("engine feed blew up mid-stream")
+
+    h.feed = boom
+
+    shutdown = asyncio.Event()
+    async with websockets.serve(handler, "127.0.0.1", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        task = asyncio.create_task(h.run(f"ws://127.0.0.1:{port}", shutdown))
+        with pytest.raises(_Bail):
+            await asyncio.wait_for(task, timeout=0.5)
+        # Checked with no intervening await: aclosing's __aexit__ drives the
+        # close handshake to completion inside run()'s own call stack, so by
+        # the time the task is done the server has already observed the
+        # close. An abandoned generator instead relies on the asyncgen
+        # finalizer, which is only scheduled via call_soon for a later tick,
+        # so it would not have run yet at this exact point.
+        assert closed_event.is_set()
