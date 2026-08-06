@@ -338,6 +338,7 @@ Images are built for both `linux/amd64` and `linux/arm64` (Raspberry Pi).
 | 8080 | HTTP | Status monitoring page |
 | 9080 | WebSocket | PECAN dashboard feed |
 | 9089 | WebSocket | Downlink-only relay for remote viewers |
+| 9090 | HTTP | WCARS OMT diagnostics API (rule CRUD, alert stream; serves the tablet UI in a later phase) |
 | 3000 | HTTP | PECAN dashboard UI |
 | 8081 | HTTP | Video quality control (car only, when ENABLE_VIDEO=true) |
 | 8554 | TCP | RTSP — car pushes H.264 to MediaMTX on base |

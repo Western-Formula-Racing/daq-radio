@@ -1,0 +1,36 @@
+# WCARS OMT diagnostics service, car RPi
+#
+# Runs the onboard rule engine and the OMT API on port 9090. Pure consumer of
+# the telemetry bridge (ws://127.0.0.1:9080): if this service dies, telemetry
+# is untouched; if the bridge dies, this service reconnects.
+#
+# Install:
+#   sudo cp wcars-diagnostics.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now wcars-diagnostics
+
+[Unit]
+Description=WCARS OMT Diagnostics
+After=network.target
+# A rule store that fails to open (RuleStore raises OSError) exits fast every
+# time; without a start-rate limit, Restart=always would flap it forever.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=car
+WorkingDirectory=/home/car/data-acquisition/universal-telemetry-software
+Environment=OMT_PORT=9090
+Environment=WCARS_BRIDGE_WS_URL=ws://127.0.0.1:9080
+Environment=WCARS_DATA_DIR=/home/car/wcars-data
+Environment=WFR_DBC_PATH=/home/car/data-acquisition/secret-dbc/WFR25.dbc
+ExecStart=/home/car/.local/bin/uv run python -m src.diagnostics
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wcars-diagnostics
+
+[Install]
+WantedBy=multi-user.target

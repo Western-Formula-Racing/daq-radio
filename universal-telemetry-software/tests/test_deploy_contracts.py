@@ -65,3 +65,17 @@ def test_windows_base_relay_contract():
     # The relay is pure PowerShell — the installer must not require Python.
     assert "python.org" not in installer
     assert "Resolve-Python" not in installer
+
+
+def test_wcars_diagnostics_runs_as_systemd_service_contract():
+    """OMT diagnostics must stay a native systemd service on the car Pi, matching car-telemetry.service."""
+    service = _read("deploy/wcars-diagnostics.service")
+
+    assert "User=car" in service
+    assert "ExecStart=/home/car/.local/bin/uv run python -m src.diagnostics" in service
+    assert "Environment=OMT_PORT=9090" in service
+    assert "Environment=WCARS_BRIDGE_WS_URL=ws://127.0.0.1:9080" in service
+
+    # Start-rate limit so a permanently broken rule store (RuleStore raising OSError)
+    # makes systemd give up instead of flapping the service forever.
+    assert "StartLimitBurst=5" in service
