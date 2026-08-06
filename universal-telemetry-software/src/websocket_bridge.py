@@ -23,6 +23,7 @@ from src.heartbeat import pump_pubsub_with_heartbeat
 from src.wcars.engine import WcarsEngine
 from src.wcars.serialization import encode_alert, encode_backlog, encode_config_ack, decode_config
 from src.wcars.config import load_config, save_config
+from src.log_throttle import LogThrottle, log_throttled_exception
 from src.frame_time import is_valid_frame_ts as _is_valid_frame_ts
 from pathlib import Path
 
@@ -46,10 +47,10 @@ def get_wcars_engine() -> WcarsEngine:
     return _wcars_engine
 
 
-# Bus-rate frames (thousands/sec) mean an unthrottled warning could flood the log
-# and become an outage of its own; log at most once every 30s.
-_BAD_FRAME_TS_LOG_INTERVAL_S = 30
-_last_bad_frame_ts_warning = 0.0
+# Bus-rate frames (thousands/sec) mean an unthrottled log line could flood the
+# log and become an outage of its own; both of these emit at most once per 30s.
+_bad_frame_ts_throttle = LogThrottle()
+_wcars_error_throttle = LogThrottle()
 
 # Per-client rate limiting state: websocket -> list of timestamps
 _client_send_times: dict = {}
@@ -369,13 +370,12 @@ async def redis_listener():
                                     # Key present but unusable: a real regression upstream,
                                     # not the expected "old publisher" case. Rate-limited
                                     # so a bad field can't flood the log at bus rate.
-                                    global _last_bad_frame_ts_warning
-                                    now = time.monotonic()
-                                    if now - _last_bad_frame_ts_warning >= _BAD_FRAME_TS_LOG_INTERVAL_S:
-                                        _last_bad_frame_ts_warning = now
+                                    emit, _first, dropped = _bad_frame_ts_throttle.take()
+                                    if emit:
                                         logger.warning(
-                                            "WCARS: frame has unusable 'time' value %r, falling back to wall clock",
-                                            raw_ts,
+                                            "WCARS: frame has unusable 'time' value %r, falling back "
+                                            "to wall clock (%d more suppressed)",
+                                            raw_ts, dropped,
                                         )
                             for alert in engine.feed({"canId": can_id, "data": payload}, ts_ms):
                                 frame_out = json.dumps(encode_alert(alert))
@@ -385,7 +385,10 @@ async def redis_listener():
                                         return_exceptions=True,
                                     )
                     except Exception as exc:
-                        logger.exception("WCARS engine error: %s", exc)
+                        # Throttled: whatever breaks one batch breaks every batch,
+                        # and a traceback per batch at bus rate is its own outage.
+                        log_throttled_exception(logger, _wcars_error_throttle,
+                                                "WCARS engine error", exc)
 
             await pump_pubsub_with_heartbeat(pubsub, _handler,
                                              should_stop=shutdown_event.is_set, log=logger)

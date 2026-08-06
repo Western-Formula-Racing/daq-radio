@@ -43,17 +43,21 @@ services:
       - TIMESCALE_TABLE=${TIMESCALE_TABLE:-WFR26test}_base
       - DBC_FILE_PATH=/app/dbc_uploads/active.dbc
       - DBC_UPLOAD_PATH=/app/dbc_uploads/active.dbc
+      - WFR_DBC_PATH=/app/dbc_uploads/active.dbc
       - ENABLE_WS_RELAY=true
       - RELAY_TOKEN=${RELAY_TOKEN:-}
       - RELAY_REQUIRE_TOKEN_ON_LAN=true
       - RELAY_UPSTREAM_WS=ws://127.0.0.1:9080
       - WCARS_ENABLED=1
-      - WCARS_CONFIG_PATH=/app/wcars_config.json
+      - WCARS_CONFIG_PATH=/app/wcars-data/wcars_config.json
     volumes:
       - ${DBC_HOST_PATH:-./example.dbc}:/app/default.dbc:ro
       - uploaded_dbc:/app/dbc_uploads
       - raw_can_data:/app/raw_can_logs
-      - wcars_config:/app
+      # A subdirectory, never /app itself: a named volume over a non-empty path
+      # is seeded from the image once, so mounting it on /app would freeze the
+      # code at whatever the first `up` shipped and silently ignore rebuilds.
+      - wcars_config:/app/wcars-data
     command: sh -c 'if [ ! -s /app/dbc_uploads/active.dbc ]; then cp /app/default.dbc /app/dbc_uploads/active.dbc; fi; exec python main.py'
     logging:
       driver: "json-file"

@@ -9,6 +9,7 @@ import time
 import websockets
 
 from src.diagnostics import frame_source
+from src.log_throttle import LogThrottle
 from src.diagnostics.frame_source import parse_frames, frame_stream
 
 
@@ -51,7 +52,7 @@ class TestParseFrames:
         assert ts >= before
 
     def test_present_but_unusable_time_warns_and_is_rate_limited(self, caplog, monkeypatch):
-        monkeypatch.setattr(frame_source, "_last_bad_frame_ts_warning", 0.0)
+        monkeypatch.setattr(frame_source, "_bad_frame_ts_throttle", LogThrottle())
         caplog.set_level(logging.WARNING, logger="diagnostics.frames")
         parse_frames(json.dumps({"canId": 1, "data": [], "time": -3}))
         parse_frames(json.dumps({"canId": 1, "data": [], "time": "x"}))
@@ -59,7 +60,7 @@ class TestParseFrames:
         assert len(warnings) == 1
 
     def test_absent_time_does_not_warn(self, caplog, monkeypatch):
-        monkeypatch.setattr(frame_source, "_last_bad_frame_ts_warning", 0.0)
+        monkeypatch.setattr(frame_source, "_bad_frame_ts_throttle", LogThrottle())
         caplog.set_level(logging.WARNING, logger="diagnostics.frames")
         parse_frames(json.dumps({"canId": 1, "data": []}))
         assert not [r for r in caplog.records if "unusable 'time'" in r.getMessage()]

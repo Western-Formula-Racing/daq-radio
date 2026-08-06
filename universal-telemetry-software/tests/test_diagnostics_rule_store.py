@@ -350,3 +350,64 @@ def test_unrelated_directory_fsync_error_still_propagates(tmp_path, db, monkeypa
     monkeypatch.setattr(os, "fsync", picky_fsync)
     with pytest.raises(OSError):
         store.create(draft(), by="a")
+
+
+class TestWriteFailureLeavesStoreUnchanged:
+    """A full or read-only SD card must not leave the store holding a change
+    that never reached disk: the engine would not have it, the tablet would
+    show it, and it would vanish at the next reboot."""
+
+    @staticmethod
+    def _break_writes(store, monkeypatch):
+        def boom():
+            raise OSError(errno.ENOSPC, "No space left on device")
+        monkeypatch.setattr(store, "_write", boom)
+
+    def test_create_rolls_back(self, tmp_path, db, monkeypatch):
+        store = RuleStore(tmp_path, db)
+        self._break_writes(store, monkeypatch)
+        with pytest.raises(OSError):
+            store.create(draft(), by="haorui")
+        assert store.list() == []
+
+    def test_update_rolls_back(self, tmp_path, db, monkeypatch):
+        store = RuleStore(tmp_path, db)
+        created = store.create(draft(), by="haorui")
+        self._break_writes(store, monkeypatch)
+        changed = draft() | {"name": "Renamed"}
+        with pytest.raises(OSError):
+            store.update(created["id"], changed, created["rev"], by="haorui")
+        assert store.list() == [created]
+
+    def test_delete_rolls_back(self, tmp_path, db, monkeypatch):
+        store = RuleStore(tmp_path, db)
+        created = store.create(draft(), by="haorui")
+        self._break_writes(store, monkeypatch)
+        with pytest.raises(OSError):
+            store.delete(created["id"], by="haorui")
+        assert store.list() == [created]
+
+    def test_toggle_rolls_back(self, tmp_path, db, monkeypatch):
+        store = RuleStore(tmp_path, db)
+        created = store.create(draft(), by="haorui")
+        self._break_writes(store, monkeypatch)
+        with pytest.raises(OSError):
+            store.toggle(created["id"], False, by="haorui")
+        assert store.list() == [created]
+
+    def test_failed_create_is_not_audited(self, tmp_path, db, monkeypatch):
+        store = RuleStore(tmp_path, db)
+        self._break_writes(store, monkeypatch)
+        with pytest.raises(OSError):
+            store.create(draft(), by="haorui")
+        assert not (tmp_path / "audit.jsonl").exists()
+
+    def test_next_successful_write_does_not_persist_the_phantom(self, tmp_path, db, monkeypatch):
+        store = RuleStore(tmp_path, db)
+        self._break_writes(store, monkeypatch)
+        with pytest.raises(OSError):
+            store.create(draft(), by="haorui")
+        monkeypatch.undo()
+        kept = store.create(draft() | {"name": "Second"}, by="haorui")
+        on_disk = json.loads((tmp_path / "rules.json").read_text())["rules"]
+        assert [r["id"] for r in on_disk] == [kept["id"]]

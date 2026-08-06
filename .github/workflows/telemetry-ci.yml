@@ -174,6 +174,7 @@ jobs:
           tests/test_stats_publisher.py \
           tests/test_status_server.py \
           tests/test_heartbeat.py \
+          tests/test_log_throttle.py \
           tests/test_wcars_rules.py \
           tests/test_wcars_config.py \
           tests/test_wcars_serialization.py \

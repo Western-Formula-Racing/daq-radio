@@ -10,6 +10,7 @@ import logging
 from collections import deque
 from typing import Any
 
+from ..log_throttle import LogThrottle, log_throttled_exception
 from .config import merge_config
 from .decoder import Decoder, load_db
 from .user_rules import UserRule, frame_ids_for_docs
@@ -47,6 +48,9 @@ class WcarsEngine:
         self._user_docs = _active_docs(user_rule_docs)
         self.decoder = Decoder(extra_ids=frame_ids_for_docs(self._user_docs, load_db()))
         self._ring: deque[Alert] = deque(maxlen=RING_BUFFER_SIZE)
+        # Per rule id, so one permanently broken rule cannot mask a second one
+        # failing for a different reason.
+        self._rule_error_throttles: dict[str, LogThrottle] = {}
         self._rules = self._build_rules()
 
     def _build_rules(self):
@@ -78,7 +82,12 @@ class WcarsEngine:
             try:
                 alert = rule.update(decoded, ts_ms)
             except Exception as exc:
-                logger.exception("Rule %s raised: %s", rule.rule_id, exc)
+                # Throttled: a rule that raises does so on every frame, and an
+                # unthrottled traceback per frame is its own outage.
+                throttle = self._rule_error_throttles.setdefault(
+                    rule.rule_id, LogThrottle())
+                log_throttled_exception(logger, throttle,
+                                        f"Rule {rule.rule_id} raised", exc)
                 continue
             if alert is not None:
                 self._ring.append(alert)

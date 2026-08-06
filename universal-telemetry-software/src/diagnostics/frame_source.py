@@ -17,24 +17,23 @@ import websockets
 from websockets.exceptions import ConnectionClosedOK
 
 from ..frame_time import is_valid_frame_ts
+from ..log_throttle import LogThrottle
 
 logger = logging.getLogger("diagnostics.frames")
 
 RECONNECT_MIN_S = 0.2
 RECONNECT_MAX_S = 10.0
 
-_BAD_FRAME_TS_LOG_INTERVAL_S = 30
-_last_bad_frame_ts_warning = 0.0
+_bad_frame_ts_throttle = LogThrottle()
 
 
 def _warn_bad_frame_ts(raw_ts) -> None:
     """Rate-limited: frames arrive at bus rate, so an unthrottled warning would be its own outage."""
-    global _last_bad_frame_ts_warning
-    now = time.monotonic()
-    if now - _last_bad_frame_ts_warning >= _BAD_FRAME_TS_LOG_INTERVAL_S:
-        _last_bad_frame_ts_warning = now
+    emit, _is_first, dropped = _bad_frame_ts_throttle.take()
+    if emit:
         logger.warning(
-            "Frame has unusable 'time' value %r, falling back to wall clock", raw_ts)
+            "Frame has unusable 'time' value %r, falling back to wall clock "
+            "(%d more suppressed)", raw_ts, dropped)
 
 
 def parse_frames(raw: str | bytes) -> list[tuple[dict, int]]:

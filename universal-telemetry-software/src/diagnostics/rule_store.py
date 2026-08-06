@@ -77,6 +77,7 @@ class RuleStore:
         overwrite a file we failed to preserve a copy of.
         """
         self._db = db
+        self.data_dir = data_dir
         self._rules_path = data_dir / "rules.json"
         self._audit_path = data_dir / "audit.jsonl"
         data_dir.mkdir(parents=True, exist_ok=True)
@@ -159,6 +160,20 @@ class RuleStore:
         logger.error("could not read %s (%s); moved aside to %s and starting empty",
                      self._rules_path, exc, dest)
 
+    def _commit(self, restore: list[dict]) -> None:
+        """Persist the already-applied mutation, or undo it if the disk refuses.
+
+        A full or read-only SD card would otherwise leave the store holding a
+        change that never reached disk: the engine never gets told about it,
+        the tablet lists it as if it were armed, and it disappears at the next
+        reboot. Better to fail the request outright.
+        """
+        try:
+            self._write()
+        except OSError:
+            self._rules[:] = restore
+            raise
+
     def list(self) -> list[dict]:
         # Deep copy: conditions is a list of dicts, and a caller mutating a
         # returned condition must never reach back into the store's state.
@@ -175,8 +190,9 @@ class RuleStore:
         doc["rev"] = 1
         doc["broken"] = False
         doc["broken_reason"] = None
+        restore = list(self._rules)
         self._rules.append(doc)
-        self._write()
+        self._commit(restore)
         self._audit("create", doc, by)
         return copy.deepcopy(doc)
 
@@ -197,25 +213,32 @@ class RuleStore:
         doc["rev"] = current_rev + 1
         doc["broken"] = False
         doc["broken_reason"] = None
+        restore = list(self._rules)
         self._rules[self._rules.index(current)] = doc
-        self._write()
+        self._commit(restore)
         self._audit("update", doc, by)
         return copy.deepcopy(doc)
 
     def delete(self, rule_id: str, by: str) -> None:
         current = self._find(rule_id)
+        restore = list(self._rules)
         self._rules.remove(current)
-        self._write()
+        self._commit(restore)
         self._audit("delete", current, by)
 
     def toggle(self, rule_id: str, enabled: bool, by: str) -> dict:
         current = self._find(rule_id)
-        current["enabled"] = bool(enabled)
-        current["updated_at"] = _now_iso()
-        current["rev"] = self._rev_of(current) + 1
-        self._write()
-        self._audit("toggle", current, by)
-        return copy.deepcopy(current)
+        # A fresh document rather than an in-place edit, so a failed write can
+        # be undone by putting the original object back.
+        toggled = copy.deepcopy(current)
+        toggled["enabled"] = bool(enabled)
+        toggled["updated_at"] = _now_iso()
+        toggled["rev"] = self._rev_of(current) + 1
+        restore = list(self._rules)
+        self._rules[self._rules.index(current)] = toggled
+        self._commit(restore)
+        self._audit("toggle", toggled, by)
+        return copy.deepcopy(toggled)
 
     def revalidate(self) -> bool:
         changed = False

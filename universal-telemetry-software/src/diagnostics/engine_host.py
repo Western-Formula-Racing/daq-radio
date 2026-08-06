@@ -10,6 +10,7 @@ import contextlib
 import logging
 from pathlib import Path
 
+from ..log_throttle import LogThrottle, log_throttled_exception
 from ..wcars.config import load_config, save_config
 from ..wcars.engine import WcarsEngine
 from ..wcars.serialization import Alert
@@ -66,9 +67,13 @@ class EngineHost:
     async def run(self, ws_url: str, shutdown: asyncio.Event) -> None:
         # aclosing ensures the socket is torn down as soon as the loop exits
         # (shutdown, error) rather than left for the asyncgen finalizer/GC.
+        feed_errors = LogThrottle()
         async with contextlib.aclosing(frame_stream(ws_url, shutdown)) as frames:
             async for frame, ts_ms in frames:
                 try:
                     self.feed(frame, ts_ms)
                 except Exception as exc:
-                    logger.exception("Engine feed error: %s", exc)
+                    # Throttled: whatever breaks one frame breaks them all, and
+                    # a traceback per frame would fill the Pi's SD card.
+                    log_throttled_exception(logger, feed_errors,
+                                            "Engine feed error", exc)

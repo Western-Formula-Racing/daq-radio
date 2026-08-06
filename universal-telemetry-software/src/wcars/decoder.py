@@ -37,7 +37,9 @@ WHITELIST_IDS: set[int] = {
     171,   # M171_Fault_Codes     0xAB
 }
 
-DBC_PATH = os.getenv("WFR_DBC_PATH", "/app/active.dbc")
+# Fall back to DBC_FILE_PATH: that is the variable every existing deployment
+# already sets, and no compose file sets WFR_DBC_PATH.
+DBC_PATH = os.getenv("WFR_DBC_PATH") or os.getenv("DBC_FILE_PATH", "/app/dbc_uploads/active.dbc")
 
 
 @lru_cache(maxsize=1)
@@ -50,7 +52,10 @@ def load_db() -> cantools.database.Database:
     return _load_db()
 
 
+@lru_cache(maxsize=1)
 def _msg_id_map() -> dict[int, str]:
+    # Cached: _resolve_frame_id calls this once or twice per frame at bus rate,
+    # and the map only changes when the process restarts.
     db = _load_db()
     return {m.frame_id: m.name for m in db.messages}
 

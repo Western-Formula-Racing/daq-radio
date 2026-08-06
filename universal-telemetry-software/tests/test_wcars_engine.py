@@ -275,3 +275,43 @@ class TestUserRulesInEngine:
         assert any(a.rule == "USER:eng-test-1" for a in alerts)
         engine.set_user_rules([])
         assert engine.feed({"canId": msg.frame_id & 0x7FFFFFFF, "data": payload}, 2000) == []
+
+
+def test_rule_exception_logged_once_not_per_frame(caplog):
+    """A rule that raises on every frame must not write a traceback per frame."""
+    eng = WcarsEngine({})
+
+    class Boom:
+        rule_id = "BOOM"
+
+        def update(self, decoded, ts_ms):
+            raise RuntimeError("always")
+
+    eng._rules = [Boom()]
+    with caplog.at_level("ERROR", logger="wcars.engine"):
+        for i in range(200):
+            eng.feed(vcu_state_info(4), 1_700_000_000_000 + i)
+
+    records = [r for r in caplog.records if r.name == "wcars.engine"]
+    assert len(records) == 1
+    assert records[0].exc_info is not None
+
+
+def test_rule_exceptions_are_throttled_per_rule(caplog):
+    """One noisy rule must not mask a second rule failing for another reason."""
+    eng = WcarsEngine({})
+
+    class Boom:
+        def __init__(self, rule_id):
+            self.rule_id = rule_id
+
+        def update(self, decoded, ts_ms):
+            raise RuntimeError(self.rule_id)
+
+    eng._rules = [Boom("A"), Boom("B")]
+    with caplog.at_level("ERROR", logger="wcars.engine"):
+        for i in range(50):
+            eng.feed(vcu_state_info(4), 1_700_000_000_000 + i)
+
+    records = [r for r in caplog.records if r.name == "wcars.engine"]
+    assert len(records) == 2

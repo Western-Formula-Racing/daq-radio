@@ -79,12 +79,22 @@ def create_app(store: RuleStore, host: EngineHost, dbc_path: Path, db,
     async def list_rules():
         return {"rules": store.list()}
 
+    def _unavailable(exc: OSError) -> HTTPException:
+        # A full or read-only SD card is routine on a Pi test day. 503 tells the
+        # tablet the rule was not stored and the engine did not get it, where a
+        # bare 500 would leave the team believing an unarmed rule is armed.
+        logger.error("rule store write failed under %s: %s", store.data_dir, exc)
+        return HTTPException(
+            503, detail=f"rule store at {store.data_dir} is not writable: {exc}")
+
     @app.post("/api/rules", status_code=201)
     async def create_rule(payload: dict):
         try:
             created = store.create(payload.get("rule"), payload.get("by", "unknown"))
         except ValidationError as exc:
             raise HTTPException(422, detail=exc.errors) from exc
+        except OSError as exc:
+            raise _unavailable(exc) from exc
         host.rules_changed()
         return created
 
@@ -105,6 +115,8 @@ def create_app(store: RuleStore, host: EngineHost, dbc_path: Path, db,
             raise HTTPException(409, detail=str(exc)) from exc
         except ValidationError as exc:
             raise HTTPException(422, detail=exc.errors) from exc
+        except OSError as exc:
+            raise _unavailable(exc) from exc
         host.rules_changed()
         return updated
 
@@ -114,6 +126,8 @@ def create_app(store: RuleStore, host: EngineHost, dbc_path: Path, db,
             store.delete(rule_id, "unknown")
         except NotFoundError as exc:
             raise HTTPException(404, detail="rule not found") from exc
+        except OSError as exc:
+            raise _unavailable(exc) from exc
         host.rules_changed()
 
     @app.post("/api/rules/{rule_id}/toggle")
@@ -123,6 +137,8 @@ def create_app(store: RuleStore, host: EngineHost, dbc_path: Path, db,
                                    payload.get("by", "unknown"))
         except NotFoundError as exc:
             raise HTTPException(404, detail="rule not found") from exc
+        except OSError as exc:
+            raise _unavailable(exc) from exc
         host.rules_changed()
         return toggled
 

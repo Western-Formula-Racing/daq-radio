@@ -130,3 +130,25 @@ async def test_run_aclosing_closes_socket_when_loop_exits_abnormally(host):
         # finalizer, which is only scheduled via call_soon for a later tick,
         # so it would not have run yet at this exact point.
         assert closed_event.is_set()
+
+
+async def test_run_loop_feed_error_logged_once_not_per_frame(host, caplog, monkeypatch):
+    """A feed that fails on every frame must not fill the SD card with tracebacks."""
+    h, _ = host
+
+    async def fake_stream(url, shutdown):
+        for i in range(200):
+            yield {"canId": 1, "data": [0] * 8}, 1000 + i
+
+    monkeypatch.setattr("src.diagnostics.engine_host.frame_stream", fake_stream)
+
+    def boom(frame, ts_ms):
+        raise RuntimeError("engine down")
+
+    h.engine.feed = boom
+    with caplog.at_level("ERROR", logger="diagnostics.engine"):
+        await h.run("ws://unused", asyncio.Event())
+
+    records = [r for r in caplog.records if r.name == "diagnostics.engine"]
+    assert len(records) == 1
+    assert records[0].exc_info is not None

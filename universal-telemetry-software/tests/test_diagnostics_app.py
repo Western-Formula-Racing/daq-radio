@@ -214,3 +214,54 @@ def test_create_registers_rule_in_engine(client):
     c.post("/api/rules", json=payload)
     app_host = c.app.state.host
     assert any(r.rule_id.startswith("USER:") for r in app_host.engine._rules)
+
+
+class TestUnwritableDataDir:
+    """A full or read-only SD card is routine on a Pi test day; the tablet must
+    be told the store is unavailable rather than shown a bare 500."""
+
+    @staticmethod
+    def _break_writes(monkeypatch, store):
+        import errno as _errno
+
+        def boom():
+            raise OSError(_errno.EROFS, "Read-only file system")
+        monkeypatch.setattr(store, "_write", boom)
+
+    @pytest.fixture
+    def broken(self, tmp_path, monkeypatch):
+        db = load_db()
+        store = RuleStore(tmp_path, db)
+        host = EngineHost(tmp_path / "wcars_config.json", store)
+        from pathlib import Path
+        app = create_app(store, host, Path(DBC_PATH), db)
+        c = TestClient(app)
+        seeded = c.post("/api/rules", json=_payload(db)).json()
+        self._break_writes(monkeypatch, store)
+        return c, db, seeded, tmp_path
+
+    def test_create_returns_503_naming_the_data_dir(self, broken):
+        c, db, _, tmp_path = broken
+        r = c.post("/api/rules", json=_payload(db))
+        assert r.status_code == 503
+        assert str(tmp_path) in str(r.json()["detail"])
+
+    def test_update_returns_503(self, broken):
+        c, db, seeded, _ = broken
+        payload = _payload(db)
+        payload["expected_rev"] = seeded["rev"]
+        assert c.put(f"/api/rules/{seeded['id']}", json=payload).status_code == 503
+
+    def test_delete_returns_503(self, broken):
+        c, _, seeded, _ = broken
+        assert c.delete(f"/api/rules/{seeded['id']}").status_code == 503
+
+    def test_toggle_returns_503(self, broken):
+        c, _, seeded, _ = broken
+        r = c.post(f"/api/rules/{seeded['id']}/toggle", json={"enabled": False})
+        assert r.status_code == 503
+
+    def test_failed_create_is_not_listed(self, broken):
+        c, db, seeded, _ = broken
+        c.post("/api/rules", json=_payload(db))
+        assert [r["id"] for r in c.get("/api/rules").json()["rules"]] == [seeded["id"]]

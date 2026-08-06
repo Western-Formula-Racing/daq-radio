@@ -241,8 +241,22 @@ if __name__ == "__main__":
         # Eagerly initialize the WCARS engine in the parent so the ring buffer is
         # warm before the first frame arrives in the child WS bridge process.
         if os.getenv("WCARS_ENABLED", "1") == "1":
-            from src.websocket_bridge import get_wcars_engine
-            get_wcars_engine()
+            try:
+                from src.websocket_bridge import get_wcars_engine
+                get_wcars_engine()
+            except Exception as exc:
+                # A missing or unparseable DBC must not take the telemetry
+                # supervisor down with it: fault display is a nice-to-have,
+                # streaming telemetry to Pecan is not.
+                try:
+                    from src.wcars.decoder import DBC_PATH as dbc_path
+                except Exception:
+                    # cantools itself is what failed; fall back to the env vars.
+                    dbc_path = os.getenv("WFR_DBC_PATH") or os.getenv("DBC_FILE_PATH", "(unset)")
+                logger.warning(
+                    "WCARS disabled for this run: could not initialize the engine "
+                    "from DBC %s (%s). Set WFR_DBC_PATH or DBC_FILE_PATH to a "
+                    "readable DBC to enable fault display.", dbc_path, exc)
 
         p_websocket = multiprocessing.Process(target=start_websocket_bridge, args=(websocket_event,), name="WebSocket")
         p_websocket.start()

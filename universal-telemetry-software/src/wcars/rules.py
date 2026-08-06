@@ -201,11 +201,12 @@ class TorchCellTempRule(BaseRule):
 """Safety loop / shutdown circuit rules on 0x420 PackStatus and 0x7D3 VCU_Precharge.
 
 Two DBC generations name the same two bits on 0x420 differently:
-  bit 20 is 'Safetyloop_return' in secret-dbc/WFR25.dbc and example.dbc (what the
-          backend loads), but 'AIR_Negative_Relay' in the DBCs pecan ships;
-  bit 21 is 'HV_Active' in the former and 'AIR_Positive_Relay' in the latter.
+  bit 20 is 'AIR_Negative_Relay' in the current secret-dbc/WFR25.dbc and the
+          example.dbc copies, but 'Safetyloop_return' in older DBCs;
+  bit 21 is 'AIR_Positive_Relay' in the former and 'HV_Active' in the latter.
 Same bit, same meaning, different label. Every rule below reads whichever key is
-present so it fires no matter which DBC generation is loaded on the base station.
+present so it fires no matter which DBC generation a car or base station has
+loaded, including an active.dbc left over from a previous season.
 """
 
 AIR_NEGATIVE_SIGNALS = ("Safetyloop_return", "AIR_Negative_Relay")
