@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import hashlib
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -15,6 +16,8 @@ from fastapi.staticfiles import StaticFiles
 from ..wcars.serialization import encode_alert, encode_backlog
 from .engine_host import EngineHost
 from .rule_store import ConflictError, NotFoundError, RuleStore, ValidationError
+
+logger = logging.getLogger("diagnostics.app")
 
 
 def signal_index(db) -> list[dict]:
@@ -181,11 +184,17 @@ def create_app(store: RuleStore, host: EngineHost, dbc_path: Path, db,
         finally:
             for t in (send_task, recv_task):
                 t.cancel()
-                # Suppress broadly: a send that failed on a half-open socket must
-                # not stop us from unsubscribing, or the queue stays in the
-                # host's subscriber set for the life of the process.
-                with contextlib.suppress(asyncio.CancelledError, Exception):
+                # Never let a failed task stop us from unsubscribing, or the queue
+                # stays in the host's subscriber set for the life of the process.
+                # Log it though: a crashing sender is the fault this teardown was
+                # built to survive, and swallowing it silently leaves a tablet
+                # reconnect-flapping with nothing in the journal to explain it.
+                try:
                     await t
+                except asyncio.CancelledError:
+                    pass
+                except Exception:
+                    logger.exception("Alert socket task failed")
             host.unsubscribe(q)
 
     if static_dir is not None and static_dir.is_dir():
