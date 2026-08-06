@@ -1,6 +1,9 @@
 """HTTP contract tests for the OMT API using FastAPI's TestClient. Rule
 payloads are built dynamically from the loaded DBC so validation passes with
 either secret-dbc or example.dbc."""
+import asyncio
+import contextlib
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -114,6 +117,95 @@ def test_ws_alerts_sends_backlog_on_connect(client):
     with c.websocket_connect("/ws/alerts") as ws:
         first = ws.receive_json()
         assert first["type"] == "wcars_backlog"
+
+
+def test_ws_alerts_unsubscribes_on_disconnect(client):
+    c, _ = client
+    host = c.app.state.host
+    with c.websocket_connect("/ws/alerts") as ws:
+        assert ws.receive_json()["type"] == "wcars_backlog"
+        assert len(host._subscribers) == 1
+    assert len(host._subscribers) == 0
+
+
+def test_ws_alerts_unsubscribes_when_sender_fails(client, monkeypatch):
+    """A send that fails on a half-open socket must not leak the subscription."""
+    c, _ = client
+    host = c.app.state.host
+
+    def boom(_backlog):
+        raise RuntimeError("transport went away")
+
+    monkeypatch.setattr("src.diagnostics.app.encode_backlog", boom)
+    with contextlib.suppress(Exception):
+        with c.websocket_connect("/ws/alerts"):
+            # Round-trips the app's event loop so the sender has certainly run
+            # and failed before the client disconnects.
+            assert c.get("/api/rules").status_code == 200
+    assert len(host._subscribers) == 0
+
+
+def test_ws_alerts_survives_a_binary_frame(client):
+    """receive_text raises KeyError, not WebSocketDisconnect, on a binary frame."""
+    c, _ = client
+    host = c.app.state.host
+    with c.websocket_connect("/ws/alerts") as ws:
+        assert ws.receive_json()["type"] == "wcars_backlog"
+        ws.send_bytes(b"\x00\x01")
+        ws.send_text("ping")
+        assert c.get("/api/rules").status_code == 200
+        assert len(host._subscribers) == 1
+    assert len(host._subscribers) == 0
+
+
+def test_ws_alerts_unsubscribes_when_the_handler_is_cancelled(client):
+    """asyncio.wait leaves its futures alone when the wait itself is cancelled,
+    so shutdown cancelling the handler must still reach the cleanup."""
+    c, _ = client
+    host = c.app.state.host
+    endpoint = next(r.endpoint for r in c.app.routes
+                    if getattr(r, "path", None) == "/ws/alerts")
+
+    class ParkedWebSocket:
+        async def accept(self):
+            pass
+
+        async def send_json(self, _payload):
+            await asyncio.sleep(3600)
+
+        async def receive_text(self):
+            await asyncio.sleep(3600)
+
+    async def scenario():
+        task = asyncio.create_task(endpoint(ParkedWebSocket()))
+        for _ in range(20):
+            await asyncio.sleep(0)
+        assert len(host._subscribers) == 1
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        assert len(host._subscribers) == 0
+
+    asyncio.run(scenario())
+
+
+def test_config_with_non_numeric_threshold_is_422(client):
+    c, _ = client
+    resp = c.put("/api/config", json={"thresholds": {"torch_cell_temp_c": "hot"}})
+    assert resp.status_code == 422
+    assert any("invalid config value" in e for e in resp.json()["detail"])
+
+
+@pytest.mark.parametrize("rev", [None, "3", 1.5, True])
+def test_update_with_bad_expected_rev_is_422(client, rev):
+    c, db = client
+    doc = c.post("/api/rules", json=_payload(db)).json()
+    body = _payload(db)
+    if rev is not None:
+        body["expected_rev"] = rev
+    resp = c.put(f"/api/rules/{doc['id']}", json=body)
+    assert resp.status_code == 422
+    assert any("expected_rev" in e for e in resp.json()["detail"])
 
 
 def test_create_registers_rule_in_engine(client):
