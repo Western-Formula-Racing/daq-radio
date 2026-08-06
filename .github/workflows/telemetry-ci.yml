@@ -158,7 +158,8 @@ jobs:
         pip install \
           pytest pytest-asyncio pytest-timeout \
           cantools \
-          websockets redis requests
+          websockets redis requests \
+          fastapi httpx
 
     - name: Run unit tests
       working-directory: ./universal-telemetry-software
@@ -182,6 +183,7 @@ jobs:
           tests/test_diagnostics_rule_store.py \
           tests/test_diagnostics_frame_source.py \
           tests/test_diagnostics_engine_host.py \
+          tests/test_diagnostics_app.py \
           -v
 
   # ── Integration tests: full docker-compose stack ─────────────────────────

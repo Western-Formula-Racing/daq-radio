@@ -18,3 +18,5 @@ Flask
 Flask-SocketIO
 eventlet
 opencv-python-headless
+fastapi
+uvicorn
