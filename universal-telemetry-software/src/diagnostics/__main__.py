@@ -25,10 +25,27 @@ def main() -> None:
     data_dir = Path(os.getenv("WCARS_DATA_DIR", "./wcars-data"))
     config_path = Path(os.getenv("WCARS_CONFIG_PATH", str(data_dir / "wcars_config.json")))
     bridge_url = os.getenv("WCARS_BRIDGE_WS_URL", "ws://127.0.0.1:9080")
-    port = int(os.getenv("OMT_PORT", "9090"))
     static_env = os.getenv("OMT_STATIC_DIR")
 
-    db = load_db()
+    raw_port = os.getenv("OMT_PORT", "9090")
+    try:
+        port = int(raw_port)
+    except ValueError:
+        logger.critical("OMT_PORT is not a number: %r. Fix the unit file.", raw_port)
+        raise SystemExit(1) from None
+
+    try:
+        db = load_db()
+    except OSError as exc:
+        # A misconfigured WFR_DBC_PATH is the likeliest failure on a fresh Pi image,
+        # and cantools raises FileNotFoundError, so name the path rather than letting
+        # a cantools traceback be the only thing in the journal.
+        logger.critical(
+            "Cannot load the DBC at %s: %s. Set WFR_DBC_PATH to the DBC this car "
+            "is running and restart.", DBC_PATH, exc,
+        )
+        raise SystemExit(1) from exc
+
     try:
         store = RuleStore(data_dir, db)
     except OSError as exc:
@@ -45,6 +62,8 @@ def main() -> None:
     host = EngineHost(config_path, store)
     app = create_app(store, host, Path(DBC_PATH), db, bridge_url=bridge_url,
                      static_dir=Path(static_env) if static_env else None)
+    # Bound on all interfaces with no auth: the only network this reaches is the
+    # car's own WiFi hotspot, which the tablet is the sole client of.
     # No workers=: RuleStore is exactly one instance per data dir and every route
     # handler stays on the single event loop the frame feed runs on. Multiple
     # uvicorn workers would each own a separate store and engine, corrupting
