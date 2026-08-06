@@ -1,0 +1,103 @@
+{
+  "dbc": "example.dbc",
+  "decoded": [
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    }
+  ],
+  "description": "A 59 s regression is a replay restart: state is wiped, so the rule fires again immediately despite a 10 s rearm window, and then holds its rearm from the new time.",
+  "expected_alerts": [
+    {
+      "detail": "Conformance rule",
+      "rule": "USER:conf-large-backwards",
+      "severity": "WARNING",
+      "title": "OVERTEMP",
+      "ts": 60000,
+      "value": 11.0
+    },
+    {
+      "detail": "Conformance rule",
+      "rule": "USER:conf-large-backwards",
+      "severity": "WARNING",
+      "title": "OVERTEMP",
+      "ts": 1000,
+      "value": 11.0
+    }
+  ],
+  "frames": [
+    [
+      60000,
+      2012,
+      "0b00000000000000"
+    ],
+    [
+      1000,
+      2012,
+      "0b00000000000000"
+    ],
+    [
+      2000,
+      2012,
+      "0b00000000000000"
+    ]
+  ],
+  "name": "large_backwards_resets",
+  "rules": [
+    {
+      "conditions": [
+        {
+          "message": "VCU_PDM_Rear_cmd",
+          "op": ">",
+          "signal": "Rear_Cmd_HSD1",
+          "value": 10
+        }
+      ],
+      "enabled": true,
+      "for_seconds": 0.0,
+      "id": "conf-large-backwards",
+      "message": "OVERTEMP",
+      "name": "Conformance rule",
+      "rearm_seconds": 10,
+      "severity": "WARNING"
+    }
+  ],
+  "targets": [
+    "large_backwards_resets"
+  ]
+}

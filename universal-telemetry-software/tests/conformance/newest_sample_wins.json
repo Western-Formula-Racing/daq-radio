@@ -1,0 +1,113 @@
+{
+  "dbc": "example.dbc",
+  "decoded": [
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 9,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    }
+  ],
+  "description": "A late frame carrying an older, below-threshold reading is discarded rather than applied, so the hold survives it.",
+  "expected_alerts": [
+    {
+      "detail": "Conformance rule",
+      "rule": "USER:conf-newest-wins",
+      "severity": "WARNING",
+      "title": "OVERTEMP",
+      "ts": 3000,
+      "value": 11.0
+    }
+  ],
+  "frames": [
+    [
+      1000,
+      2012,
+      "0b00000000000000"
+    ],
+    [
+      2000,
+      2012,
+      "0b00000000000000"
+    ],
+    [
+      1500,
+      2012,
+      "0900000000000000"
+    ],
+    [
+      3000,
+      2012,
+      "0b00000000000000"
+    ]
+  ],
+  "name": "newest_sample_wins",
+  "rules": [
+    {
+      "conditions": [
+        {
+          "message": "VCU_PDM_Rear_cmd",
+          "op": ">",
+          "signal": "Rear_Cmd_HSD1",
+          "value": 10
+        }
+      ],
+      "enabled": true,
+      "for_seconds": 2.0,
+      "id": "conf-newest-wins",
+      "message": "OVERTEMP",
+      "name": "Conformance rule",
+      "rearm_seconds": 0.0,
+      "severity": "WARNING"
+    }
+  ],
+  "targets": [
+    "newest_wins"
+  ]
+}

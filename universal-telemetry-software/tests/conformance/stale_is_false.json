@@ -1,0 +1,133 @@
+{
+  "dbc": "example.dbc",
+  "decoded": [
+    {
+      "message": "M174_Firmware_Info",
+      "signals": {
+        "INV_DateCode_MMDD": 0,
+        "INV_DateCode_YYYY": 0,
+        "INV_Project_Code_EEP_Ver": 11,
+        "INV_SW_Version": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 9,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    }
+  ],
+  "description": "Two conditions on two messages; one signal stops arriving. Once it is older than the staleness window its condition is false, so a dead sensor cannot hold the fault on.",
+  "expected_alerts": [
+    {
+      "detail": "Conformance rule",
+      "rule": "USER:conf-stale-false",
+      "severity": "WARNING",
+      "title": "OVERTEMP",
+      "ts": 3000,
+      "value": 11.0
+    }
+  ],
+  "frames": [
+    [
+      1000,
+      174,
+      "0b00000000000000"
+    ],
+    [
+      3000,
+      2012,
+      "0b00000000000000"
+    ],
+    [
+      4000,
+      2012,
+      "0900000000000000"
+    ],
+    [
+      6001,
+      2012,
+      "0b00000000000000"
+    ],
+    [
+      7000,
+      2012,
+      "0b00000000000000"
+    ]
+  ],
+  "name": "stale_is_false",
+  "rules": [
+    {
+      "conditions": [
+        {
+          "message": "VCU_PDM_Rear_cmd",
+          "op": ">",
+          "signal": "Rear_Cmd_HSD1",
+          "value": 10
+        },
+        {
+          "message": "M174_Firmware_Info",
+          "op": ">",
+          "signal": "INV_Project_Code_EEP_Ver",
+          "value": 10
+        }
+      ],
+      "enabled": true,
+      "for_seconds": 0.0,
+      "id": "conf-stale-false",
+      "message": "OVERTEMP",
+      "name": "Conformance rule",
+      "rearm_seconds": 0.0,
+      "severity": "WARNING"
+    }
+  ],
+  "targets": [
+    "stale_is_false"
+  ]
+}

@@ -181,6 +181,7 @@ jobs:
           tests/test_wcars_decoder.py \
           tests/test_wcars_engine.py \
           tests/test_wcars_user_rules.py \
+          tests/test_conformance.py \
           tests/test_diagnostics_rule_store.py \
           tests/test_diagnostics_frame_source.py \
           tests/test_diagnostics_engine_host.py \

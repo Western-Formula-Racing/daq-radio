@@ -1,0 +1,115 @@
+{
+  "dbc": "example.dbc",
+  "decoded": [
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "M174_Firmware_Info",
+      "signals": {
+        "INV_DateCode_MMDD": 0,
+        "INV_DateCode_YYYY": 0,
+        "INV_Project_Code_EEP_Ver": 11,
+        "INV_SW_Version": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    }
+  ],
+  "description": "Each condition is true alone without firing; the hold only starts once both hold at the same time.",
+  "expected_alerts": [
+    {
+      "detail": "Conformance rule",
+      "rule": "USER:conf-two-conditions",
+      "severity": "WARNING",
+      "title": "OVERTEMP",
+      "ts": 3000,
+      "value": 11.0
+    }
+  ],
+  "frames": [
+    [
+      1000,
+      2012,
+      "0b00000000000000"
+    ],
+    [
+      2000,
+      174,
+      "0b00000000000000"
+    ],
+    [
+      2500,
+      2012,
+      "0b00000000000000"
+    ],
+    [
+      3000,
+      2012,
+      "0b00000000000000"
+    ]
+  ],
+  "name": "two_conditions_anded",
+  "rules": [
+    {
+      "conditions": [
+        {
+          "message": "VCU_PDM_Rear_cmd",
+          "op": ">",
+          "signal": "Rear_Cmd_HSD1",
+          "value": 10
+        },
+        {
+          "message": "M174_Firmware_Info",
+          "op": ">",
+          "signal": "INV_Project_Code_EEP_Ver",
+          "value": 10
+        }
+      ],
+      "enabled": true,
+      "for_seconds": 1.0,
+      "id": "conf-two-conditions",
+      "message": "OVERTEMP",
+      "name": "Conformance rule",
+      "rearm_seconds": 0.0,
+      "severity": "WARNING"
+    }
+  ],
+  "targets": [
+    "for_seconds"
+  ]
+}

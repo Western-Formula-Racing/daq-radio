@@ -1,0 +1,113 @@
+{
+  "dbc": "example.dbc",
+  "decoded": [
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    }
+  ],
+  "description": "True at t=1000, silence for 6 s, true again: the unobserved stretch does not count toward the hold, so the hold restarts.",
+  "expected_alerts": [
+    {
+      "detail": "Conformance rule",
+      "rule": "USER:conf-gap-resets",
+      "severity": "WARNING",
+      "title": "OVERTEMP",
+      "ts": 9000,
+      "value": 11.0
+    }
+  ],
+  "frames": [
+    [
+      1000,
+      2012,
+      "0b00000000000000"
+    ],
+    [
+      7000,
+      2012,
+      "0b00000000000000"
+    ],
+    [
+      8000,
+      2012,
+      "0b00000000000000"
+    ],
+    [
+      9000,
+      2012,
+      "0b00000000000000"
+    ]
+  ],
+  "name": "gap_resets_hold",
+  "rules": [
+    {
+      "conditions": [
+        {
+          "message": "VCU_PDM_Rear_cmd",
+          "op": ">",
+          "signal": "Rear_Cmd_HSD1",
+          "value": 10
+        }
+      ],
+      "enabled": true,
+      "for_seconds": 2.0,
+      "id": "conf-gap-resets",
+      "message": "OVERTEMP",
+      "name": "Conformance rule",
+      "rearm_seconds": 0.0,
+      "severity": "WARNING"
+    }
+  ],
+  "targets": [
+    "gap_resets_hold"
+  ]
+}

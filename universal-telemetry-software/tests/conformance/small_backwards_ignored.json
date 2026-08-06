@@ -1,0 +1,113 @@
+{
+  "dbc": "example.dbc",
+  "decoded": [
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    }
+  ],
+  "description": "A 100 ms regression mid-hold is ordinary out-of-order UDP arrival, not a source switch: it must not restart the hold, or reordering turns into alert spam.",
+  "expected_alerts": [
+    {
+      "detail": "Conformance rule",
+      "rule": "USER:conf-small-backwards",
+      "severity": "WARNING",
+      "title": "OVERTEMP",
+      "ts": 3000,
+      "value": 11.0
+    }
+  ],
+  "frames": [
+    [
+      1000,
+      2012,
+      "0b00000000000000"
+    ],
+    [
+      2900,
+      2012,
+      "0b00000000000000"
+    ],
+    [
+      2800,
+      2012,
+      "0b00000000000000"
+    ],
+    [
+      3000,
+      2012,
+      "0b00000000000000"
+    ]
+  ],
+  "name": "small_backwards_ignored",
+  "rules": [
+    {
+      "conditions": [
+        {
+          "message": "VCU_PDM_Rear_cmd",
+          "op": ">",
+          "signal": "Rear_Cmd_HSD1",
+          "value": 10
+        }
+      ],
+      "enabled": true,
+      "for_seconds": 2.0,
+      "id": "conf-small-backwards",
+      "message": "OVERTEMP",
+      "name": "Conformance rule",
+      "rearm_seconds": 0.0,
+      "severity": "WARNING"
+    }
+  ],
+  "targets": [
+    "small_backwards_ignored"
+  ]
+}

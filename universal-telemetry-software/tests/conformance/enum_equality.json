@@ -1,0 +1,178 @@
+{
+  "dbc": "example.dbc",
+  "decoded": [
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "TORCH_M1_BALANCE",
+      "signals": {
+        "Cell_10_balance_flag": "Not balancing",
+        "Cell_11_balance_flag": "Not balancing",
+        "Cell_12_balance_flag": "Not balancing",
+        "Cell_13_balance_flag": "Not balancing",
+        "Cell_14_balance_flag": "Not balancing",
+        "Cell_15_balance_flag": "Not balancing",
+        "Cell_16_balance_flag": "Not balancing",
+        "Cell_17_balance_flag": "Not balancing",
+        "Cell_18_balance_flag": "Not balancing",
+        "Cell_19_balance_flag": "Not balancing",
+        "Cell_1_balance_flag": "Balancing",
+        "Cell_20_balance_flag": "Not balancing",
+        "Cell_2_balance_flag": "Not balancing",
+        "Cell_3_balance_flag": "Not balancing",
+        "Cell_4_balance_flag": "Not balancing",
+        "Cell_5_balance_flag": "Not balancing",
+        "Cell_6_balance_flag": "Not balancing",
+        "Cell_7_balance_flag": "Not balancing",
+        "Cell_8_balance_flag": "Not balancing",
+        "Cell_9_balance_flag": "Not balancing",
+        "Max_cell_voltage_delta": 0.0,
+        "Out_of_balance_cell_count": 0,
+        "Resistor_hottest_temperature": 0.0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 9,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 9,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    },
+    {
+      "message": "VCU_PDM_Rear_cmd",
+      "signals": {
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
+      }
+    }
+  ],
+  "description": "A VAL_-mapped signal compared with == to 'Balancing'. The trigger value is null because the first condition is textual, and the enum going stale still makes the condition false.",
+  "expected_alerts": [
+    {
+      "detail": "Conformance rule",
+      "rule": "USER:conf-enum-equality",
+      "severity": "WARNING",
+      "title": "OVERTEMP",
+      "ts": 2000,
+      "value": null
+    },
+    {
+      "detail": "Conformance rule",
+      "rule": "USER:conf-enum-equality",
+      "severity": "WARNING",
+      "title": "OVERTEMP",
+      "ts": 4000,
+      "value": null
+    }
+  ],
+  "frames": [
+    [
+      1000,
+      2012,
+      "0b00000000000000"
+    ],
+    [
+      2000,
+      1001,
+      "0000000001000000"
+    ],
+    [
+      3000,
+      2012,
+      "0900000000000000"
+    ],
+    [
+      4000,
+      2012,
+      "0b00000000000000"
+    ],
+    [
+      5000,
+      2012,
+      "0900000000000000"
+    ],
+    [
+      7100,
+      2012,
+      "0b00000000000000"
+    ]
+  ],
+  "name": "enum_equality",
+  "rules": [
+    {
+      "conditions": [
+        {
+          "message": "TORCH_M1_BALANCE",
+          "op": "==",
+          "signal": "Cell_1_balance_flag",
+          "value": "Balancing"
+        },
+        {
+          "message": "VCU_PDM_Rear_cmd",
+          "op": ">",
+          "signal": "Rear_Cmd_HSD1",
+          "value": 10
+        }
+      ],
+      "enabled": true,
+      "for_seconds": 0.0,
+      "id": "conf-enum-equality",
+      "message": "OVERTEMP",
+      "name": "Conformance rule",
+      "rearm_seconds": 0.0,
+      "severity": "WARNING"
+    }
+  ],
+  "targets": [
+    "stale_is_false"
+  ]
+}
