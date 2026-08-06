@@ -23,9 +23,16 @@ class LogThrottle:
         self._suppressed = 0
 
     def take(self) -> tuple[bool, bool, int]:
-        """Return (emit, is_first, suppressed_since_last_emit)."""
+        """Return (emit, is_first, suppressed_since_last_emit).
+
+        A whole quiet interval with nothing suppressed re-arms the throttle, so
+        a transient fault at startup cannot cost every later fault its traceback
+        for the rest of the process's life. A genuinely continuous fault always
+        has suppressed takes in the gap, so it stays throttled.
+        """
         now = self._monotonic()
-        if self._last_emit is None:
+        if self._last_emit is None or (
+                now - self._last_emit >= self.interval_s and self._suppressed == 0):
             self._last_emit = now
             return True, True, 0
         if now - self._last_emit >= self.interval_s:
@@ -35,6 +42,17 @@ class LogThrottle:
             return True, False, dropped
         self._suppressed += 1
         return False, False, 0
+
+
+def suppressed_suffix(dropped: int, interval_s: float) -> str:
+    """Clause naming how many lines were dropped, empty when none were.
+
+    '(0 more suppressed)' on a first line reads as though something had already
+    been lost, which sends whoever reads the journal hunting for it.
+    """
+    if dropped <= 0:
+        return ""
+    return f" ({dropped} more suppressed in the last {interval_s:.0f}s)"
 
 
 def log_throttled_exception(logger, throttle: LogThrottle, message: str, exc: BaseException) -> None:
@@ -49,5 +67,7 @@ def log_throttled_exception(logger, throttle: LogThrottle, message: str, exc: Ba
     if is_first:
         logger.exception("%s: %s", message, exc)
     else:
-        logger.error("%s: %s (%d more suppressed in the last %.0fs)",
-                     message, exc, dropped, throttle.interval_s)
+        # Without the class name a throttled KeyError('canId') logs as just
+        # 'canId', which identifies nothing once the traceback is gone.
+        logger.error("%s: %s: %s%s", message, type(exc).__name__, exc,
+                     suppressed_suffix(dropped, throttle.interval_s))

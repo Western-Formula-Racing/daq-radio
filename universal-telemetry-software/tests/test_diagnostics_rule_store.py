@@ -352,6 +352,39 @@ def test_unrelated_directory_fsync_error_still_propagates(tmp_path, db, monkeypa
         store.create(draft(), by="a")
 
 
+def test_committed_rename_is_not_rolled_back_when_the_directory_fsync_fails(
+        tmp_path, db, monkeypatch):
+    """os.replace already put the new file on disk, so list() must show the new
+    state; rolling memory back would tell the team a delete failed when the next
+    reboot will honor it."""
+    real_fsync = os.fsync
+    store = RuleStore(tmp_path, db)
+    created = store.create(draft(), by="haorui")
+
+    def picky_fsync(fd):
+        if os.fstat(fd).st_mode & 0o040000:
+            raise OSError(errno.EIO, "I/O error")
+        return real_fsync(fd)
+
+    monkeypatch.setattr(os, "fsync", picky_fsync)
+    with pytest.raises(OSError):
+        store.delete(created["id"], by="haorui")
+    assert store.list() == []
+    monkeypatch.undo()
+    assert RuleStore(tmp_path, db).list() == []
+
+
+def test_a_failing_audit_does_not_fail_an_applied_mutation(tmp_path, db):
+    # A directory where the audit log belongs makes every append raise, the
+    # same shape as a full or read-only card refusing the audit write.
+    (tmp_path / "audit.jsonl").mkdir()
+    store = RuleStore(tmp_path, db)
+    created = store.create(draft(), by="haorui")
+    assert [r["id"] for r in store.list()] == [created["id"]]
+    on_disk = json.loads((tmp_path / "rules.json").read_text())["rules"]
+    assert [r["id"] for r in on_disk] == [created["id"]]
+
+
 class TestWriteFailureLeavesStoreUnchanged:
     """A full or read-only SD card must not leave the store holding a change
     that never reached disk: the engine would not have it, the tablet would

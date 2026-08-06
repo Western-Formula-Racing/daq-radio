@@ -6,7 +6,7 @@ CONE_DETECTION_PATH = Path(__file__).parent / "cone-detection"
 if str(CONE_DETECTION_PATH) not in sys.path:
     sys.path.insert(0, str(CONE_DETECTION_PATH))
 
-# The WCARS decoder defaults to the in-container DBC (/app/active.dbc), which
+# The WCARS decoder defaults to the in-container DBC (/app/dbc_uploads/active.dbc), which
 # does not exist on a dev machine. Prefer the secret-dbc submodule; fall back to
 # example.dbc so the wcars tests still run in CI, which does not check out
 # submodules. Set before any test imports src.wcars.decoder, which reads

@@ -82,6 +82,9 @@ class RuleStore:
         self._audit_path = data_dir / "audit.jsonl"
         data_dir.mkdir(parents=True, exist_ok=True)
         self._ids_assigned_at_load = False
+        # Set by _write once os.replace has landed; read by _commit to decide
+        # whether a failure still left the new file on disk.
+        self._rename_committed = False
         self._rules = self._load()
         # A DBC swap between service runs can orphan stored rules; mark them
         # instead of deleting so nobody's work silently disappears.
@@ -167,11 +170,17 @@ class RuleStore:
         change that never reached disk: the engine never gets told about it,
         the tablet lists it as if it were armed, and it disappears at the next
         reboot. Better to fail the request outright.
+
+        The undo is skipped once the rename has landed: the new file is on disk
+        and a later step (the directory fsync) is what failed, so restoring the
+        old list would make the tablet show a rule the next reboot will not.
         """
+        self._rename_committed = False
         try:
             self._write()
         except OSError:
-            self._rules[:] = restore
+            if not self._rename_committed:
+                self._rules[:] = restore
             raise
 
     def list(self) -> list[dict]:
@@ -286,21 +295,30 @@ class RuleStore:
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, self._rules_path)
+        self._rename_committed = True
         _fsync_dir(self._rules_path.parent)
 
     def _audit(self, action: str, doc: dict, by: str) -> None:
+        """Best effort: the mutation is already on disk and in memory by the
+        time we get here, so a card that refuses the audit line must not turn an
+        applied change into a 503 the engine was never told about."""
         entry = {"ts": _now_iso(), "action": action,
                  "rule_id": doc.get("id"), "rule_name": doc.get("name"), "by": by}
         if action == "delete":
             # The audit line is the only remaining record of a deleted rule, so
             # keep the whole body to make an accidental delete recoverable.
             entry["rule"] = copy.deepcopy(doc)
-        is_new = not self._audit_path.exists()
-        with open(self._audit_path, "a") as f:
-            f.write(json.dumps(entry) + "\n")
-            f.flush()
-            os.fsync(f.fileno())
-        if is_new:
-            # The contents are durable but the name is not until the directory
-            # is synced, so a power cut could lose the whole audit log.
-            _fsync_dir(self._audit_path.parent)
+        try:
+            is_new = not self._audit_path.exists()
+            with open(self._audit_path, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+            if is_new:
+                # The contents are durable but the name is not until the
+                # directory is synced, so a power cut could lose the whole log.
+                _fsync_dir(self._audit_path.parent)
+        except OSError as exc:
+            logger.error("could not append the %s of rule %s to %s (%s); the "
+                         "change itself is applied", action, doc.get("id"),
+                         self._audit_path, exc, exc_info=True)

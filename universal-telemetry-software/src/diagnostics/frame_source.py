@@ -17,7 +17,7 @@ import websockets
 from websockets.exceptions import ConnectionClosedOK
 
 from ..frame_time import is_valid_frame_ts
-from ..log_throttle import LogThrottle
+from ..log_throttle import LogThrottle, suppressed_suffix
 
 logger = logging.getLogger("diagnostics.frames")
 
@@ -32,8 +32,8 @@ def _warn_bad_frame_ts(raw_ts) -> None:
     emit, _is_first, dropped = _bad_frame_ts_throttle.take()
     if emit:
         logger.warning(
-            "Frame has unusable 'time' value %r, falling back to wall clock "
-            "(%d more suppressed)", raw_ts, dropped)
+            "Frame has unusable 'time' value %r, falling back to wall clock%s",
+            raw_ts, suppressed_suffix(dropped, _bad_frame_ts_throttle.interval_s))
 
 
 def parse_frames(raw: str | bytes) -> list[tuple[dict, int]]:

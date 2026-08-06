@@ -23,7 +23,7 @@ from src.heartbeat import pump_pubsub_with_heartbeat
 from src.wcars.engine import WcarsEngine
 from src.wcars.serialization import encode_alert, encode_backlog, encode_config_ack, decode_config
 from src.wcars.config import load_config, save_config
-from src.log_throttle import LogThrottle, log_throttled_exception
+from src.log_throttle import LogThrottle, log_throttled_exception, suppressed_suffix
 from src.frame_time import is_valid_frame_ts as _is_valid_frame_ts
 from pathlib import Path
 
@@ -374,8 +374,11 @@ async def redis_listener():
                                     if emit:
                                         logger.warning(
                                             "WCARS: frame has unusable 'time' value %r, falling back "
-                                            "to wall clock (%d more suppressed)",
-                                            raw_ts, dropped,
+                                            "to wall clock%s",
+                                            raw_ts,
+                                            suppressed_suffix(
+                                                dropped,
+                                                _bad_frame_ts_throttle.interval_s),
                                         )
                             for alert in engine.feed({"canId": can_id, "data": payload}, ts_ms):
                                 frame_out = json.dumps(encode_alert(alert))

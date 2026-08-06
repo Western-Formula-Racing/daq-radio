@@ -59,6 +59,13 @@ class TestParseFrames:
         warnings = [r for r in caplog.records if "unusable 'time'" in r.getMessage()]
         assert len(warnings) == 1
 
+    def test_first_warning_does_not_claim_zero_were_suppressed(self, caplog, monkeypatch):
+        monkeypatch.setattr(frame_source, "_bad_frame_ts_throttle", LogThrottle())
+        caplog.set_level(logging.WARNING, logger="diagnostics.frames")
+        parse_frames(json.dumps({"canId": 1, "data": [], "time": -3}))
+        ((warning,)) = [r for r in caplog.records if "unusable 'time'" in r.getMessage()]
+        assert "suppressed" not in warning.getMessage()
+
     def test_absent_time_does_not_warn(self, caplog, monkeypatch):
         monkeypatch.setattr(frame_source, "_bad_frame_ts_throttle", LogThrottle())
         caplog.set_level(logging.WARNING, logger="diagnostics.frames")
