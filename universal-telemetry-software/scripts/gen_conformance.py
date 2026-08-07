@@ -157,8 +157,10 @@ def scenarios(c: Corpus) -> list[dict]:
     out.append({
         "name": "for_seconds_hold",
         "description": "Condition true at 10 Hz for 3 s with for_seconds 2: the alert "
-                       "lands exactly one hold after the condition first held.",
-        "targets": ["for_seconds"],
+                       "lands exactly one hold after the condition first held. The 21 "
+                       "frames after the fire also pin the must-go-false latch, since "
+                       "rearm_seconds is 0 and only the latch stops a refire per frame.",
+        "targets": ["for_seconds", "must_go_false_latch"],
         "rules": [rule("conf-for-seconds", [c.cond_a()], for_seconds=hold_2s)],
         "frames": [c.a(ts, TRUE_VALUE) for ts in range(1000, 4001, 100)],
     })

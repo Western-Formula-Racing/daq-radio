@@ -23,6 +23,7 @@ REQUIRED_TARGETS = {
     "high_water", "newest_wins", "gap_resets_hold", "small_backwards_ignored",
     "large_backwards_resets", "stale_is_false", "rearm", "for_seconds",
     "alert_ts", "staleness_ms_value", "backwards_reset_threshold",
+    "must_go_false_latch",
 }
 
 

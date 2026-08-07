@@ -405,7 +405,7 @@
       }
     }
   ],
-  "description": "Condition true at 10 Hz for 3 s with for_seconds 2: the alert lands exactly one hold after the condition first held.",
+  "description": "Condition true at 10 Hz for 3 s with for_seconds 2: the alert lands exactly one hold after the condition first held. The 21 frames after the fire also pin the must-go-false latch, since rearm_seconds is 0 and only the latch stops a refire per frame.",
   "expected_alerts": [
     {
       "detail": "Conformance rule",
@@ -594,6 +594,7 @@
     }
   ],
   "targets": [
-    "for_seconds"
+    "for_seconds",
+    "must_go_false_latch"
   ]
 }
