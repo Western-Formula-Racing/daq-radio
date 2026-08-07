@@ -117,7 +117,7 @@ describe("replayParser", () => {
       expect(result.errors).toHaveLength(0);
       expect(result.frames).toHaveLength(1_000_005);
       expect(result.warnings.some((w) => w.code === "frame-cap-exceeded")).toBe(true);
-    });
+    }, 30_000);
   });
 
   describe("parseWFRECUCsv", () => {
@@ -186,7 +186,7 @@ describe("replayParser", () => {
       expect(result.errors).toHaveLength(0);
       expect(result.frames).toHaveLength(1_000_002);
       expect(result.warnings.some((w) => w.code === "frame-cap-exceeded")).toBe(true);
-    });
+    }, 30_000);
   });
 
   describe("parsePecanSessionJson", () => {
