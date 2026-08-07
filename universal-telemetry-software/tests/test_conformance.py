@@ -2,6 +2,7 @@
 
 These files are the contract with the browser engine: the TS suite loads the same
 directory. A vector that passes here and fails there means the runtimes diverged."""
+import copy
 import json
 from pathlib import Path
 
@@ -21,6 +22,7 @@ CORPUS_DBC = Path(__file__).parent.parent / "example.dbc"
 REQUIRED_TARGETS = {
     "high_water", "newest_wins", "gap_resets_hold", "small_backwards_ignored",
     "large_backwards_resets", "stale_is_false", "rearm", "for_seconds",
+    "alert_ts", "staleness_ms_value", "backwards_reset_threshold",
 }
 
 
@@ -99,14 +101,25 @@ def test_recorded_decode_matches_the_live_decoder(path):
             assert recorded == {"message": live["message"], "signals": live["signals"]}
 
 
-def test_a_vector_fails_when_the_expectation_is_wrong(tmp_path):
-    """Guards the harness itself: a corrupted expectation must be detected."""
-    vector = json.loads(_vectors()[0].read_text())
-    engine = WcarsEngine(load_config(tmp_path / "c.json"),
-                         user_rule_docs=vector["rules"])
-    produced = []
-    for ts_ms, can_id, data_hex in vector["frames"]:
-        for alert in engine.feed(
-                {"canId": can_id, "data": list(bytes.fromhex(data_hex))}, ts_ms):
-            produced.append(alert.rule)
-    assert produced != ["definitely-not-a-real-rule-id"]
+@pytest.mark.parametrize("field,corrupt", [
+    ("ts", lambda v: v + 1),
+    ("value", lambda v: (v or 0) + 1),
+    ("title", lambda v: v + "!"),
+    ("severity", lambda v: "CRITICAL" if v != "CRITICAL" else "WARNING"),
+])
+def test_a_vector_fails_when_the_expectation_is_wrong(field, corrupt, tmp_path):
+    """Guards the comparison in test_vector_reproduces against being vacuous.
+
+    Perturbing one field of a real expectation must make the comparison disagree.
+    If it does not, that test is asserting nothing and the whole corpus is theater.
+    """
+    path = next(p for p in _vectors()
+                if json.loads(p.read_text())["expected_alerts"])
+    vector = json.loads(path.read_text())
+    produced = _run(vector, tmp_path)
+    assert produced == vector["expected_alerts"], "precondition: the vector reproduces"
+
+    corrupted = copy.deepcopy(vector["expected_alerts"])
+    corrupted[0][field] = corrupt(corrupted[0][field])
+    assert corrupted != vector["expected_alerts"], "the perturbation changed nothing"
+    assert produced != corrupted, f"corrupting {field!r} went undetected"

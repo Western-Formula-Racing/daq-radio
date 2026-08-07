@@ -8,10 +8,15 @@ whatever it emitted recorded as expected_alerts. The pytest suite and the browse
 vitest suite both execute these files, so a rule that fires on the car and not in
 replay shows up as a red build instead of a misleading tool.
 
-The scenarios target the five timing behaviors that are invisible in the rule JSON
-and are therefore where a second implementation drifts: high-water-mark clock,
-newest sample wins, a gap resetting the hold, only a large backwards jump resetting
-state, and a stale signal evaluating false.
+The scenarios target the timing behaviors that are invisible in the rule JSON and
+are therefore where a second implementation drifts: high-water-mark clock, newest
+sample wins, a gap resetting the hold, only a large backwards jump resetting state,
+and a stale signal evaluating false.
+
+They also pin the numeric value of STALENESS_MS itself, from both sides of both
+thresholds it governs. Behavioral vectors alone leave the constant bracketed over a
+wide range, and a port that picks any value inside that range is green here and
+wrong on the car.
 
 Regeneration is deterministic: the DBC is pinned to the committed example.dbc, rule
 ids are fixed strings, keys are sorted, and nothing records a wall clock, so a diff
@@ -23,6 +28,8 @@ import json
 import os
 import sys
 from pathlib import Path
+
+import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 CORPUS_DBC = REPO / "example.dbc"
@@ -99,7 +106,14 @@ def _hex(msg, values: dict) -> str:
 
 class Corpus:
     def __init__(self) -> None:
-        msg_a, sig_a, _, _ = encodable_user_signal()
+        # encodable_user_signal is a test helper and signals failure with
+        # pytest.skip, which outside a test session would surface as an opaque
+        # Skipped traceback instead of the clean exit the other selectors give.
+        try:
+            msg_a, sig_a, _, _ = encodable_user_signal()
+        except pytest.skip.Exception as exc:
+            raise SystemExit(
+                f"no encodable non-whitelisted signal in {CORPUS_DBC.name}: {exc}")
         self.a_msg, self.a_sig = msg_a, sig_a
         self.b_msg, self.b_sig = _second_numeric_signal(msg_a.name)
         self.e_msg, self.e_sig = _enum_signal()
@@ -177,7 +191,10 @@ def scenarios(c: Corpus) -> list[dict]:
         "description": "The frame that completes the AND arrives 2 s late. Timing uses "
                        "the high-water mark but the alert timestamp is the frame's own "
                        "time, so user rules agree with the built-ins on when it happened.",
-        "targets": ["high_water"],
+        # Not a high_water vector: with for_seconds 0 the fire is unconditional on
+        # the completing frame and the staleness check passes under either clock,
+        # so only the alert timestamp is actually pinned here.
+        "targets": ["alert_ts"],
         "rules": [rule("conf-alert-ts", [c.cond_a(), c.cond_b()])],
         "frames": [c.a(5000, TRUE_VALUE), c.b(3000, TRUE_VALUE)],
     })
@@ -258,6 +275,43 @@ def scenarios(c: Corpus) -> list[dict]:
                    c.a(3000, FALSE_VALUE), c.a(4000, TRUE_VALUE),
                    c.a(5000, FALSE_VALUE), c.a(7100, TRUE_VALUE)],
     })
+
+    # The behavioral vectors above only bracket STALENESS_MS to [4000, 5000] and the
+    # backwards-reset threshold to [100, 59000]. These six pin both edges to the
+    # exact millisecond, so a port that guesses a value inside those ranges goes red
+    # here rather than on the car.
+    for age, fresh in ((4999, True), (5000, True), (5001, False)):
+        verdict = "fresh" if fresh else "stale"
+        out.append({
+            "name": f"staleness_{age}_is_{verdict}",
+            "description": f"B stops arriving; the frame that would complete the AND "
+                           f"lands when B is exactly {age} ms old. STALENESS_MS is "
+                           f"5000 and the check is strictly greater, so B is "
+                           f"{verdict} and the rule "
+                           f"{'fires' if fresh else 'cannot fire'}.",
+            "targets": ["staleness_ms_value"] + ([] if fresh else ["stale_is_false"]),
+            "rules": [rule(f"conf-staleness-{age}", [c.cond_a(), c.cond_b()])],
+            "frames": [c.b(1000, TRUE_VALUE), c.a(1000 + age, TRUE_VALUE)],
+        })
+
+    for regression, resets in ((4900, False), (5000, False), (5001, True), (5100, True)):
+        verdict = "resets" if resets else "does_not_reset"
+        outcome = ("wiped, so the rule refires at once despite the 10 s rearm window"
+                   if resets else
+                   "kept, so the rearm window still blocks the refire")
+        out.append({
+            "name": f"backwards_{regression}_{verdict}",
+            "description": f"The rule fires at 10000, then frame time steps back by "
+                           f"exactly {regression} ms. The reset threshold is "
+                           f"STALENESS_MS (5000) and the check is strictly greater, "
+                           f"so state is {outcome}.",
+            "targets": ["backwards_reset_threshold",
+                        "large_backwards_resets" if resets
+                        else "small_backwards_ignored"],
+            "rules": [rule(f"conf-backwards-{regression}", [c.cond_a()],
+                           rearm_seconds=10)],
+            "frames": [c.a(10000, TRUE_VALUE), c.a(10000 - regression, TRUE_VALUE)],
+        })
 
     return out
 

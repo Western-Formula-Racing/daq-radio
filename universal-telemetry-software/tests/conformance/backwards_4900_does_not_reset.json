@@ -15,39 +15,43 @@
       }
     },
     {
-      "message": "M174_Firmware_Info",
+      "message": "VCU_PDM_Rear_cmd",
       "signals": {
-        "INV_DateCode_MMDD": 0,
-        "INV_DateCode_YYYY": 0,
-        "INV_Project_Code_EEP_Ver": 11,
-        "INV_SW_Version": 0
+        "Rear_Cmd_HSD1": 11,
+        "Rear_Cmd_HSD2": 0,
+        "Rear_Cmd_HSD3": 0,
+        "Rear_Cmd_HSD4": 0,
+        "Rear_Cmd_HSD5": 0,
+        "Rear_Cmd_HSD6": 0,
+        "Rear_Cmd_HSD7": 0,
+        "Rear_Cmd_HSD8": 0
       }
     }
   ],
-  "description": "The frame that completes the AND arrives 2 s late. Timing uses the high-water mark but the alert timestamp is the frame's own time, so user rules agree with the built-ins on when it happened.",
+  "description": "The rule fires at 10000, then frame time steps back by exactly 4900 ms. The reset threshold is STALENESS_MS (5000) and the check is strictly greater, so state is kept, so the rearm window still blocks the refire.",
   "expected_alerts": [
     {
       "detail": "Conformance rule",
-      "rule": "USER:conf-alert-ts",
+      "rule": "USER:conf-backwards-4900",
       "severity": "WARNING",
       "title": "OVERTEMP",
-      "ts": 3000,
+      "ts": 10000,
       "value": 11.0
     }
   ],
   "frames": [
     [
-      5000,
+      10000,
       2012,
       "0b00000000000000"
     ],
     [
-      3000,
-      174,
+      5100,
+      2012,
       "0b00000000000000"
     ]
   ],
-  "name": "alert_ts_is_frame_time",
+  "name": "backwards_4900_does_not_reset",
   "rules": [
     {
       "conditions": [
@@ -56,24 +60,19 @@
           "op": ">",
           "signal": "Rear_Cmd_HSD1",
           "value": 10
-        },
-        {
-          "message": "M174_Firmware_Info",
-          "op": ">",
-          "signal": "INV_Project_Code_EEP_Ver",
-          "value": 10
         }
       ],
       "enabled": true,
       "for_seconds": 0.0,
-      "id": "conf-alert-ts",
+      "id": "conf-backwards-4900",
       "message": "OVERTEMP",
       "name": "Conformance rule",
-      "rearm_seconds": 0.0,
+      "rearm_seconds": 10,
       "severity": "WARNING"
     }
   ],
   "targets": [
-    "alert_ts"
+    "backwards_reset_threshold",
+    "small_backwards_ignored"
   ]
 }

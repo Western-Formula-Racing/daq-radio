@@ -2,6 +2,15 @@
   "dbc": "example.dbc",
   "decoded": [
     {
+      "message": "M174_Firmware_Info",
+      "signals": {
+        "INV_DateCode_MMDD": 0,
+        "INV_DateCode_YYYY": 0,
+        "INV_Project_Code_EEP_Ver": 11,
+        "INV_SW_Version": 0
+      }
+    },
+    {
       "message": "VCU_PDM_Rear_cmd",
       "signals": {
         "Rear_Cmd_HSD1": 11,
@@ -13,41 +22,23 @@
         "Rear_Cmd_HSD7": 0,
         "Rear_Cmd_HSD8": 0
       }
-    },
-    {
-      "message": "M174_Firmware_Info",
-      "signals": {
-        "INV_DateCode_MMDD": 0,
-        "INV_DateCode_YYYY": 0,
-        "INV_Project_Code_EEP_Ver": 11,
-        "INV_SW_Version": 0
-      }
     }
   ],
-  "description": "The frame that completes the AND arrives 2 s late. Timing uses the high-water mark but the alert timestamp is the frame's own time, so user rules agree with the built-ins on when it happened.",
-  "expected_alerts": [
-    {
-      "detail": "Conformance rule",
-      "rule": "USER:conf-alert-ts",
-      "severity": "WARNING",
-      "title": "OVERTEMP",
-      "ts": 3000,
-      "value": 11.0
-    }
-  ],
+  "description": "B stops arriving; the frame that would complete the AND lands when B is exactly 5001 ms old. STALENESS_MS is 5000 and the check is strictly greater, so B is stale and the rule cannot fire.",
+  "expected_alerts": [],
   "frames": [
     [
-      5000,
-      2012,
+      1000,
+      174,
       "0b00000000000000"
     ],
     [
-      3000,
-      174,
+      6001,
+      2012,
       "0b00000000000000"
     ]
   ],
-  "name": "alert_ts_is_frame_time",
+  "name": "staleness_5001_is_stale",
   "rules": [
     {
       "conditions": [
@@ -66,7 +57,7 @@
       ],
       "enabled": true,
       "for_seconds": 0.0,
-      "id": "conf-alert-ts",
+      "id": "conf-staleness-5001",
       "message": "OVERTEMP",
       "name": "Conformance rule",
       "rearm_seconds": 0.0,
@@ -74,6 +65,7 @@
     }
   ],
   "targets": [
-    "alert_ts"
+    "staleness_ms_value",
+    "stale_is_false"
   ]
 }
