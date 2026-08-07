@@ -330,4 +330,26 @@ describe("UserRule", () => {
   it("exports the staleness window the Python engine uses", () => {
     expect(STALENESS_MS).toBe(5000);
   });
+
+  // Python keys its latest-value map on a (message, signal) tuple, which cannot
+  // collide. JS has no tuple keys, so the separator carries that guarantee: if it
+  // were ever lost, ("AB","C") and ("A","BC") would silently share an entry.
+  it("does not confuse two signals whose names concatenate the same way", () => {
+    const r = new UserRule(doc({
+      conditions: [
+        { message: "AB", signal: "C", op: ">", value: 10 },
+        { message: "A", signal: "BC", op: ">", value: 10 },
+      ],
+    }));
+    // Only the first condition is ever satisfied, so the AND can never hold.
+    expect(r.update({ message: "AB", signals: { C: 11 } }, 1000)).toBeNull();
+    expect(r.update({ message: "AB", signals: { C: 11 } }, 2000)).toBeNull();
+  });
+
+  it("ignores a signal name that only exists on Object.prototype", () => {
+    const r = new UserRule(doc({
+      conditions: [{ message: "M", signal: "toString", op: ">", value: 10 }],
+    }));
+    expect(r.update({ message: "M", signals: {} }, 1000)).toBeNull();
+  });
 });
