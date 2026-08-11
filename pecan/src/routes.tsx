@@ -15,6 +15,7 @@ const SensorValidator = lazy(() => import("./pages/SensorValidator"));
 const Trace = lazy(() => import("./pages/Trace"));
 const DataTransmitter = lazy(() => import("./pages/Transmitter"));
 const Wcars = lazy(() => import("./pages/Wcars"));
+const ReplayViewer = lazy(() => import("./pages/ReplayViewer"));
 
 // Get base path for GitHub Pages deployment
 const basename = import.meta.env.BASE_URL || '/';
@@ -39,7 +40,7 @@ export const router = createBrowserRouter([
       { path: "throttle-mapper", element: <Suspense fallback={<Fallback />}><ThrottleMapper /></Suspense> },
       { path: "sensor-validator", element: <Suspense fallback={<Fallback />}><SensorValidator /></Suspense> },
       { path: "trace", element: <Suspense fallback={<Fallback />}><Trace /></Suspense> },
-      { path: "replay-viewer", element: <Suspense fallback={<Fallback />}><Dashboard /></Suspense> },
+      { path: "replay-viewer", element: <Suspense fallback={<Fallback />}><ReplayViewer /></Suspense> },
       { path: "can-transmitter", element: <Suspense fallback={<Fallback />}><DataTransmitter /></Suspense> },
     ],
   },
