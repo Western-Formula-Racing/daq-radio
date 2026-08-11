@@ -265,3 +265,89 @@ class TestUnwritableDataDir:
         c, db, seeded, _ = broken
         c.post("/api/rules", json=_payload(db))
         assert [r["id"] for r in c.get("/api/rules").json()["rules"]] == [seeded["id"]]
+
+
+class TestHistoryRoutes:
+    """A read failure must reach the tablet as an error. An empty fault log
+    would tell whoever is deciding whether the car is safe that we saw
+    nothing."""
+
+    @staticmethod
+    def _alert(rule="USER:r1", severity="WARNING", ts=1000, value=41.5):
+        from src.wcars.serialization import Alert, Severity
+        return Alert(id=f"{rule}-{ts}", rule=rule, severity=Severity(severity),
+                     title="OVERTEMP", detail="Temp 41.5 C", value=value,
+                     ts=ts, replay=False)
+
+    @pytest.fixture
+    def hist_client(self, tmp_path):
+        from pathlib import Path
+        from src.diagnostics.history import FaultHistory
+        db = load_db()
+        store = RuleStore(tmp_path, db)
+        history = FaultHistory(tmp_path / "diagnostics.db")
+        host = EngineHost(tmp_path / "wcars_config.json", store, history=history)
+        app = create_app(store, host, Path(DBC_PATH), db, history=history)
+        with TestClient(app) as c:
+            yield c, history
+        history.close()
+
+    def test_history_returns_recorded_faults(self, hist_client):
+        c, history = hist_client
+        history.record(self._alert(), {"Temp": [[900, 41.5]]})
+        events = c.get("/api/history").json()["events"]
+        assert [e["rule_id"] for e in events] == ["USER:r1"]
+        assert events[0]["severity"] == "WARNING"
+
+    def test_history_filters_are_applied(self, hist_client):
+        c, history = hist_client
+        history.record(self._alert(rule="USER:a", ts=1000))
+        history.record(self._alert(rule="USER:b", severity="MEMO", ts=5000))
+        by_rule = c.get("/api/history", params={"rule_id": "USER:b"}).json()["events"]
+        assert [e["rule_id"] for e in by_rule] == ["USER:b"]
+        by_sev = c.get("/api/history", params={"severity": "MEMO"}).json()["events"]
+        assert [e["rule_id"] for e in by_sev] == ["USER:b"]
+        windowed = c.get("/api/history",
+                         params={"from_ms": 2000, "to_ms": 9000}).json()["events"]
+        assert [e["ts_ms"] for e in windowed] == [5000]
+        assert len(c.get("/api/history", params={"limit": 1}).json()["events"]) == 1
+
+    def test_freeze_route_returns_the_payload(self, hist_client):
+        c, history = hist_client
+        event_id = history.record(self._alert(), {"Temp": [[900, 41.5]]})
+        body = c.get(f"/api/freeze/{event_id}").json()
+        assert body["event_id"] == event_id
+        assert body["freeze"] == {"Temp": [[900, 41.5]]}
+
+    def test_unknown_event_id_is_404(self, hist_client):
+        c, _ = hist_client
+        assert c.get("/api/freeze/424242").status_code == 404
+
+    def test_history_read_failure_is_503_not_an_empty_log(self, hist_client):
+        c, history = hist_client
+        history.record(self._alert())
+        history.close()
+        resp = c.get("/api/history")
+        assert resp.status_code == 503
+        assert "history" in str(resp.json()["detail"]).lower()
+
+    def test_freeze_read_failure_is_503(self, hist_client):
+        c, history = hist_client
+        event_id = history.record(self._alert(), {"Temp": [[900, 41.5]]})
+        history.close()
+        assert c.get(f"/api/freeze/{event_id}").status_code == 503
+
+
+class TestHistoryNotConfigured:
+    """A Phase A deployment with no database must say so plainly rather than
+    reporting an empty fault log."""
+
+    def test_history_is_503_without_a_database(self, client):
+        c, _ = client
+        resp = c.get("/api/history")
+        assert resp.status_code == 503
+        assert "not configured" in str(resp.json()["detail"]).lower()
+
+    def test_freeze_is_503_without_a_database(self, client):
+        c, _ = client
+        assert c.get("/api/freeze/1").status_code == 503

@@ -188,6 +188,7 @@ jobs:
           tests/test_diagnostics_app.py \
           tests/test_diagnostics_freeze.py \
           tests/test_diagnostics_history.py \
+          tests/test_diagnostics_watch.py \
           -v
 
   # ── Integration tests: full docker-compose stack ─────────────────────────

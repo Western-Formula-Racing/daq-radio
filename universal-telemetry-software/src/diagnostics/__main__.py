@@ -13,6 +13,7 @@ import uvicorn
 from ..wcars.decoder import DBC_PATH, load_db
 from .app import create_app
 from .engine_host import EngineHost
+from .history import FaultHistory, HistoryError
 from .rule_store import RuleStore
 
 logging.basicConfig(level=logging.INFO,
@@ -59,9 +60,22 @@ def main() -> None:
             "file in that directory).", data_dir, exc,
         )
         raise SystemExit(1) from exc
-    host = EngineHost(config_path, store)
+    try:
+        history = FaultHistory(data_dir / "diagnostics.db")
+    except (HistoryError, OSError) as exc:
+        # Same class of operator problem as an unopenable rule store: a service
+        # that started anyway would serve an empty fault log, and "no faults
+        # last week" is exactly the answer nobody may be given by mistake.
+        logger.critical(
+            "Cannot open the WCARS fault history at %s: %s. The service will "
+            "not start until this is fixed (check permissions and free space "
+            "on that filesystem).", data_dir / "diagnostics.db", exc,
+        )
+        raise SystemExit(1) from exc
+    host = EngineHost(config_path, store, history=history)
     app = create_app(store, host, Path(DBC_PATH), db, bridge_url=bridge_url,
-                     static_dir=Path(static_env) if static_env else None)
+                     static_dir=Path(static_env) if static_env else None,
+                     history=history)
     # Bound on all interfaces with no auth: the only network this reaches is the
     # car's own WiFi hotspot, which the tablet is the sole client of.
     # No workers=: RuleStore is exactly one instance per data dir and every route
