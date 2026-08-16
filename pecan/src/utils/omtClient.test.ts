@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { OMT_URL_KEY, OmtError, getOmtBaseUrl, setOmtBaseUrl, fetchSignals, createRule, updateRule } from "./omtClient";
+import { OMT_URL_KEY, OmtError, getOmtBaseUrl, setOmtBaseUrl, fetchSignals, fetchDbc, createRule, updateRule } from "./omtClient";
 
 describe("the OMT base URL", () => {
   beforeEach(() => localStorage.clear());
@@ -60,5 +60,14 @@ describe("OMT requests", () => {
   it("says the car is not reachable rather than surfacing a fetch stack trace", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Load failed"); }));
     await expect(fetchSignals()).rejects.toMatchObject({ status: 0 });
+  });
+
+  it("carries the server's own explanation when the DBC fetch fails, same as every other endpoint", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ detail: "no DBC has been loaded" }), { status: 503 })));
+    await expect(fetchDbc()).rejects.toMatchObject({
+      status: 503,
+      messages: ["no DBC has been loaded"],
+    });
   });
 });

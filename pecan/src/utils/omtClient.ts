@@ -55,12 +55,13 @@ function messagesFrom(body: unknown, status: number): string[] {
   return [`OMT answered ${status}.`];
 }
 
-async function request(path: string, init?: RequestInit): Promise<unknown> {
+/** The base-URL check and try/catch around fetch, shared by every OMT call
+ * regardless of how each one wants to read the response body. */
+async function rawRequest(path: string, init?: RequestInit): Promise<Response> {
   const base = getOmtBaseUrl();
   if (!base) throw new OmtError(0, ["No OMT address is configured."]);
-  let response: Response;
   try {
-    response = await fetch(`${base}${path}`, init);
+    return await fetch(`${base}${path}`, init);
   } catch (error) {
     // A car that is not on this network is the normal case at a track, so this
     // reports the situation rather than leaking a fetch error to the user.
@@ -69,6 +70,10 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
       + `${error instanceof Error ? error.message : String(error)}`,
     ]);
   }
+}
+
+async function request(path: string, init?: RequestInit): Promise<unknown> {
+  const response = await rawRequest(path, init);
   if (response.status === 204) return null;
   let body: unknown = null;
   try {
@@ -95,20 +100,20 @@ export async function fetchSignals(): Promise<RawSignal[]> {
 }
 
 export async function fetchDbc(): Promise<{ text: string; sha256: string }> {
-  const base = getOmtBaseUrl();
-  if (!base) throw new OmtError(0, ["No OMT address is configured."]);
-  let response: Response;
-  try {
-    response = await fetch(`${base}/api/dbc`);
-  } catch (error) {
-    throw new OmtError(0, [
-      `Could not reach OMT at ${base}: `
-      + `${error instanceof Error ? error.message : String(error)}`,
-    ]);
+  const response = await rawRequest("/api/dbc");
+  const text = await response.text();
+  if (!response.ok) {
+    // The body is still JSON on failure even though a success reads as plain DBC text.
+    let body: unknown = null;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = null;
+    }
+    throw new OmtError(response.status, messagesFrom(body, response.status));
   }
-  if (!response.ok) throw new OmtError(response.status, [`OMT answered ${response.status}.`]);
   return {
-    text: await response.text(),
+    text,
     sha256: response.headers.get("x-dbc-sha256") ?? "",
   };
 }
