@@ -11,7 +11,7 @@ from pathlib import Path
 import uvicorn
 
 from ..wcars.decoder import DBC_PATH, load_db
-from .app import create_app
+from .app import create_app, parse_allowed_origins
 from .engine_host import EngineHost
 from .history import FaultHistory, HistoryError
 from .rule_store import RuleStore
@@ -72,10 +72,14 @@ def main() -> None:
             "on that filesystem).", data_dir / "diagnostics.db", exc,
         )
         raise SystemExit(1) from exc
+    allowed_origins = parse_allowed_origins(os.getenv("OMT_ALLOWED_ORIGINS"))
+    if allowed_origins:
+        logger.info("Browser calls allowed from: %s", ", ".join(allowed_origins))
+
     host = EngineHost(config_path, store, history=history)
     app = create_app(store, host, Path(DBC_PATH), db, bridge_url=bridge_url,
                      static_dir=Path(static_env) if static_env else None,
-                     history=history)
+                     history=history, allowed_origins=allowed_origins)
     # Bound on all interfaces with no auth: the only network this reaches is the
     # car's own WiFi hotspot, which the tablet is the sole client of.
     # No workers=: RuleStore is exactly one instance per data dir and every route

@@ -11,6 +11,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -39,10 +40,26 @@ def signal_index(db) -> list[dict]:
     return out
 
 
+def parse_allowed_origins(raw: str | None) -> list[str]:
+    """Origins allowed to call this API from a browser, from a comma-separated env.
+
+    The tablet loads OMT's own UI from this same service, so it needs nothing here.
+    PECAN is the cross-origin caller: it fetches the car's rules to replay a log,
+    and a browser refuses that without a matching Access-Control-Allow-Origin, which
+    surfaces to the user as an unhelpful "Load failed". The default is empty rather
+    than "*" because the service has no auth: any page a team member happened to
+    open while on the car's hotspot could otherwise rewrite the fault rules.
+    """
+    if not raw:
+        return []
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
+
+
 def create_app(store: RuleStore, host: EngineHost, dbc_path: Path, db,
                bridge_url: str | None = None,
                static_dir: Path | None = None,
-               history=None) -> FastAPI:
+               history=None,
+               allowed_origins: list[str] | None = None) -> FastAPI:
     # Precomputed: the DBC only changes with a service restart.
     signals = signal_index(db)
     dbc_sha = hashlib.sha256(dbc_path.read_bytes()).hexdigest()
@@ -74,6 +91,14 @@ def create_app(store: RuleStore, host: EngineHost, dbc_path: Path, db,
 
     app = FastAPI(title="WCARS OMT", lifespan=lifespan)
     app.state.host = host
+
+    if allowed_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=allowed_origins,
+            allow_methods=["GET", "POST", "PUT", "DELETE"],
+            allow_headers=["Content-Type"],
+        )
 
     # Route handlers are async def, not the plain def the FastAPI docs default
     # to: a plain def runs in a worker threadpool, and engine_host.py's design

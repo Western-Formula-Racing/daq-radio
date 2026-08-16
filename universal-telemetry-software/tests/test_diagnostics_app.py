@@ -7,7 +7,7 @@ import contextlib
 import pytest
 from fastapi.testclient import TestClient
 
-from src.diagnostics.app import create_app, signal_index
+from src.diagnostics.app import create_app, parse_allowed_origins, signal_index
 from src.diagnostics.engine_host import EngineHost
 from src.diagnostics.rule_store import RuleStore
 from src.wcars.decoder import load_db, DBC_PATH
@@ -351,3 +351,57 @@ class TestHistoryNotConfigured:
     def test_freeze_is_503_without_a_database(self, client):
         c, _ = client
         assert c.get("/api/freeze/1").status_code == 503
+
+
+class TestBrowserOrigins:
+    """PECAN fetches the car's rules to replay a log, which is a cross-origin
+    call. Without the right header a browser refuses it and the user is told
+    only "Load failed", which reads as the car being unreachable."""
+
+    def _app(self, tmp_path, origins):
+        from pathlib import Path
+        db = load_db()
+        store = RuleStore(tmp_path, db)
+        host = EngineHost(tmp_path / "wcars_config.json", store)
+        return TestClient(create_app(store, host, Path(DBC_PATH), db,
+                                     allowed_origins=origins))
+
+    def test_a_configured_origin_may_read_the_rules(self, tmp_path):
+        c = self._app(tmp_path, ["http://pecan.local:5173"])
+        resp = c.get("/api/rules", headers={"Origin": "http://pecan.local:5173"})
+        assert resp.status_code == 200
+        assert resp.headers["access-control-allow-origin"] == "http://pecan.local:5173"
+
+    def test_an_unlisted_origin_gets_no_grant(self, tmp_path):
+        c = self._app(tmp_path, ["http://pecan.local:5173"])
+        resp = c.get("/api/rules", headers={"Origin": "http://evil.example"})
+        assert "access-control-allow-origin" not in resp.headers
+
+    def test_the_default_grants_nothing(self, tmp_path):
+        # The service has no auth, so a page a team member opened while on the
+        # car's hotspot must not be able to rewrite the fault rules by default.
+        c = self._app(tmp_path, None)
+        resp = c.get("/api/rules", headers={"Origin": "http://pecan.local:5173"})
+        assert resp.status_code == 200
+        assert "access-control-allow-origin" not in resp.headers
+
+    def test_a_write_from_a_configured_origin_is_preflighted(self, tmp_path):
+        c = self._app(tmp_path, ["http://pecan.local:5173"])
+        resp = c.options("/api/rules", headers={
+            "Origin": "http://pecan.local:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        })
+        assert resp.status_code == 200
+        assert "POST" in resp.headers["access-control-allow-methods"]
+
+
+class TestParseAllowedOrigins:
+    def test_splits_and_trims_a_comma_separated_list(self):
+        assert parse_allowed_origins("http://a.local , http://b.local") == [
+            "http://a.local", "http://b.local"]
+
+    def test_unset_or_empty_means_no_origins(self):
+        assert parse_allowed_origins(None) == []
+        assert parse_allowed_origins("") == []
+        assert parse_allowed_origins("  ,  ") == []
