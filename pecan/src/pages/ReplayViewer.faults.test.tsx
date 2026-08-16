@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 import type { ReplayResult } from "../lib/wcars/engine/replayRunner";
 import type { RuleDoc, WcarsAlert } from "../lib/wcars/engine/types";
+import { REPLAY_PARSED_EVENT } from "../types/replay";
 import type { ReplayFrame, ReplayParseResult } from "../types/replay";
 import type { LoadedRules } from "../utils/ruleSource";
 
@@ -321,6 +322,91 @@ describe("ReplayViewer fault analysis", () => {
     expect(within(panel).getByTestId("freeze-signal-Speed")).toBeTruthy();
   });
 
+  // Both engines label a user rule's alerts "USER:<id>". Every test above used a
+  // bare id, which is why a lookup that never matched the real shape shipped: it
+  // silently fell back to every loaded rule's signals, so a motor-temp fault
+  // charted DC bus voltage and torque shudder alongside it.
+  it("charts only the firing rule's signals when the alert carries the USER: prefix", async () => {
+    const otherRule: RuleDoc = {
+      ...RULE,
+      id: "r9",
+      name: "Gear check",
+      conditions: [{ message: "M", signal: "Gear", op: "==", value: "DRIVE" }],
+    };
+    loadRulesResult = { rules: [RULE, otherRule], source: "omt" };
+    resolveWith(runResult({ alerts: [alertAt(1000, { rule: "USER:r1" })] }));
+    render(<ReplayViewer />);
+    await importReplayFile();
+    await loadRulesFromOmt();
+    await runAnalysis();
+
+    fireEvent.click(screen.getByTestId("fault-alert-a1"));
+    const panel = await screen.findByTestId("freeze-frame-panel");
+    expect(within(panel).getByTestId("freeze-signal-Speed")).toBeTruthy();
+    expect(within(panel).queryByTestId("freeze-signal-Gear")).toBeNull();
+  });
+
+  it("shows nothing rather than every rule's signals when the rule cannot be found", async () => {
+    resolveWith(runResult({ alerts: [alertAt(1000, { rule: "USER:deleted-since" })] }));
+    render(<ReplayViewer />);
+    await importReplayFile();
+    await loadRulesFromOmt();
+    await runAnalysis();
+
+    fireEvent.click(screen.getByTestId("fault-alert-a1"));
+    const panel = await screen.findByTestId("freeze-frame-panel");
+    expect(within(panel).getByTestId("freeze-frame-empty")).toBeTruthy();
+    expect(within(panel).queryByTestId("freeze-signal-Speed")).toBeNull();
+  });
+
+  it("draws data after the fire moment, faded, and says why the car cannot", async () => {
+    resolveWith(runResult({ alerts: [alertAt(1000, { rule: "USER:r1" })] }));
+    render(<ReplayViewer />);
+    await importReplayFile();
+    await loadRulesFromOmt();
+    await runAnalysis();
+
+    fireEvent.click(screen.getByTestId("fault-alert-a1"));
+    const chart = await screen.findByTestId("freeze-signal-Speed");
+    // Frames run to 2000 ms, so the 1000 ms alert has a real tail to draw.
+    expect(chart.querySelector("[data-testid='freeze-after-line']")).toBeTruthy();
+
+    const caption = screen.getByTestId("freeze-frame-caption").textContent ?? "";
+    expect(caption).toMatch(/faded/i);
+    expect(caption).toMatch(/car'?s own fault log shows only the lead-up/i);
+  });
+
+  it("stops the tail at the next fault so it cannot cover the next lead-up", async () => {
+    resolveWith(runResult({
+      alerts: [
+        alertAt(1000, { rule: "USER:r1" }),
+        alertAt(1500, { id: "a2", rule: "USER:r1" }),
+      ],
+    }));
+    render(<ReplayViewer />);
+    await importReplayFile();
+    await loadRulesFromOmt();
+    await runAnalysis();
+
+    fireEvent.click(screen.getByTestId("fault-alert-a1"));
+    const caption = screen.getByTestId("freeze-frame-caption").textContent ?? "";
+    // 500 ms to the next fault, not the full 10 s window.
+    expect(caption).toMatch(/0\.5 seconds after/);
+  });
+
+  it("keeps the car's past-only wording when there is no tail to draw", async () => {
+    // The last fault in a session has nothing after it in the file.
+    resolveWith(runResult({ alerts: [alertAt(2000, { rule: "USER:r1" })] }));
+    render(<ReplayViewer />);
+    await importReplayFile();
+    await loadRulesFromOmt();
+    await runAnalysis();
+
+    fireEvent.click(screen.getByTestId("fault-alert-a1"));
+    const chart = await screen.findByTestId("freeze-signal-Speed");
+    expect(chart.querySelector("[data-testid='freeze-after-line']")).toBeNull();
+  });
+
   it("draws a string-valued signal as labeled steps rather than a sparkline", async () => {
     const textRule: RuleDoc = {
       ...RULE,
@@ -404,5 +490,81 @@ describe("ReplayViewer fault analysis", () => {
     // the parity notice may make it look like one.
     expect(screen.queryByTestId("replay-fault-empty")).toBeNull();
     expect(screen.queryByTestId("replay-parity-notice")).toBeNull();
+  });
+});
+
+/** The timeline owns a second file picker. Importing through it once loaded the
+ * timeline but left this page's own state empty, so fault analysis said "import a
+ * replay file first" against a session the user could plainly see loaded. These
+ * cover the seam that joins the two importers. TimelineBar itself is mocked out,
+ * so the event is dispatched directly, exactly as the real one dispatches it.
+ */
+describe("ReplayViewer fed by the timeline's importer", () => {
+  beforeEach(() => {
+    seek.mockClear();
+    runReplayInWorker.mockClear();
+    replaySession = { fileName: "session.csv", frameCount: 3, startTimeMs: 500_000, endTimeMs: 502_000 };
+    parseResult = parseResultWith(0);
+    loadRulesResult = { rules: [RULE], source: "omt" };
+    resolveWith(runResult());
+  });
+
+  function dispatchParsed(detail: unknown) {
+    act(() => {
+      window.dispatchEvent(new CustomEvent(REPLAY_PARSED_EVENT, { detail }));
+    });
+  }
+
+  it("enables the run action for a file this page never parsed itself", async () => {
+    render(<ReplayViewer />);
+    await loadRulesFromOmt();
+    expect(screen.getByTestId("replay-run-explanation").textContent ?? "").toMatch(/replay file/i);
+
+    dispatchParsed({ fileName: "from-timeline.csv", result: parseResultWith(0) });
+
+    await waitFor(() => {
+      expect((screen.getByRole("button", { name: /run fault analysis/i }) as HTMLButtonElement).disabled)
+        .toBe(false);
+    });
+    expect(screen.queryByTestId("replay-run-explanation")).toBeNull();
+    expect(screen.getByText(/from-timeline\.csv/)).toBeTruthy();
+  });
+
+  it("hands the runner the frames from the event, not an empty session", async () => {
+    resolveWith(runResult({ alerts: [alertAt(1000)] }));
+    render(<ReplayViewer />);
+    await loadRulesFromOmt();
+    dispatchParsed({ fileName: "from-timeline.csv", result: parseResultWith(0) });
+    await waitFor(() => {
+      expect((screen.getByRole("button", { name: /run fault analysis/i }) as HTMLButtonElement).disabled)
+        .toBe(false);
+    });
+
+    await runAnalysis();
+
+    // Enabling the button proves nothing on its own: assert the frames actually
+    // reached the worker and the resulting alert rendered.
+    expect(runReplayInWorker.mock.calls[0][0]).toHaveLength(3);
+    expect(screen.getByTestId("fault-alert-a1").textContent).toContain("BRK PRESS LO");
+  });
+
+  it("ignores an event whose detail carries no frames", async () => {
+    render(<ReplayViewer />);
+    await loadRulesFromOmt();
+
+    dispatchParsed({});
+    dispatchParsed(undefined);
+    dispatchParsed({ fileName: "x.csv", result: {} });
+
+    expect((screen.getByRole("button", { name: /run fault analysis/i }) as HTMLButtonElement).disabled)
+      .toBe(true);
+    expect(screen.getByTestId("replay-run-explanation").textContent ?? "").toMatch(/replay file/i);
+  });
+
+  it("stops listening once the page unmounts", async () => {
+    const { unmount } = render(<ReplayViewer />);
+    unmount();
+    // Would throw on a state update against an unmounted tree if the listener leaked.
+    dispatchParsed({ fileName: "after-unmount.csv", result: parseResultWith(0) });
   });
 });

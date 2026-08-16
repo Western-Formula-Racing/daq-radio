@@ -95,3 +95,17 @@ export interface ReplayParseResult {
     plots?: ReplayPlotsMetadata;
   };
 }
+
+/** Announces a parse that happened somewhere other than the page showing it.
+ *
+ * The timeline's own importer only feeds TimelineContext, whose frames are sorted,
+ * re-based, and possibly clipped. A page that needs the frames exactly as the file
+ * ordered them (fault analysis does, since it asks what the car would have done)
+ * cannot recover them from the context, so the parse result travels intact here.
+ */
+export const REPLAY_PARSED_EVENT = "pecan:replay-parsed";
+
+export interface ReplayParsedEventDetail {
+  fileName: string;
+  result: ReplayParseResult;
+}

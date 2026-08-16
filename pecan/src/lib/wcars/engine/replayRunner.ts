@@ -180,11 +180,13 @@ export function runReplay(
   };
 }
 
-/** Samples for the given signals in the window ending at atTsMs.
+/** Samples for the given signals around atTsMs: windowMs before, afterMs after.
  *
- * The car keeps a rolling buffer because it cannot hold a test day in memory.
- * The browser already has every frame, so nothing is buffered during the run
- * and the window is queried after the fact, once, when a fault is selected.
+ * The car keeps a rolling buffer because it cannot hold a test day in memory,
+ * and it snapshots that buffer the instant a rule fires, so a car-side freeze
+ * frame can only ever hold the lead-up. The browser already has the whole file,
+ * so replay can also show what happened next. Callers that want to match the
+ * car exactly leave afterMs at 0.
  */
 export function freezeWindow(
   frames: readonly ReplayInputFrame[],
@@ -192,15 +194,17 @@ export function freezeWindow(
   atTsMs: number,
   signals: readonly string[],
   windowMs: number = FREEZE_WINDOW_MS,
+  afterMs: number = 0,
 ): Record<string, [number, number | string][]> {
   const wanted = new Set(signals);
   if (wanted.size === 0) return {};
   const from = atTsMs - windowMs;
+  const to = atTsMs + Math.max(0, afterMs);
   const collected = new Map<string, [number, number | string][]>();
 
   for (const frame of frames) {
     const tsMs = frame.tRelMs;
-    if (tsMs < from || tsMs > atTsMs) continue;
+    if (tsMs < from || tsMs > to) continue;
     const decoded = decode(frame.canId, frame.dataHex);
     if (decoded === null) continue;
     for (const name of Object.keys(decoded.signals)) {

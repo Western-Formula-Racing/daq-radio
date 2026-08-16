@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTimeline } from "../context/TimelineContext";
 import { dataStore, type TelemetrySample } from "../lib/DataStore";
 import { coldStore } from "../lib/ColdStore";
-import type { ReplayFrame, ReplayPlotLayout } from "../types/replay";
+import { REPLAY_PARSED_EVENT } from "../types/replay";
+import type { ReplayFrame, ReplayParsedEventDetail, ReplayPlotLayout } from "../types/replay";
 import { parseReplayFile, REPLAY_FRAME_HARD_CAP } from "../utils/replayParser";
 import { serializePecanV2 } from "../utils/pecanSerializer";
 import { getActiveDbcText, setActiveDbcText, usingCachedDBC } from "../utils/canProcessor";
@@ -11,6 +12,9 @@ import ReplayImportClipModal from "./ReplayImportClipModal";
 
 interface TimelineBarProps {
   plotLayouts?: ReplayPlotLayout[];
+  /** Set false where the bar shares a scroll container with controls it would
+   * otherwise park on top of. The floating timeline (T) still scrubs there. */
+  sticky?: boolean;
 }
 
 const TIMELINE_COLLAPSED_KEY = "pecan:timeline:collapsed";
@@ -108,7 +112,7 @@ function sampleToReplayFrame(sample: TelemetrySample, exportStartMs: number): Re
   };
 }
 
-function TimelineBar({ plotLayouts = [] }: TimelineBarProps) {
+function TimelineBar({ plotLayouts = [], sticky = true }: TimelineBarProps) {
   const {
     source,
     mode,
@@ -494,6 +498,12 @@ function TimelineBar({ plotLayouts = [] }: TimelineBarProps) {
         return;
       }
 
+      // Announced whole and before any clipping: a page doing its own analysis
+      // needs every frame the file held, not the subset the timeline retains.
+      window.dispatchEvent(new CustomEvent<ReplayParsedEventDetail>(REPLAY_PARSED_EVENT, {
+        detail: { fileName: file.name, result: parseResult },
+      }));
+
       if (parseResult.frames.length > REPLAY_FRAME_HARD_CAP) {
         setPendingClipImport({
           frames: parseResult.frames,
@@ -573,9 +583,11 @@ function TimelineBar({ plotLayouts = [] }: TimelineBarProps) {
     </div>
   );
 
+  const stickyClass = sticky ? "sticky top-0 z-20" : "";
+
   if (collapsed) {
     return (
-      <div className="sticky top-0 z-20 mb-2 flex justify-end">
+      <div className={`${stickyClass} mb-2 flex justify-end`}>
         <button
           type="button"
           className={`trace-btn trace-btn-subtle !text-[10px] !px-2 !py-1 ${mode === "paused" ? "animate-blink" : ""}`}
@@ -588,7 +600,7 @@ function TimelineBar({ plotLayouts = [] }: TimelineBarProps) {
   }
 
   return (
-    <div className="timeline-box bg-data-module-bg/92 rounded-md p-2.5 mb-2 border border-white/10 sticky top-0 z-20 backdrop-blur-[1px]">
+    <div className={`timeline-box bg-data-module-bg/92 rounded-md p-2.5 mb-2 border border-white/10 ${stickyClass} backdrop-blur-[1px]`}>
       {pendingClipImport && (
         <ReplayImportClipModal
           frames={pendingClipImport.frames}

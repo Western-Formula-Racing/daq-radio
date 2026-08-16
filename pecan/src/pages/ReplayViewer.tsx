@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Upload, AlertTriangle, FileJson, Settings as SettingsIcon, Activity, Info } from "lucide-react";
 import TimelineBar from "../components/TimelineBar";
 import ReplayImportClipModal from "../components/ReplayImportClipModal";
@@ -6,7 +6,8 @@ import FaultTrack from "../components/FaultTrack";
 import FreezeFramePanel from "../components/FreezeFramePanel";
 import type { FreezeSamples } from "../components/FreezeFramePanel";
 import { parseReplayFile, REPLAY_FRAME_HARD_CAP } from "../utils/replayParser";
-import type { ReplayDecodeMetadata, ReplayFrame, ReplayParseResult, ReplayPlotsMetadata, ReplayTimelineMetadata } from "../types/replay";
+import { REPLAY_PARSED_EVENT } from "../types/replay";
+import type { ReplayDecodeMetadata, ReplayFrame, ReplayParsedEventDetail, ReplayParseResult, ReplayPlotsMetadata, ReplayTimelineMetadata } from "../types/replay";
 import { useTimeline } from "../context/TimelineContext";
 import { getActiveDbcText, setActiveDbcText } from "../utils/canProcessor";
 import { importRulesJson, loadRules } from "../utils/ruleSource";
@@ -70,6 +71,30 @@ function epochBaseOf(frames: readonly ReplayFrame[]): number {
   return withEpoch.tEpochMs - withEpoch.tRelMs;
 }
 
+/** The rule document id behind an alert.
+ *
+ * Both engines label a user rule's alerts "USER:<id>" so they cannot collide with
+ * a built-in's id. Matching alert.rule against doc.id directly therefore never
+ * hits, which used to send every freeze frame down the "show all rules" fallback.
+ */
+function ruleIdOf(alert: WcarsAlert): string {
+  return alert.rule.startsWith("USER:") ? alert.rule.slice("USER:".length) : alert.rule;
+}
+
+/** How far past the fire moment to draw, stopping short of the next fault.
+ *
+ * Running to a full window regardless would let one fault's tail cover the
+ * lead-up of the next one, which is the part that explains it.
+ */
+function postFireWindowMs(alert: WcarsAlert, alerts: readonly WcarsAlert[]): number {
+  let next = Infinity;
+  for (const other of alerts) {
+    if (other.ts > alert.ts && other.ts < next) next = other.ts;
+  }
+  if (next === Infinity) return FREEZE_WINDOW_MS;
+  return Math.max(0, Math.min(FREEZE_WINDOW_MS, next - alert.ts));
+}
+
 function ReplayViewer() {
   const { loadReplayFrames, clearReplaySession, replaySession, source, seek } = useTimeline();
   const [isParsing, setIsParsing] = useState(false);
@@ -93,6 +118,7 @@ function ReplayViewer() {
   const [severityFilter, setSeverityFilter] = useState<"ALL" | Severity>("ALL");
   const [selectedAlert, setSelectedAlert] = useState<WcarsAlert | null>(null);
   const [freezeSamples, setFreezeSamples] = useState<FreezeSamples>({});
+  const [freezeAfterMs, setFreezeAfterMs] = useState(0);
 
   // The exact frames and base the last run used. Reading them back from state
   // would let a new import silently re-time alerts that came from the old one.
@@ -134,6 +160,20 @@ function ReplayViewer() {
       event.target.value = "";
     }
   };
+
+  // The timeline owns a second file picker, and importing through it used to leave
+  // this page's own state empty: fault analysis reported "import a replay file
+  // first" against a session the user could see loaded. Both pickers land here.
+  useEffect(() => {
+    const onParsed = (event: Event) => {
+      const detail = (event as CustomEvent<ReplayParsedEventDetail>).detail;
+      if (!detail || !Array.isArray(detail.result?.frames)) return;
+      setResult(detail.result);
+      setLoadedFileName(detail.fileName ?? "");
+    };
+    window.addEventListener(REPLAY_PARSED_EVENT, onParsed);
+    return () => window.removeEventListener(REPLAY_PARSED_EVENT, onParsed);
+  }, []);
 
   const handleConfigOnlyPick = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -301,13 +341,21 @@ function ReplayViewer() {
       seek(replaySession.startTimeMs + (alert.ts - runEpochBaseRef.current));
     }
 
-    const rule = rules.find((doc) => doc.id === alert.rule);
-    const signals = signalsForRules(rule ? [rule] : rules);
+    const rule = rules.find((doc) => doc.id === ruleIdOf(alert));
+    // Falling back to every loaded rule would fill the panel with signals that
+    // had nothing to do with this fault, so an unmatched rule shows nothing and
+    // says so rather than showing the wrong thing confidently.
+    const signals = signalsForRules(rule ? [rule] : []);
+    const afterMs = postFireWindowMs(alert, faultResult?.alerts ?? []);
+    setFreezeAfterMs(afterMs);
     try {
       if (runDecoderRef.current === null) {
         runDecoderRef.current = createRuleDecoder(getActiveDbcText());
       }
-      setFreezeSamples(freezeWindow(runFramesRef.current, runDecoderRef.current, alert.ts, signals));
+      setFreezeSamples(freezeWindow(
+        runFramesRef.current, runDecoderRef.current, alert.ts, signals,
+        FREEZE_WINDOW_MS, afterMs,
+      ));
     } catch {
       // A freeze frame is a convenience; failing to build one must not take the
       // fault list down with it.
@@ -400,7 +448,7 @@ function ReplayViewer() {
           </div>
         </header>
 
-        <TimelineBar />
+        <TimelineBar sticky={false} />
 
         <section className="rounded-lg border border-white/10 bg-data-module-bg p-4">
           <div className="mb-3 flex items-center gap-2 text-slate-200">
@@ -668,6 +716,7 @@ function ReplayViewer() {
             samples={freezeSamples}
             atTsMs={selectedAlert.ts}
             windowMs={FREEZE_WINDOW_MS}
+            afterMs={freezeAfterMs}
             onClose={() => setSelectedAlert(null)}
             formatTime={formatFaultTime}
           />

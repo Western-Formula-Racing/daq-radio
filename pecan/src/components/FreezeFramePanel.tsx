@@ -18,20 +18,36 @@ interface FreezeFramePanelProps {
   /** Fire moment, in the same timescale as the sample timestamps. */
   atTsMs: number;
   windowMs: number;
+  /** Span drawn past the fire moment, faded. 0 matches what the car records. */
+  afterMs?: number;
   onClose?: () => void;
   formatTime?: (ts: number) => string;
 }
 
-function xAt(ts: number, fromMs: number, windowMs: number): number {
-  const ratio = windowMs > 0 ? (ts - fromMs) / windowMs : 1;
+function xAt(ts: number, fromMs: number, spanMs: number): number {
+  const ratio = spanMs > 0 ? (ts - fromMs) / spanMs : 1;
   const clamped = Math.min(1, Math.max(0, ratio));
   return PAD + clamped * (WIDTH - 2 * PAD);
 }
 
-function NumericSpark({ series, fromMs, windowMs }: {
+/** Split at the fire moment, repeating the boundary sample in both halves so the
+ * faded tail starts where the solid lead-up ends instead of leaving a gap. */
+function splitAtFire<T extends number | string>(
+  series: [number, T][], atTsMs: number,
+): { before: [number, T][]; after: [number, T][] } {
+  const before = series.filter(([ts]) => ts <= atTsMs);
+  const after = series.filter(([ts]) => ts >= atTsMs);
+  if (before.length > 0 && after.length > 0 && after[0][0] !== before[before.length - 1][0]) {
+    after.unshift(before[before.length - 1]);
+  }
+  return { before, after };
+}
+
+function NumericSpark({ series, fromMs, spanMs, atTsMs }: {
   series: [number, number][];
   fromMs: number;
-  windowMs: number;
+  spanMs: number;
+  atTsMs: number;
 }) {
   let min = Infinity;
   let max = -Infinity;
@@ -40,61 +56,95 @@ function NumericSpark({ series, fromMs, windowMs }: {
     if (value > max) max = value;
   }
   // A flat signal has no range to normalize against, so it is centered rather
-  // than divided by zero.
+  // than divided by zero. Both halves share one scale, so the tail is comparable
+  // with the lead-up rather than renormalized against itself.
   const span = max - min;
   const yAt = (value: number) => (span > 0
     ? HEIGHT - PAD - ((value - min) / span) * (HEIGHT - 2 * PAD)
     : HEIGHT / 2);
-  const points = series
-    .map(([ts, value]) => `${xAt(ts, fromMs, windowMs).toFixed(1)},${yAt(value).toFixed(1)}`)
+  const pointsOf = (part: [number, number][]) => part
+    .map(([ts, value]) => `${xAt(ts, fromMs, spanMs).toFixed(1)},${yAt(value).toFixed(1)}`)
     .join(" ");
+  const { before, after } = splitAtFire(series, atTsMs);
 
   return (
     <>
-      <polyline points={points} fill="none" stroke="#67e8f9" strokeWidth={1.5} />
+      {before.length > 0 && (
+        <polyline points={pointsOf(before)} fill="none" stroke="#67e8f9" strokeWidth={1.5} />
+      )}
+      {after.length > 1 && (
+        <polyline
+          data-testid="freeze-after-line"
+          points={pointsOf(after)}
+          fill="none"
+          stroke="#67e8f9"
+          strokeWidth={1.5}
+          strokeOpacity={0.35}
+        />
+      )}
       {series.length === 1 && (
-        <circle cx={xAt(series[0][0], fromMs, windowMs)} cy={yAt(series[0][1])} r={2} fill="#67e8f9" />
+        <circle cx={xAt(series[0][0], fromMs, spanMs)} cy={yAt(series[0][1])} r={2} fill="#67e8f9" />
       )}
     </>
   );
 }
 
-function StringSteps({ series, fromMs, windowMs }: {
+function StringSteps({ series, fromMs, spanMs, atTsMs }: {
   series: [number, string][];
   fromMs: number;
-  windowMs: number;
+  spanMs: number;
+  atTsMs: number;
 }) {
   const levels: string[] = [];
   for (const [, value] of series) if (!levels.includes(value)) levels.push(value);
   const rows = Math.max(1, levels.length);
   const yFor = (value: string) => PAD + ((levels.indexOf(value) + 0.5) / rows) * (HEIGHT - 2 * PAD);
 
-  const segments: string[] = [];
-  let previous: [number, string] | null = null;
   const labels: { x: number; y: number; text: string }[] = [];
-  for (const [ts, value] of series) {
-    const x = xAt(ts, fromMs, windowMs);
-    const y = yFor(value);
-    if (previous === null) {
-      segments.push(`M ${x.toFixed(1)} ${y.toFixed(1)}`);
-      labels.push({ x, y, text: value });
-    } else {
-      const priorY = yFor(previous[1]);
-      segments.push(`L ${x.toFixed(1)} ${priorY.toFixed(1)}`);
-      if (previous[1] !== value) {
-        segments.push(`L ${x.toFixed(1)} ${y.toFixed(1)}`);
-        labels.push({ x, y, text: value });
+
+  // Labels are collected only from the solid half: a value that persists past the
+  // fire moment would otherwise be written twice on the same chart.
+  const pathFor = (part: [number, string][], endMs: number, withLabels: boolean) => {
+    const segments: string[] = [];
+    let previous: [number, string] | null = null;
+    for (const [ts, value] of part) {
+      const x = xAt(ts, fromMs, spanMs);
+      const y = yFor(value);
+      if (previous === null) {
+        segments.push(`M ${x.toFixed(1)} ${y.toFixed(1)}`);
+        if (withLabels) labels.push({ x, y, text: value });
+      } else {
+        segments.push(`L ${x.toFixed(1)} ${yFor(previous[1]).toFixed(1)}`);
+        if (previous[1] !== value) {
+          segments.push(`L ${x.toFixed(1)} ${y.toFixed(1)}`);
+          if (withLabels) labels.push({ x, y, text: value });
+        }
       }
+      previous = [ts, value];
     }
-    previous = [ts, value];
-  }
-  if (previous !== null) {
-    segments.push(`L ${xAt(fromMs + windowMs, fromMs, windowMs).toFixed(1)} ${yFor(previous[1]).toFixed(1)}`);
-  }
+    if (previous !== null) {
+      segments.push(`L ${xAt(endMs, fromMs, spanMs).toFixed(1)} ${yFor(previous[1]).toFixed(1)}`);
+    }
+    return segments.join(" ");
+  };
+
+  const { before, after } = splitAtFire(series, atTsMs);
+  const beforePath = pathFor(before, atTsMs, true);
+  const afterPath = after.length > 1 ? pathFor(after, fromMs + spanMs, false) : "";
 
   return (
     <>
-      <path d={segments.join(" ")} fill="none" stroke="#c4b5fd" strokeWidth={1.5} />
+      {beforePath && <path d={beforePath} fill="none" stroke="#c4b5fd" strokeWidth={1.5} />}
+      {afterPath && (
+        <path
+          data-testid="freeze-after-line"
+          d={afterPath}
+          fill="none"
+          stroke="#c4b5fd"
+          strokeWidth={1.5}
+          strokeOpacity={0.35}
+        />
+      )}
       {labels.map((label, i) => (
         <text
           key={`${label.text}-${i}`}
@@ -110,8 +160,11 @@ function StringSteps({ series, fromMs, windowMs }: {
   );
 }
 
-function FreezeFramePanel({ alert, samples, atTsMs, windowMs, onClose, formatTime }: FreezeFramePanelProps) {
+function FreezeFramePanel({
+  alert, samples, atTsMs, windowMs, afterMs = 0, onClose, formatTime,
+}: FreezeFramePanelProps) {
   const fromMs = atTsMs - windowMs;
+  const spanMs = windowMs + Math.max(0, afterMs);
   const names = Object.keys(samples).sort();
   const when = formatTime ? formatTime(alert.ts) : `${alert.ts} ms`;
 
@@ -139,9 +192,21 @@ function FreezeFramePanel({ alert, samples, atTsMs, windowMs, onClose, formatTim
         )}
       </div>
 
-      <p className="mb-3 text-xs text-slate-400">
-        The {Math.round(windowMs / 1000)} seconds of recorded data before this rule fired. The
-        dashed line marks the moment it fired.
+      <p className="mb-3 text-xs text-slate-400" data-testid="freeze-frame-caption">
+        {afterMs > 0 ? (
+          <>
+            The {Math.round(windowMs / 1000)} seconds before this rule fired, and the{" "}
+            {(afterMs / 1000).toFixed(afterMs < 1000 ? 1 : 0)} seconds after it, drawn faded. The
+            dashed line marks the moment it fired. The car's own fault log shows only the lead-up,
+            because it saves the freeze frame the instant a rule fires and cannot know what
+            happens next; replay has the whole recording.
+          </>
+        ) : (
+          <>
+            The {Math.round(windowMs / 1000)} seconds of recorded data before this rule fired. The
+            dashed line marks the moment it fired.
+          </>
+        )}
       </p>
 
       {names.length === 0 ? (
@@ -166,11 +231,11 @@ function FreezeFramePanel({ alert, samples, atTsMs, windowMs, onClose, formatTim
                 </div>
                 <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} className="h-10 w-full" role="img" aria-label={`${name} freeze frame`}>
                   {isText
-                    ? <StringSteps series={series.map(([ts, v]) => [ts, String(v)])} fromMs={fromMs} windowMs={windowMs} />
-                    : <NumericSpark series={series.map(([ts, v]) => [ts, Number(v)])} fromMs={fromMs} windowMs={windowMs} />}
+                    ? <StringSteps series={series.map(([ts, v]) => [ts, String(v)])} fromMs={fromMs} spanMs={spanMs} atTsMs={atTsMs} />
+                    : <NumericSpark series={series.map(([ts, v]) => [ts, Number(v)])} fromMs={fromMs} spanMs={spanMs} atTsMs={atTsMs} />}
                   <line
-                    x1={WIDTH - PAD}
-                    x2={WIDTH - PAD}
+                    x1={xAt(atTsMs, fromMs, spanMs)}
+                    x2={xAt(atTsMs, fromMs, spanMs)}
                     y1={0}
                     y2={HEIGHT}
                     stroke="#f87171"
