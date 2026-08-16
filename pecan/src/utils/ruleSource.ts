@@ -12,6 +12,7 @@
  */
 import type { Condition, Op, RuleDoc, Severity } from "../lib/wcars/engine/types";
 import { MAX_CONDITIONS } from "../lib/wcars/engine/userRule";
+import { getOmtBaseUrl } from "./omtClient";
 
 const MAX_MESSAGE_LEN = 24;
 const MAX_NAME_LEN = 64;
@@ -39,8 +40,7 @@ export function getImportedRules(): RuleDoc[] | null {
 }
 
 function omtBaseUrl(): string {
-  const raw = import.meta.env?.VITE_OMT_URL;
-  return typeof raw === "string" ? raw.trim().replace(/\/+$/, "") : "";
+  return getOmtBaseUrl();
 }
 
 export async function loadRules(): Promise<LoadedRules> {
