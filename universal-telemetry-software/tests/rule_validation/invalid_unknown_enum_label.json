@@ -1,0 +1,8 @@
+{
+  "name": "invalid_unknown_enum_label",
+  "description": "A misspelled enum label. It stores fine and never fires, which is the failure this editor exists to prevent.",
+  "valid": false,
+  "rule": {"name": "Misspelled", "enabled": true, "severity": "WARNING", "message": "LABEL",
+           "conditions": [{"message": "VCU_State_Info", "signal": "State", "op": "==", "value": "DRIVEE"}],
+           "for_seconds": 0, "rearm_seconds": 0}
+}

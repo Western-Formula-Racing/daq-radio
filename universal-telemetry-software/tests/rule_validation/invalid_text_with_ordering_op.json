@@ -1,0 +1,8 @@
+{
+  "name": "invalid_text_with_ordering_op",
+  "description": "A text value with a greater-than, which would invent an ordering the DBC never claimed.",
+  "valid": false,
+  "rule": {"name": "Ordered text", "enabled": true, "severity": "WARNING", "message": "ORD",
+           "conditions": [{"message": "VCU_State_Info", "signal": "State", "op": ">", "value": "DRIVE"}],
+           "for_seconds": 0, "rearm_seconds": 0}
+}

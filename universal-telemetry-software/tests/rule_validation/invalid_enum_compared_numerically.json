@@ -1,0 +1,8 @@
+{
+  "name": "invalid_enum_compared_numerically",
+  "description": "An enum compared with a number. The decoder unwraps the signal to its label, so this condition can never be true.",
+  "valid": false,
+  "rule": {"name": "Numeric enum", "enabled": true, "severity": "WARNING", "message": "ENUM",
+           "conditions": [{"message": "VCU_State_Info", "signal": "State", "op": "==", "value": 4}],
+           "for_seconds": 0, "rearm_seconds": 0}
+}

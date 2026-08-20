@@ -1,0 +1,8 @@
+{
+  "name": "invalid_unknown_signal",
+  "description": "A real message with a signal it does not carry, the commonest typo.",
+  "valid": false,
+  "rule": {"name": "Typo", "enabled": true, "severity": "WARNING", "message": "TYPO",
+           "conditions": [{"message": "VCU_Pedal_Info", "signal": "pedalPositon", "op": ">", "value": 1}],
+           "for_seconds": 0, "rearm_seconds": 0}
+}

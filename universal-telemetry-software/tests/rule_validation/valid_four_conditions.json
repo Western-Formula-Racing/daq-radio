@@ -1,0 +1,12 @@
+{
+  "name": "valid_four_conditions",
+  "description": "Exactly MAX_CONDITIONS conditions, the boundary that must be accepted.",
+  "valid": true,
+  "rule": {"name": "Four", "enabled": true, "severity": "CAUTION", "message": "FOUR",
+           "conditions": [
+             {"message": "VCU_Pedal_Info", "signal": "pedalPosition", "op": ">", "value": 1},
+             {"message": "VCU_Pedal_Info", "signal": "sensor1Position", "op": ">", "value": 2},
+             {"message": "VCU_Pedal_Info", "signal": "sensor2Position", "op": ">", "value": 3},
+             {"message": "VCU_State_Info", "signal": "Throttle", "op": ">", "value": 4}],
+           "for_seconds": 0, "rearm_seconds": 0}
+}

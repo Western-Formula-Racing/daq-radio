@@ -1,0 +1,8 @@
+{
+  "name": "valid_enum_equality",
+  "description": "An enum compared to one of its named values with ==, which is the only correct way to test a VAL_-mapped signal.",
+  "valid": true,
+  "rule": {"name": "In drive", "enabled": true, "severity": "MEMO", "message": "DRIVE",
+           "conditions": [{"message": "VCU_State_Info", "signal": "State", "op": "==", "value": "DRIVE"}],
+           "for_seconds": 0, "rearm_seconds": 0}
+}

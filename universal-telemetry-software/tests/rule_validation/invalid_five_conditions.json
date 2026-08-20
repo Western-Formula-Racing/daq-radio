@@ -1,0 +1,13 @@
+{
+  "name": "invalid_five_conditions",
+  "description": "One past MAX_CONDITIONS, the boundary that must be rejected.",
+  "valid": false,
+  "rule": {"name": "Five", "enabled": true, "severity": "CAUTION", "message": "FIVE",
+           "conditions": [
+             {"message": "VCU_Pedal_Info", "signal": "pedalPosition", "op": ">", "value": 1},
+             {"message": "VCU_Pedal_Info", "signal": "sensor1Position", "op": ">", "value": 2},
+             {"message": "VCU_Pedal_Info", "signal": "sensor2Position", "op": ">", "value": 3},
+             {"message": "VCU_State_Info", "signal": "Throttle", "op": ">", "value": 4},
+             {"message": "VCU_State_Info", "signal": "Brake_Percent", "op": ">", "value": 5}],
+           "for_seconds": 0, "rearm_seconds": 0}
+}

@@ -1,0 +1,8 @@
+{
+  "name": "invalid_message_too_long",
+  "description": "A 25-character ECAM message. The 24-char limit exists to fit the display line, and silently truncating would misinform a driver.",
+  "valid": false,
+  "rule": {"name": "Too long", "enabled": true, "severity": "WARNING", "message": "ABCDEFGHIJKLMNOPQRSTUVWXY",
+           "conditions": [{"message": "VCU_Pedal_Info", "signal": "pedalPosition", "op": ">", "value": 1}],
+           "for_seconds": 0, "rearm_seconds": 0}
+}

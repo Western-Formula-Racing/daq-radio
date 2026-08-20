@@ -1,0 +1,8 @@
+{
+  "name": "invalid_unknown_message",
+  "description": "A message name not in the DBC. Accepting this stores a rule that can never fire.",
+  "valid": false,
+  "rule": {"name": "Ghost", "enabled": true, "severity": "WARNING", "message": "GHOST",
+           "conditions": [{"message": "NOT_A_MESSAGE", "signal": "pedalPosition", "op": ">", "value": 1}],
+           "for_seconds": 0, "rearm_seconds": 0}
+}

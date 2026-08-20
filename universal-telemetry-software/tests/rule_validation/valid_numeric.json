@@ -1,0 +1,8 @@
+{
+  "name": "valid_numeric",
+  "description": "A plain numeric threshold with a hold, the commonest rule there is.",
+  "valid": true,
+  "rule": {"name": "Pedal high", "enabled": true, "severity": "WARNING", "message": "PEDAL HI",
+           "conditions": [{"message": "VCU_Pedal_Info", "signal": "pedalPosition", "op": ">", "value": 50}],
+           "for_seconds": 1.0, "rearm_seconds": 0}
+}
