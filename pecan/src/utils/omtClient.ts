@@ -36,15 +36,34 @@ function trim(url: string): string {
   return url.trim().replace(/\/+$/, "");
 }
 
+// localStorage is not a safe global to touch unconditionally: the replay worker
+// (src/workers/replayWorker.ts) runs in a Web Worker where localStorage does not
+// exist, and Safari in private browsing has historically thrown on access rather
+// than returning null. Read and write both fall back to the build-time default
+// and swallow storage errors so a car diagnostics call degrades instead of
+// crashing the page that made it.
+function readStoredUrl(): string | null {
+  try {
+    return localStorage.getItem(OMT_URL_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export function getOmtBaseUrl(): string {
-  const stored = localStorage.getItem(OMT_URL_KEY);
+  const stored = readStoredUrl();
   if (stored !== null) return trim(stored);
   const built = import.meta.env?.VITE_OMT_URL;
   return typeof built === "string" ? trim(built) : "";
 }
 
 export function setOmtBaseUrl(url: string): void {
-  localStorage.setItem(OMT_URL_KEY, trim(url));
+  try {
+    localStorage.setItem(OMT_URL_KEY, trim(url));
+  } catch {
+    // A rule builder that cannot remember an address is a degraded experience;
+    // one that throws is a blank page. Nothing to do here but move on.
+  }
 }
 
 /** FastAPI answers {"detail": ...} where detail is a string or a list. */

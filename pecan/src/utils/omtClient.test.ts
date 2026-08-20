@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OMT_URL_KEY, OmtError, getOmtBaseUrl, setOmtBaseUrl, fetchSignals, fetchDbc, createRule, updateRule } from "./omtClient";
 
 describe("the OMT base URL", () => {
@@ -23,6 +23,33 @@ describe("the OMT base URL", () => {
     setOmtBaseUrl("http://car.local:9090");
     setOmtBaseUrl("   ");
     expect(getOmtBaseUrl()).toBe("");
+  });
+});
+
+describe("the OMT base URL without a usable localStorage", () => {
+  // Undo the stub so later suites get the real (or polyfilled) localStorage back.
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("falls back to the build-time default instead of throwing, as in a Web Worker", () => {
+    vi.stubGlobal("localStorage", undefined);
+    expect(() => getOmtBaseUrl()).not.toThrow();
+  });
+
+  it("does not throw on write when storage is unavailable, as in a Web Worker", () => {
+    vi.stubGlobal("localStorage", undefined);
+    expect(() => setOmtBaseUrl("http://car.local:9090")).not.toThrow();
+  });
+
+  it("does not throw when localStorage.setItem itself throws, as in Safari private browsing", () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
+      removeItem: () => {},
+      clear: () => {},
+    });
+    expect(() => setOmtBaseUrl("http://car.local:9090")).not.toThrow();
   });
 });
 
