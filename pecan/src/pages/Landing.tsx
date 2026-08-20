@@ -6,6 +6,7 @@ import {
     Link2,
     Zap,
     ScrollText,
+    ShieldAlert,
     type LucideIcon,
 } from "lucide-react";
 
@@ -70,6 +71,16 @@ const features: FeatureCard[] = [
                 accentBorder: "border-cyan-400/35",
                 accentGlow: "hover:shadow-cyan-500/15",
                 accentBg: "from-cyan-500/8 to-teal-600/4",
+        iconColor: "text-cyan-400",
+    },
+    {
+        title: "Rule Builder",
+        description: "Write and test the car's fault rules without touching code.",
+        icon: ShieldAlert,
+        path: "/rule-builder",
+        accentBorder: "border-cyan-400/35",
+        accentGlow: "hover:shadow-cyan-500/15",
+        accentBg: "from-cyan-500/8 to-sky-600/4",
         iconColor: "text-cyan-400",
     },
     {

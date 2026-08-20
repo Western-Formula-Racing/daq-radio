@@ -16,6 +16,7 @@ const Trace = lazy(() => import("./pages/Trace"));
 const DataTransmitter = lazy(() => import("./pages/Transmitter"));
 const Wcars = lazy(() => import("./pages/Wcars"));
 const ReplayViewer = lazy(() => import("./pages/ReplayViewer"));
+const RuleBuilder = lazy(() => import("./pages/RuleBuilder"));
 
 // Get base path for GitHub Pages deployment
 const basename = import.meta.env.BASE_URL || '/';
@@ -41,6 +42,7 @@ export const router = createBrowserRouter([
       { path: "sensor-validator", element: <Suspense fallback={<Fallback />}><SensorValidator /></Suspense> },
       { path: "trace", element: <Suspense fallback={<Fallback />}><Trace /></Suspense> },
       { path: "replay-viewer", element: <Suspense fallback={<Fallback />}><ReplayViewer /></Suspense> },
+      { path: "rule-builder", element: <Suspense fallback={<Fallback />}><RuleBuilder /></Suspense> },
       { path: "can-transmitter", element: <Suspense fallback={<Fallback />}><DataTransmitter /></Suspense> },
     ],
   },

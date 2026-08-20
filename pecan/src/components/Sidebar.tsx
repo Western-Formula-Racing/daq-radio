@@ -110,6 +110,11 @@ function Sidebar({ onClose, isOpen, onOpenSettings, onOpenAuth }: Readonly<Input
                 onClose={onClose}
               />
               <SidebarOption
+                option="RULE BUILDER"
+                path="/rule-builder"
+                onClose={onClose}
+              />
+              <SidebarOption
                 option="COMMS INTERFACE"
                 path="/comms"
                 onClose={onClose}
