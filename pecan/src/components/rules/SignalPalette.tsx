@@ -74,6 +74,7 @@ function SignalPalette({ index, armed, onArm, emptyReason }: SignalPaletteProps)
                 <button
                   type="button"
                   data-testid={`palette-message-${group.message}`}
+                  aria-expanded={open}
                   className="flex min-h-[44px] w-full items-center justify-between rounded border border-white/10 bg-black/20 px-3 text-left font-mono text-xs uppercase tracking-wide text-slate-200"
                   onClick={() => setOpenMessages((prev) => {
                     const next = new Set(prev);
@@ -82,7 +83,10 @@ function SignalPalette({ index, armed, onArm, emptyReason }: SignalPaletteProps)
                     return next;
                   })}
                 >
-                  <span>{group.message}</span>
+                  <span className="flex items-center gap-2">
+                    <span aria-hidden="true">{open ? "▲" : "▼"}</span>
+                    <span>{group.message}</span>
+                  </span>
                   <span className="text-slate-400">{group.signals.length}</span>
                 </button>
                 {open && (
@@ -93,7 +97,7 @@ function SignalPalette({ index, armed, onArm, emptyReason }: SignalPaletteProps)
                         <li key={info.signal}>
                           <button
                             type="button"
-                            data-testid={`palette-signal-${info.signal}`}
+                            data-testid={`palette-signal-${info.message}-${info.signal}`}
                             aria-pressed={isArmed}
                             className={`flex min-h-[44px] w-full flex-wrap items-center justify-between gap-2 rounded border px-3 text-left font-mono text-xs ${
                               isArmed
