@@ -27,6 +27,15 @@ describe("buildIndex", () => {
     expect(findSignal(buildIndex(RAW), "M162_Temperature_Set_3", "Nope")).toBeNull();
   });
 
+  // An empty VAL_ table is not an enum. Left as [], it would make ConditionSlots,
+  // ConditionEditor, and ruleValidate disagree on whether the signal is enum-valued.
+  it("normalizes an empty choices object to null rather than an empty list", () => {
+    const raw: RawSignal[] = [
+      { message: "M", signal: "S", unit: null, minimum: null, maximum: null, choices: {} },
+    ];
+    expect(buildIndex(raw).all[0].choices).toBeNull();
+  });
+
   // A naive "message + signal" join would let ("AB","C") and ("A","BC") share a
   // key. The NUL separator in signalIndex.ts's key() helper is what prevents that.
   it("does not confuse two signals whose names concatenate the same way", () => {

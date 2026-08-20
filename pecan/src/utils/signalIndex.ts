@@ -34,7 +34,15 @@ export function buildIndex(signals: RawSignal[]): SignalIndex {
     unit: raw.unit ?? null,
     minimum: typeof raw.minimum === "number" ? raw.minimum : null,
     maximum: typeof raw.maximum === "number" ? raw.maximum : null,
-    choices: raw.choices ? Object.values(raw.choices).map(String) : null,
+    // ConditionSlots, ConditionEditor, and ruleValidate all read "choices ===
+    // null" as the definition of "not an enum." An empty choices object would
+    // survive Object.values as [], letting the three drift apart: conditionFor
+    // would build a numeric condition, ruleValidate would reject it on the
+    // spot, and the editor would render a <select> with no options. Folding
+    // {} to null here keeps [] from ever existing, so all three agree.
+    choices: raw.choices && Object.keys(raw.choices).length > 0
+      ? Object.values(raw.choices).map(String)
+      : null,
   }));
   const byKey = new Map<string, SignalInfo>();
   for (const info of all) byKey.set(key(info.message, info.signal), info);

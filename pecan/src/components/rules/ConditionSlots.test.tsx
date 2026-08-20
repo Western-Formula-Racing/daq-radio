@@ -4,7 +4,21 @@ import { describe, expect, it, vi } from "vitest";
 import { buildIndex } from "../../utils/signalIndex";
 import type { RawSignal } from "../../utils/omtClient";
 import type { Condition } from "../../lib/wcars/engine/types";
+import { validateRuleDoc } from "../../utils/ruleValidate";
 import ConditionSlots from "./ConditionSlots";
+
+// Wraps a bare condition list in the rest of a rule doc so validateRuleDoc can
+// judge it: a placement is only really "valid the moment it lands" if the
+// whole rule, not just the condition shape, passes.
+const asRuleDoc = (conditions: Condition[]) => ({
+  name: "test rule",
+  message: "test message",
+  severity: "WARNING",
+  enabled: true,
+  for_seconds: 0,
+  rearm_seconds: 0,
+  conditions,
+});
 
 const RAW: RawSignal[] = [
   { message: "M162_Temperature_Set_3", signal: "INV_Motor_Temp", unit: "C", minimum: 0, maximum: 300, choices: null },
@@ -34,18 +48,18 @@ describe("placing a signal", () => {
   it("places the armed signal into the empty slot with a sensible default", () => {
     const { onChange, onPlaced } = setup([], MOTOR as never);
     fireEvent.click(screen.getByTestId("condition-empty-slot"));
-    expect(onChange).toHaveBeenCalledWith([
-      { message: MOTOR.message, signal: MOTOR.signal, op: ">", value: 0 },
-    ]);
+    const placed = [{ message: MOTOR.message, signal: MOTOR.signal, op: ">", value: 0 }];
+    expect(onChange).toHaveBeenCalledWith(placed);
     expect(onPlaced).toHaveBeenCalled();
+    expect(validateRuleDoc(asRuleDoc(placed as Condition[]), index)).toEqual([]);
   });
 
   it("defaults an enum placement to == and its first label, which is always valid", () => {
     const { onChange } = setup([], STATE as never);
     fireEvent.click(screen.getByTestId("condition-empty-slot"));
-    expect(onChange).toHaveBeenCalledWith([
-      { message: STATE.message, signal: STATE.signal, op: "==", value: "START" },
-    ]);
+    const placed = [{ message: STATE.message, signal: STATE.signal, op: "==", value: "START" }];
+    expect(onChange).toHaveBeenCalledWith(placed);
+    expect(validateRuleDoc(asRuleDoc(placed as Condition[]), index)).toEqual([]);
   });
 
   it("replaces the signal of a filled slot that is tapped while armed", () => {
@@ -76,5 +90,21 @@ describe("slot structure", () => {
     const { onChange } = setup([existing, second]);
     fireEvent.click(screen.getByTestId("condition-0-clear"));
     expect(onChange).toHaveBeenCalledWith([second]);
+  });
+
+  // A signal armed for placement must not block reaching a filled condition's
+  // own controls: the replace affordance sits above the editor, not over it.
+  // jsdom does not do hit-testing, so fireEvent.click reaches condition-0-clear
+  // even through a full-bleed overlay; the DOM-order check is what actually
+  // catches a regression back to that overlay (the old markup put the replace
+  // button after, not before, the editor it covered).
+  it("keeps a filled condition's Clear button reachable while a signal is armed", () => {
+    const { onChange } = setup([existing], STATE as never);
+    fireEvent.click(screen.getByTestId("condition-0-clear"));
+    expect(onChange).toHaveBeenCalledWith([]);
+
+    const replace = screen.getByTestId("condition-0-replace");
+    const clear = screen.getByTestId("condition-0-clear");
+    expect(replace.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

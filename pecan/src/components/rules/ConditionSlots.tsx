@@ -22,7 +22,7 @@ interface ConditionSlotsProps {
 /** A placement that is valid the moment it lands, so a half-built rule never
  * reports an error the author did not cause. */
 function conditionFor(info: SignalInfo): Condition {
-  return info.choices != null && info.choices.length > 0
+  return info.choices != null
     ? { message: info.message, signal: info.signal, op: "==", value: info.choices[0] }
     : { message: info.message, signal: info.signal, op: ">", value: 0 };
 }
@@ -47,7 +47,21 @@ function ConditionSlots({ conditions, index, armed, problems, onChange, onPlaced
               AND
             </p>
           )}
-          <div className="relative">
+          <div>
+            {armed !== null && (
+              // A band above the editor rather than a full-bleed overlay: the
+              // condition's own op buttons, value field, and Clear button must
+              // stay reachable while a signal is armed, or fixing an existing
+              // condition means first hunting for how to disarm.
+              <button
+                type="button"
+                data-testid={`condition-${i}-replace`}
+                className="min-h-[44px] w-full rounded-t border-2 border-b-0 border-dashed border-cyan-400/70 bg-cyan-500/10 px-3 text-xs font-mono uppercase tracking-wide text-cyan-100"
+                onClick={() => place(i)}
+              >
+                Tap to replace with {armed.signal}
+              </button>
+            )}
             <ConditionEditor
               condition={condition}
               info={index === null ? null : findSignal(index, condition.message, condition.signal)}
@@ -60,16 +74,6 @@ function ConditionSlots({ conditions, index, armed, problems, onChange, onPlaced
               }}
               onClear={() => onChange(conditions.filter((_, at) => at !== i))}
             />
-            {armed !== null && (
-              <button
-                type="button"
-                data-testid={`condition-${i}-replace`}
-                className="absolute inset-0 rounded border-2 border-dashed border-cyan-400/70 bg-cyan-500/10 text-xs font-mono uppercase tracking-wide text-cyan-100"
-                onClick={() => place(i)}
-              >
-                Tap to replace with {armed.signal}
-              </button>
-            )}
           </div>
         </div>
       ))}
