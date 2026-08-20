@@ -55,6 +55,10 @@ export function validateRuleDoc(doc: unknown, index: SignalIndex | null): RulePr
   }
   for (const field of ["for_seconds", "rearm_seconds"] as const) {
     const value = rule[field];
+    // Known deliberate divergence: the car accepts NaN here because NaN < 0 is
+    // false, while Number.isFinite rejects it. Being stricter is the safe
+    // direction, since it can only warn about a rule the car would have taken,
+    // never bless one the car would refuse.
     if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
       problems.push({ path: field, message: "Must be a number of seconds, zero or more." });
     }
@@ -109,7 +113,17 @@ function validateCondition(raw: unknown, i: number, index: SignalIndex | null): 
         message: "A named value can only be compared with == or !=.",
       });
     }
-    if (choices !== null && !choices.includes(value)) {
+    // With no index there is no VAL_ table to judge the text against, so the
+    // car gets the last word here just as it does for the name above.
+    if (info !== null && choices === null) {
+      // The car rejects any text value on a signal with no VAL_ table, because
+      // its choices set is empty and nothing can be in it. Accepting it here
+      // would tell someone their rule is fine when the car will refuse it.
+      problems.push({
+        path: at("value"),
+        message: `${signal} reports a number, so compare it with a number rather than text.`,
+      });
+    } else if (choices !== null && !choices.includes(value)) {
       problems.push({
         path: at("value"),
         message: `${signal} has no named value '${value}'. Choose one of: ${choices.join(", ")}.`,

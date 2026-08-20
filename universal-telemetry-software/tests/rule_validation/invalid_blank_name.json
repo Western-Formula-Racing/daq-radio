@@ -1,0 +1,21 @@
+{
+  "name": "invalid_blank_name",
+  "description": "A name of nothing but spaces, which passes a bare truthiness test but still leaves the alert unidentifiable.",
+  "valid": false,
+  "rule": {
+    "name": "   ",
+    "enabled": true,
+    "severity": "WARNING",
+    "message": "BASE",
+    "conditions": [
+      {
+        "message": "VCU_Pedal_Info",
+        "signal": "pedalPosition",
+        "op": ">",
+        "value": 1
+      }
+    ],
+    "for_seconds": 0,
+    "rearm_seconds": 0
+  }
+}

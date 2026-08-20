@@ -1,0 +1,21 @@
+{
+  "name": "valid_boundary_lengths",
+  "description": "A name of exactly MAX_NAME_LEN and a message of exactly MAX_MESSAGE_LEN, the accepting side of both length boundaries, which nothing else in the corpus held.",
+  "valid": true,
+  "rule": {
+    "name": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
+    "enabled": true,
+    "severity": "WARNING",
+    "message": "MMMMMMMMMMMMMMMMMMMMMMMM",
+    "conditions": [
+      {
+        "message": "VCU_Pedal_Info",
+        "signal": "pedalPosition",
+        "op": ">",
+        "value": 1
+      }
+    ],
+    "for_seconds": 0,
+    "rearm_seconds": 0
+  }
+}

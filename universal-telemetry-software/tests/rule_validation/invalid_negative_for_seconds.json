@@ -1,0 +1,21 @@
+{
+  "name": "invalid_negative_for_seconds",
+  "description": "A negative hold time. Time cannot run backward, and a negative hold would make the rule fire before its condition was ever continuously true.",
+  "valid": false,
+  "rule": {
+    "name": "Base",
+    "enabled": true,
+    "severity": "WARNING",
+    "message": "BASE",
+    "conditions": [
+      {
+        "message": "VCU_Pedal_Info",
+        "signal": "pedalPosition",
+        "op": ">",
+        "value": 1
+      }
+    ],
+    "for_seconds": -1,
+    "rearm_seconds": 0
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "name": "invalid_op",
+  "description": "A comparison operator the engine has no implementation for. Storing it would leave a rule the car cannot evaluate at all.",
+  "valid": false,
+  "rule": {
+    "name": "Base",
+    "enabled": true,
+    "severity": "WARNING",
+    "message": "BASE",
+    "conditions": [
+      {
+        "message": "VCU_Pedal_Info",
+        "signal": "pedalPosition",
+        "op": "=>",
+        "value": 1
+      }
+    ],
+    "for_seconds": 0,
+    "rearm_seconds": 0
+  }
+}

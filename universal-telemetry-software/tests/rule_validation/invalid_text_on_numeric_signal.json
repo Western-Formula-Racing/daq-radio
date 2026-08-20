@@ -1,0 +1,21 @@
+{
+  "name": "invalid_text_on_numeric_signal",
+  "description": "A text value on a plain numeric signal. The car's choices set is empty so nothing can be in it, and a form field handing back '50' instead of 50 would otherwise pass here and be refused on save, leaving a student sure the rule was armed.",
+  "valid": false,
+  "rule": {
+    "name": "Text pedal",
+    "enabled": true,
+    "severity": "WARNING",
+    "message": "TEXT NUM",
+    "conditions": [
+      {
+        "message": "VCU_Pedal_Info",
+        "signal": "pedalPosition",
+        "op": "==",
+        "value": "50"
+      }
+    ],
+    "for_seconds": 0,
+    "rearm_seconds": 0
+  }
+}

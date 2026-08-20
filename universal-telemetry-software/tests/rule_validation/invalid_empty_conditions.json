@@ -1,0 +1,14 @@
+{
+  "name": "invalid_empty_conditions",
+  "description": "conditions present but empty. A rule with nothing to test would fire on nothing or never, and neither is what anyone asked for.",
+  "valid": false,
+  "rule": {
+    "name": "Base",
+    "enabled": true,
+    "severity": "WARNING",
+    "message": "BASE",
+    "conditions": [],
+    "for_seconds": 0,
+    "rearm_seconds": 0
+  }
+}

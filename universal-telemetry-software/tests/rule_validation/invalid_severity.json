@@ -1,0 +1,21 @@
+{
+  "name": "invalid_severity",
+  "description": "A severity outside the three the display can render. An unrecognized level has no place to be shown, so the alert would be invisible.",
+  "valid": false,
+  "rule": {
+    "name": "Base",
+    "enabled": true,
+    "severity": "CRITICAL",
+    "message": "BASE",
+    "conditions": [
+      {
+        "message": "VCU_Pedal_Info",
+        "signal": "pedalPosition",
+        "op": ">",
+        "value": 1
+      }
+    ],
+    "for_seconds": 0,
+    "rearm_seconds": 0
+  }
+}

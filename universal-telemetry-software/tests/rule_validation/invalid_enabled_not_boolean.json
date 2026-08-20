@@ -1,0 +1,21 @@
+{
+  "name": "invalid_enabled_not_boolean",
+  "description": "enabled given as the string 'true'. A truthy string would arm a rule someone may have meant to leave off, so only a real boolean counts.",
+  "valid": false,
+  "rule": {
+    "name": "Base",
+    "enabled": "true",
+    "severity": "WARNING",
+    "message": "BASE",
+    "conditions": [
+      {
+        "message": "VCU_Pedal_Info",
+        "signal": "pedalPosition",
+        "op": ">",
+        "value": 1
+      }
+    ],
+    "for_seconds": 0,
+    "rearm_seconds": 0
+  }
+}

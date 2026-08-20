@@ -1,0 +1,21 @@
+{
+  "name": "invalid_name_too_long",
+  "description": "A 65-character name, one past MAX_NAME_LEN, the boundary that must be rejected.",
+  "valid": false,
+  "rule": {
+    "name": "NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNN",
+    "enabled": true,
+    "severity": "WARNING",
+    "message": "BASE",
+    "conditions": [
+      {
+        "message": "VCU_Pedal_Info",
+        "signal": "pedalPosition",
+        "op": ">",
+        "value": 1
+      }
+    ],
+    "for_seconds": 0,
+    "rearm_seconds": 0
+  }
+}

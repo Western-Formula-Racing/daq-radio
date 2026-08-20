@@ -43,6 +43,11 @@ describe("validateRuleDoc", () => {
       .toEqual(["conditions.0.value"]);
   });
 
+  it("rejects text on a signal with no named values, which the car refuses too", () => {
+    expect(paths({ ...base, conditions: [{ message: "VCU_Pedal_Info", signal: "pedalPosition", op: "==", value: "50" }] }))
+      .toEqual(["conditions.0.value"]);
+  });
+
   it("rejects text compared with an ordering operator", () => {
     const problems = validateRuleDoc(
       { ...base, conditions: [{ message: "VCU_State_Info", signal: "State", op: ">", value: "DRIVE" }] }, index);
@@ -59,6 +64,13 @@ describe("validateRuleDoc", () => {
   // rule is worse than deferring the check to the car, which will run it anyway.
   it("skips message and signal checks when there is no index", () => {
     expect(validateRuleDoc({ ...base, conditions: [{ message: "WHO", signal: "KNOWS", op: ">", value: 1 }] }, null))
+      .toEqual([]);
+  });
+
+  // The same reasoning covers the value: with no index there is no VAL_ table to
+  // say whether the text is a label, so rejecting it would block a valid rule.
+  it("leaves a text value to the car when there is no index", () => {
+    expect(validateRuleDoc({ ...base, conditions: [{ message: "WHO", signal: "KNOWS", op: "==", value: "DRIVE" }] }, null))
       .toEqual([]);
   });
 });

@@ -1,0 +1,16 @@
+{
+  "name": "invalid_condition_not_an_object",
+  "description": "A condition that is a bare string instead of an object. Hand-edited JSON is the usual route in, and indexing it as a mapping would fail on the car mid-session.",
+  "valid": false,
+  "rule": {
+    "name": "Base",
+    "enabled": true,
+    "severity": "WARNING",
+    "message": "BASE",
+    "conditions": [
+      "pedalPosition > 1"
+    ],
+    "for_seconds": 0,
+    "rearm_seconds": 0
+  }
+}
