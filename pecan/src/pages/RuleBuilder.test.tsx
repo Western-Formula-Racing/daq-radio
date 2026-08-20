@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const fetchSignals = vi.fn();
@@ -89,6 +89,51 @@ describe("RuleBuilder connection states", () => {
     render(<RuleBuilder />);
     await waitFor(() => expect(screen.getByTestId("palette-empty").textContent).toMatch(/no dbc/i));
     expect((screen.getByTestId("rule-save") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("hashes the car's own DBC when it sends no digest header, rather than reading silence as agreement", async () => {
+    fetchSignals.mockResolvedValue(SIGNALS);
+    fetchDbc.mockResolvedValue({ text: "OTHER DBC", sha256: "" });
+    render(<RuleBuilder />);
+    await waitFor(() => expect(screen.getByTestId("omt-connection").textContent).toMatch(/different dbc/i));
+    expect((screen.getByTestId("rule-save") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("connects when the car sends no digest header but serves the same DBC", async () => {
+    fetchSignals.mockResolvedValue(SIGNALS);
+    fetchDbc.mockResolvedValue({ text: "LOCAL DBC", sha256: "" });
+    render(<RuleBuilder />);
+    await waitFor(() => expect(screen.getByTestId("omt-connection").textContent).toMatch(/connected/i));
+  });
+
+  it("blocks saving when the DBCs cannot be compared at all", async () => {
+    fetchSignals.mockResolvedValue(SIGNALS);
+    fetchDbc.mockResolvedValue({ text: "LOCAL DBC", sha256: "b".repeat(64) });
+    // What a plain-http origin looks like: crypto.subtle is not there to hash with.
+    const digest = vi.spyOn(crypto.subtle, "digest").mockRejectedValue(new Error("subtle is undefined"));
+    try {
+      render(<RuleBuilder />);
+      await waitFor(() => expect(screen.getByTestId("dbc-unverified-notice")).toBeTruthy());
+      expect((screen.getByTestId("rule-save") as HTMLButtonElement).disabled).toBe(true);
+      // The car is still reachable, so its catalog is still worth authoring against.
+      expect(screen.getByTestId("palette-message-VCU_Pedal_Info")).toBeTruthy();
+    } finally {
+      digest.mockRestore();
+    }
+  });
+
+  it("does not let a save ride on the previous address's verdict while a reconnect is in flight", async () => {
+    fetchSignals.mockResolvedValue(SIGNALS);
+    fetchDbc.mockResolvedValue({ text: "LOCAL DBC", sha256: await sha256("LOCAL DBC") });
+    render(<RuleBuilder />);
+    await waitFor(() => expect(screen.getByTestId("omt-connection").textContent).toMatch(/connected/i));
+
+    let release: (value: unknown) => void = () => {};
+    fetchSignals.mockReturnValue(new Promise((resolve) => { release = resolve; }));
+    fireEvent.click(screen.getByTestId("omt-reconnect"));
+    await waitFor(() => expect(screen.getByTestId("omt-connection").textContent).toMatch(/checking/i));
+    expect((screen.getByTestId("rule-save") as HTMLButtonElement).disabled).toBe(true);
+    release(SIGNALS);
   });
 
   it("lets the address be changed without a rebuild", async () => {

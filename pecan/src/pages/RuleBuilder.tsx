@@ -31,6 +31,7 @@ type Connection =
   | { kind: "connected" }
   | { kind: "offline"; reason: string }
   | { kind: "mismatch"; carSha: string; localSha: string }
+  | { kind: "unverified"; reason: string }
   | { kind: "no-catalog" };
 
 const EMPTY_DOC: RuleDoc = {
@@ -46,13 +47,30 @@ async function sha256Hex(text: string): Promise<string> {
 async function probe(localDbc: string): Promise<{ connection: Connection; signals: RawSignal[] }> {
   try {
     const [signals, dbc] = await Promise.all([fetchSignals(), fetchDbc()]);
-    if (localDbc) {
-      const localSha = await sha256Hex(localDbc);
-      // A rule written against a different DBC stores cleanly and then never
-      // fires, so this is blocked rather than warned about.
-      if (dbc.sha256 && dbc.sha256 !== localSha) {
-        return { connection: { kind: "mismatch", carSha: dbc.sha256, localSha }, signals };
-      }
+    // With no local DBC there is nothing to disagree with: the catalog below is
+    // the car's own, so a rule written on it is written against what is running.
+    if (!localDbc) return { connection: { kind: "connected" }, signals };
+    let localSha: string;
+    let carSha: string;
+    try {
+      // An OMT that does not send the digest header, or a proxy that strips it,
+      // must not read as agreement. Falling back to hashing the body the car
+      // served keeps the comparison ours to make.
+      [localSha, carSha] = await Promise.all([
+        sha256Hex(localDbc),
+        dbc.sha256 ? Promise.resolve(dbc.sha256) : sha256Hex(dbc.text),
+      ]);
+    } catch (error) {
+      // crypto.subtle is absent outside a secure context, which is exactly the
+      // plain-http pit stop this page is used from. Say the identity is unknown
+      // instead of claiming a match nobody checked.
+      const reason = error instanceof Error ? error.message : String(error);
+      return { connection: { kind: "unverified", reason }, signals };
+    }
+    // A rule written against a different DBC stores cleanly and then never
+    // fires, so this is blocked rather than warned about.
+    if (carSha !== localSha) {
+      return { connection: { kind: "mismatch", carSha, localSha }, signals };
     }
     return { connection: { kind: "connected" }, signals };
   } catch (error) {
@@ -135,7 +153,9 @@ function RuleBuilder() {
 
   const problems = useMemo(() => validateRuleDoc(doc, index), [doc, index]);
 
-  const canSave = connection.kind === "connected" && problems.length === 0
+  // While a probe is in flight the verdict on screen belongs to the previous
+  // address, so a save started here would go to a car nobody has checked yet.
+  const canSave = connection.kind === "connected" && !probing && problems.length === 0
     && saveState.kind !== "saving";
 
   const handleSave = async () => {
@@ -172,7 +192,9 @@ function RuleBuilder() {
         ? { label: "Offline", Icon: WifiOff, className: "border-amber-400/50 bg-amber-500/15 text-amber-100" }
         : connection.kind === "mismatch"
           ? { label: "Different DBC", Icon: AlertTriangle, className: "border-red-400/50 bg-red-500/15 text-red-100" }
-          : { label: "No signals", Icon: CircleSlash, className: "border-red-400/50 bg-red-500/15 text-red-100" };
+          : connection.kind === "unverified"
+            ? { label: "Unverified DBC", Icon: AlertTriangle, className: "border-red-400/50 bg-red-500/15 text-red-100" }
+            : { label: "No signals", Icon: CircleSlash, className: "border-red-400/50 bg-red-500/15 text-red-100" };
 
   const paletteEmptyReason = probing
     ? "Looking for the car."
@@ -246,6 +268,14 @@ function RuleBuilder() {
             <span className="font-mono">{shortSha(connection.localSha)}</span>. Saving is blocked,
             because a rule written against the wrong DBC saves without complaint and then never
             fires on the car. Load the car's DBC in PECAN, or reflash the car, then reconnect.
+          </p>
+        )}
+
+        {connection.kind === "unverified" && (
+          <p data-testid="dbc-unverified-notice" className={`${panelClass} text-sm text-red-100`}>
+            The car answered, but PECAN could not check that it is running the same DBC (
+            {connection.reason}). Saving is blocked rather than risking a rule that stores fine and
+            never fires. Open PECAN over https, or export the rule and import it on the car.
           </p>
         )}
 
