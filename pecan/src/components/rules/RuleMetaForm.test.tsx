@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { RuleDoc } from "../../lib/wcars/engine/types";
+import { validateRuleDoc } from "../../utils/ruleValidate";
 import RuleMetaForm from "./RuleMetaForm";
 
 const doc: RuleDoc = {
@@ -51,10 +52,23 @@ describe("RuleMetaForm", () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
   });
 
-  it("does not emit NaN when a seconds field is emptied", () => {
-    const onChange = setup();
+  it("emits a value the validator rejects when a seconds field is emptied, rather than a silent fire-immediately 0", () => {
+    const validCondition = { message: "Motor", signal: "temp", op: ">" as const, value: 80 };
+    const onChange = setup({ conditions: [validCondition] });
     fireEvent.change(screen.getByTestId("rule-for-seconds"), { target: { value: "" } });
     const [next] = onChange.mock.calls[0];
-    expect(Number.isNaN(next.for_seconds)).toBe(false);
+    const problems = validateRuleDoc(next, null);
+    expect(problems).toContainEqual(expect.objectContaining({ path: "for_seconds" }));
+  });
+
+  it("shows a for_seconds problem where the user can see it", () => {
+    setup({}, [{ path: "for_seconds", message: "Must be a number of seconds, zero or more." }] as never);
+    expect(screen.getByTestId("rule-problem-for_seconds")).toBeTruthy();
+  });
+
+  it("renders an emptied seconds field as empty, not as the text NaN", () => {
+    setup({ for_seconds: NaN });
+    const input = screen.getByTestId("rule-for-seconds") as HTMLInputElement;
+    expect(input.value).toBe("");
   });
 });

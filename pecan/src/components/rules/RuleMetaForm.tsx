@@ -14,24 +14,25 @@ interface RuleMetaFormProps {
 }
 
 function RuleMetaForm({ doc, problems, onChange }: RuleMetaFormProps) {
-  const problemFor = (path: string) => problems.find((p) => p.path === path);
   const field = (path: string) => {
-    const problem = problemFor(path);
-    return problem ? (
-      <p data-testid={`rule-problem-${path}`} className="mt-1 text-xs text-amber-200">
-        {problem.message}
-      </p>
+    const mine = problems.filter((p) => p.path === path);
+    return mine.length > 0 ? (
+      <ul data-testid={`rule-problem-${path}`} className="mt-1 space-y-1 text-xs text-amber-200">
+        {mine.map((problem) => <li key={problem.path + problem.message}>{problem.message}</li>)}
+      </ul>
     ) : null;
   };
   const inputClass = "min-h-[44px] w-full rounded border border-white/20 bg-black/30 px-3 text-sm text-slate-100";
   const labelClass = "block font-mono text-[10px] uppercase tracking-wide text-slate-400";
 
-  // A partial entry like "-" or "1e", or an emptied field, parses to NaN;
-  // fall back to 0 rather than emitting a value the doc can never hold.
+  // A partial entry like "-" or "1e", or an emptied field, parses to NaN. Emit it
+  // anyway so validateRuleDoc's Number.isFinite check can flag it, rather than
+  // silently falling back to 0, which is a legal "fire immediately" value.
   const numberField = (path: "for_seconds" | "rearm_seconds") => (event: ChangeEvent<HTMLInputElement>) => {
+    // Number("") is 0, not NaN, which would let an emptied field through as a
+    // legal (and dangerous) "fire immediately" value; force it to NaN instead.
     const raw = event.target.value;
-    const parsed = Number(raw);
-    onChange({ ...doc, [path]: Number.isFinite(parsed) ? parsed : 0 });
+    onChange({ ...doc, [path]: raw === "" ? NaN : Number(raw) });
   };
 
   return (
@@ -76,7 +77,8 @@ function RuleMetaForm({ doc, problems, onChange }: RuleMetaFormProps) {
           <label className={labelClass} htmlFor="rule-for-seconds">Hold for (s)</label>
           <input
             id="rule-for-seconds" data-testid="rule-for-seconds" type="number" inputMode="decimal"
-            min={0} step="0.1" className={inputClass} value={doc.for_seconds}
+            min={0} step="0.1" className={inputClass}
+            value={Number.isFinite(doc.for_seconds) ? doc.for_seconds : ""}
             onChange={numberField("for_seconds")}
           />
           {field("for_seconds")}
@@ -85,7 +87,8 @@ function RuleMetaForm({ doc, problems, onChange }: RuleMetaFormProps) {
           <label className={labelClass} htmlFor="rule-rearm-seconds">Re-arm after (s)</label>
           <input
             id="rule-rearm-seconds" data-testid="rule-rearm-seconds" type="number" inputMode="decimal"
-            min={0} step="1" className={inputClass} value={doc.rearm_seconds}
+            min={0} step="1" className={inputClass}
+            value={Number.isFinite(doc.rearm_seconds) ? doc.rearm_seconds : ""}
             onChange={numberField("rearm_seconds")}
           />
           {field("rearm_seconds")}
