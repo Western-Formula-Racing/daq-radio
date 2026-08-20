@@ -54,10 +54,12 @@ function ConditionEditor({ condition, info, problems, index, onChange, onClear }
               type="button"
               data-testid={`condition-${index}-op-${op}`}
               aria-pressed={condition.op === op}
-              className={`min-h-[44px] min-w-[44px] rounded border px-3 font-mono text-sm ${
+              // Selection carries weight and a border width as well as color, so
+              // it survives a tablet in direct sun where hue washes out.
+              className={`min-h-[44px] min-w-[44px] rounded px-3 font-mono text-sm ${
                 condition.op === op
-                  ? "border-cyan-400/60 bg-cyan-500/15 text-cyan-100"
-                  : "border-white/20 bg-black/30 text-slate-200"
+                  ? "border-2 border-cyan-300 bg-cyan-500/20 font-bold text-cyan-50 underline"
+                  : "border border-white/20 bg-black/30 font-normal text-slate-200"
               }`}
               onClick={() => onChange({ ...condition, op })}
             >
@@ -87,9 +89,25 @@ function ConditionEditor({ condition, info, problems, index, onChange, onClear }
             value={typeof condition.value === "number" ? condition.value : ""}
             onChange={(event) => {
               const raw = event.target.value;
-              onChange({ ...condition, value: raw === "" ? raw : Number(raw) });
+              const parsed = Number(raw);
+              // A partial entry like "-" or "1e" parses to NaN; emit the raw
+              // string instead of a value we already know is not a number, and
+              // let the validator (which already handles a stray string) say so.
+              onChange({ ...condition, value: Number.isFinite(parsed) && raw !== "" ? parsed : raw });
             }}
           />
+        )}
+
+        {!isEnum && info === null && (
+          // Offline, or against a mismatched DBC, we cannot tell if this signal
+          // is really enum-valued. A number typed here would then never match.
+          <span
+            data-testid={`condition-${index}-unknown-signal`}
+            className="font-mono text-[10px] text-amber-300"
+          >
+            This signal isn't in the loaded catalog, so we can't check whether it reports numbers or named
+            values. If it turns out to report named values, a number here will never match.
+          </span>
         )}
 
         {!isEnum && info && info.minimum !== null && info.maximum !== null && (

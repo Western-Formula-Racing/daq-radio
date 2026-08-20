@@ -40,10 +40,35 @@ describe("a numeric signal", () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ value: 85 }));
   });
 
+  it("emits the raw string rather than NaN for a partial or empty entry", () => {
+    const { onChange } = setup(cond(), NUMERIC);
+    const input = screen.getByTestId("condition-0-value-number") as HTMLInputElement;
+    // A number input's value setter sanitizes a bare "-" to "" before onChange
+    // ever runs (that's spec behavior, not this component's), which is exactly
+    // the gap between jsdom/desktop and the looser number fields iOS Safari
+    // hands back. Switch to text so the handler sees the raw partial entry.
+    input.setAttribute("type", "text");
+    fireEvent.change(input, { target: { value: "-" } });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ value: "-" }));
+    fireEvent.change(input, { target: { value: "" } });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ value: "" }));
+  });
+
+  it("does not show the unknown-signal hint for a signal in the catalog", () => {
+    setup(cond(), NUMERIC);
+    expect(screen.queryByTestId("condition-0-unknown-signal")).toBeNull();
+  });
+
   it("shows the DBC range as a hint rather than enforcing it", () => {
     setup(cond({ value: 9999 }), NUMERIC);
     expect(screen.getByTestId("condition-0-range").textContent).toContain("-100");
     expect(screen.getByTestId("condition-0-range").textContent).toContain("300");
+  });
+
+  it("marks the selected operator with more than color, so it survives a washed-out screen", () => {
+    setup(cond({ op: ">" }), NUMERIC);
+    expect(screen.getByTestId("condition-0-op->").className).toContain("font-bold");
+    expect(screen.getByTestId("condition-0-op-<").className).not.toContain("font-bold");
   });
 });
 
@@ -62,7 +87,7 @@ describe("an enum signal", () => {
     expect(screen.queryByTestId("condition-0-value-number")).toBeNull();
   });
 
-  it("switches the value to a label when an ordering operator is replaced", () => {
+  it("emits the chosen label when a different one is picked", () => {
     const { onChange } = setup(cond({ message: ENUM.message, signal: ENUM.signal, op: "==", value: "START" }), ENUM);
     fireEvent.change(screen.getByTestId("condition-0-value-enum"), { target: { value: "DRIVE" } });
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ value: "DRIVE" }));
@@ -88,5 +113,10 @@ describe("problems and clearing", () => {
     const { onChange } = setup(cond({ message: "GONE", signal: "MISSING", value: 5 }), null);
     fireEvent.change(screen.getByTestId("condition-0-value-number"), { target: { value: "7" } });
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ value: 7 }));
+  });
+
+  it("warns that an unknown signal's type could not be checked", () => {
+    setup(cond({ message: "GONE", signal: "MISSING", value: 5 }), null);
+    expect(screen.getByTestId("condition-0-unknown-signal")).toBeTruthy();
   });
 });
