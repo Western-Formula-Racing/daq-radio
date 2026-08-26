@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { OMT_URL_KEY, OmtError, getOmtBaseUrl, setOmtBaseUrl, fetchSignals, fetchDbc, createRule, updateRule } from "./omtClient";
+import { OMT_URL_KEY, OmtError, getOmtBaseUrl, setOmtBaseUrl, fetchSignals, fetchDbc, createRule, updateRule, toggleRule } from "./omtClient";
 
 describe("the OMT base URL", () => {
   beforeEach(() => localStorage.clear());
@@ -75,6 +75,15 @@ describe("OMT requests", () => {
       status: 422,
       messages: ["condition 1: message 'NOPE' not in DBC"],
     });
+  });
+
+  it("sends the armed state it was asked for, since the car applies the body rather than flipping", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id: "r1", enabled: true }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await toggleRule("r1", true, "pecan");
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body as string)).toMatchObject({ enabled: true, by: "pecan" });
   });
 
   it("reports a conflict distinctly so the page can offer a reload", async () => {

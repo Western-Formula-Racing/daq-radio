@@ -9,18 +9,23 @@ import { AlertTriangle, CircleSlash, Wifi, WifiOff } from "lucide-react";
 
 import ConditionSlots from "../components/rules/ConditionSlots";
 import RuleJsonView from "../components/rules/RuleJsonView";
+import RuleList from "../components/rules/RuleList";
+import type { StoredRule } from "../components/rules/RuleList";
 import RuleMetaForm from "../components/rules/RuleMetaForm";
 import SignalPalette from "../components/rules/SignalPalette";
 import type { Condition, RuleDoc } from "../lib/wcars/engine/types";
 import { getActiveDbcText } from "../utils/canProcessor";
 import {
   createRule,
+  deleteRule,
   fetchDbc,
   fetchRules,
   fetchSignals,
   getOmtBaseUrl,
   OmtError,
   setOmtBaseUrl,
+  toggleRule,
+  updateRule,
 } from "../utils/omtClient";
 import type { RawSignal } from "../utils/omtClient";
 import { validateRuleDoc } from "../utils/ruleValidate";
@@ -95,7 +100,25 @@ type SaveState =
   | { kind: "idle" }
   | { kind: "saving" }
   | { kind: "saved"; name: string }
-  | { kind: "failed"; messages: string[] };
+  | { kind: "failed"; messages: string[] }
+  | { kind: "conflict" };
+
+/** The rev and the car's verdict on the rule belong to the car, not to the
+ * document being edited, so they are dropped before it is sent back. */
+function editableCopy(rule: StoredRule): RuleDoc {
+  return {
+    id: rule.id,
+    name: rule.name,
+    enabled: rule.enabled,
+    severity: rule.severity,
+    message: rule.message,
+    // Copied, not shared: editing a condition here must not reach back into the
+    // list still showing what the car holds.
+    conditions: rule.conditions.map((condition) => ({ ...condition })),
+    for_seconds: rule.for_seconds,
+    rearm_seconds: rule.rearm_seconds,
+  };
+}
 
 function exportRule(doc: RuleDoc): void {
   // An array, because that is what the replay page's importer reads and what a
@@ -116,7 +139,10 @@ function RuleBuilder() {
   const [index, setIndex] = useState<SignalIndex | null>(null);
   const [connection, setConnection] = useState<Connection>({ kind: "no-catalog" });
   const [probing, setProbing] = useState(true);
-  const [carRuleCount, setCarRuleCount] = useState<number | null>(null);
+  const [rules, setRules] = useState<StoredRule[] | null>(null);
+  // Which stored rule the form is editing, and at which rev. Null means the
+  // next save creates a rule rather than replacing one.
+  const [editing, setEditing] = useState<StoredRule | null>(null);
   const [url, setUrl] = useState(() => getOmtBaseUrl());
   const [tab, setTab] = useState<Tab>("palette");
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
@@ -134,16 +160,16 @@ function RuleBuilder() {
     setIndex(result.connection.kind === "no-catalog" ? null : buildIndex(result.signals));
     setProbing(false);
     if (result.connection.kind === "no-catalog" || result.connection.kind === "offline") {
-      setCarRuleCount(null);
+      setRules(null);
       return;
     }
     try {
-      const rules = await fetchRules();
-      if (probeToken.current === token) setCarRuleCount(rules.length);
+      const stored = await fetchRules() as StoredRule[];
+      if (probeToken.current === token) setRules(stored);
     } catch {
-      // The rule count is context, not a capability. A car that answered the
+      // The rule list is context, not a capability. A car that answered the
       // catalog but not this is still an authoring session worth having.
-      if (probeToken.current === token) setCarRuleCount(null);
+      if (probeToken.current === token) setRules(null);
     }
   }, []);
 
@@ -158,16 +184,105 @@ function RuleBuilder() {
   const canSave = connection.kind === "connected" && !probing && problems.length === 0
     && saveState.kind !== "saving";
 
+  /** Takes the car's answer as the new truth, so a second save carries the rev
+   * the car just minted rather than the one it has already superseded. */
+  const adoptSaved = (saved: RuleDoc) => {
+    setDoc(saved);
+    const stored = saved as StoredRule;
+    // Guessing a rev would either overwrite someone else's edit or, if editing
+    // were dropped instead, save a second copy of the same rule.
+    setEditing(typeof stored.rev === "number" ? stored : editing);
+  };
+
   const handleSave = async () => {
     setSaveState({ kind: "saving" });
     try {
-      const saved = await createRule(doc, "pecan");
-      setDoc(saved);
+      const saved = editing === null
+        ? await createRule(doc, "pecan")
+        : await updateRule(editing.id, doc, editing.rev, "pecan");
+      adoptSaved(saved);
       setSaveState({ kind: "saved", name: saved.name });
       void runProbe();
     } catch (error) {
+      if (!(error instanceof OmtError)) {
+        setSaveState({
+          kind: "failed",
+          messages: [error instanceof Error ? error.message : String(error)],
+        });
+        return;
+      }
+      if (error.status === 409) {
+        setSaveState({ kind: "conflict" });
+        return;
+      }
       // The car is authoritative on whether a rule is legal, so its own wording
       // is shown rather than being reworded into something that may not match.
+      setSaveState({
+        kind: "failed",
+        messages: error.status === 503
+          // Saying only "failed" here would leave someone believing the rule is
+          // armed on the car when the car never received it.
+          ? [...error.messages, "The rule was not stored and the car is not checking it."]
+          : error.messages,
+      });
+    }
+  };
+
+  const handleEdit = (rule: StoredRule) => {
+    setEditing(rule);
+    setDoc(editableCopy(rule));
+    setArmed(null);
+    setSaveState({ kind: "idle" });
+    setTab("build");
+  };
+
+  const handleNew = () => {
+    setEditing(null);
+    setDoc(EMPTY_DOC);
+    setArmed(null);
+    setSaveState({ kind: "idle" });
+  };
+
+  /** Pulls the car's copy back over the form after a conflict, which is the
+   * point of refusing the write: the other person's edit is not thrown away. */
+  const handleReload = async () => {
+    try {
+      const stored = await fetchRules() as StoredRule[];
+      setRules(stored);
+      const fresh = editing === null ? undefined : stored.find((r) => r.id === editing.id);
+      if (fresh) handleEdit(fresh);
+      else handleNew();
+    } catch (error) {
+      setSaveState({
+        kind: "failed",
+        messages: [error instanceof Error ? error.message : String(error)],
+      });
+    }
+  };
+
+  const handleToggle = async (rule: StoredRule) => {
+    try {
+      await toggleRule(rule.id, !rule.enabled, "pecan");
+      void runProbe();
+    } catch (error) {
+      setSaveState({
+        kind: "failed",
+        messages: error instanceof OmtError
+          ? error.messages
+          : [error instanceof Error ? error.message : String(error)],
+      });
+    }
+  };
+
+  const handleDelete = async (rule: StoredRule) => {
+    // Deleting a rule silently disarms a check the team may be relying on, and
+    // the rows sit under a thumb on a tablet.
+    if (!window.confirm(`Delete '${rule.name}'? The car will stop checking it.`)) return;
+    try {
+      await deleteRule(rule.id);
+      if (editing?.id === rule.id) handleNew();
+      void runProbe();
+    } catch (error) {
       setSaveState({
         kind: "failed",
         messages: error instanceof OmtError
@@ -223,9 +338,14 @@ function RuleBuilder() {
             <chip.Icon size={16} aria-hidden="true" />
             {chip.label}
           </span>
-          {carRuleCount !== null && (
+          {rules !== null && (
             <span className="font-mono text-xs text-slate-400">
-              {carRuleCount} rule{carRuleCount === 1 ? "" : "s"} on the car
+              {rules.length} rule{rules.length === 1 ? "" : "s"} on the car
+            </span>
+          )}
+          {editing !== null && (
+            <span data-testid="editing-notice" className="font-mono text-xs text-cyan-200">
+              Editing '{editing.name}' (rev {editing.rev})
             </span>
           )}
         </div>
@@ -302,8 +422,20 @@ function RuleBuilder() {
             className="trace-btn trace-btn-primary min-h-[44px] disabled:cursor-not-allowed disabled:opacity-40"
             onClick={() => void handleSave()}
           >
-            {saveState.kind === "saving" ? "Saving" : "Save to car"}
+            {saveState.kind === "saving"
+              ? "Saving"
+              : editing === null ? "Save to car" : "Update on car"}
           </button>
+          {editing !== null && (
+            <button
+              type="button"
+              data-testid="rule-new"
+              className="trace-btn trace-btn-subtle min-h-[44px]"
+              onClick={handleNew}
+            >
+              New rule
+            </button>
+          )}
           <button
             type="button"
             data-testid="rule-export"
@@ -324,9 +456,27 @@ function RuleBuilder() {
         </div>
 
         {saveState.kind === "failed" && (
-          <ul data-testid="rule-save-error" className="space-y-1 text-xs text-amber-200">
+          <ul data-testid="save-problems" className="space-y-1 text-xs text-amber-200">
             {saveState.messages.map((message) => <li key={message}>{message}</li>)}
           </ul>
+        )}
+
+        {saveState.kind === "conflict" && (
+          <div data-testid="save-conflict" className={`${panelClass} space-y-2 text-sm text-amber-100`}>
+            <p>
+              Someone else changed this rule on the car since it was opened here. Saving would
+              throw their edit away, so it was refused. Load the car's copy and redo the change on
+              top of it.
+            </p>
+            <button
+              type="button"
+              data-testid="save-conflict-reload"
+              className="trace-btn trace-btn-subtle min-h-[44px]"
+              onClick={() => void handleReload()}
+            >
+              Load the car's copy
+            </button>
+          </div>
         )}
       </header>
 
@@ -387,6 +537,18 @@ function RuleBuilder() {
           <RuleJsonView doc={doc} onChange={setDoc} />
         </div>
       </div>
+
+      {rules !== null && (
+        <section className={`${panelClass} mt-4`}>
+          <h2 className="app-section-title mb-2">On the car</h2>
+          <RuleList
+            rules={rules}
+            onEdit={handleEdit}
+            onToggle={(rule) => void handleToggle(rule)}
+            onDelete={(rule) => void handleDelete(rule)}
+          />
+        </section>
+      )}
     </div>
   );
 }

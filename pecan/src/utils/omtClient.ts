@@ -157,8 +157,12 @@ export async function updateRule(
   }) as RuleDoc;
 }
 
-export async function toggleRule(id: string): Promise<RuleDoc> {
-  return await request(`/api/rules/${encodeURIComponent(id)}/toggle`, { method: "POST" }) as RuleDoc;
+/** Sets the armed state outright rather than flipping it: the car applies the
+ * value in the body, so sending none disarms every rule this is called on. */
+export async function toggleRule(id: string, enabled: boolean, by: string): Promise<RuleDoc> {
+  return await request(
+    `/api/rules/${encodeURIComponent(id)}/toggle`, json({ enabled, by }),
+  ) as RuleDoc;
 }
 
 export async function deleteRule(id: string): Promise<void> {
