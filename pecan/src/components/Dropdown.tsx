@@ -65,7 +65,7 @@ const Dropdown: React.FC<DropdownProps> = ({
             <div className="flex flex-col">
               {items.map((item, idx) =>
                 item === "br" ? (
-                  <div key={`div-${idx}`} className="h-[2px] w-full bg-gray-200" />
+                  <div key={`div-${idx}`} className="h-[2px] w-full bg-border" />
                 ) : (
                   <button
                     key={idx}

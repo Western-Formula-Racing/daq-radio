@@ -24,16 +24,49 @@ Use it as the source of truth for all new pages and refactors.
 ## 2. Color System
 
 Primary theme tokens are defined in [pecan/src/index.css](src/index.css).
+Supported theme names live in [pecan/src/theme/theme.ts](src/theme/theme.ts).
 
-Core tokens:
+User-selectable appearances (`USER_THEMES`):
+- `dark` → `.theme-dark`
+- `light` → `.theme-light`
+- `psl` (Pumpkin Spice) → `.theme-psl`
+
+Operational modes (not shown in Settings):
+- `internal` → `.theme-internal` (same palette as dark)
+- `local-can` → `.theme-local-can` (mid-blue, requested while a USB adapter is open)
+
+`@theme` holds Tailwind's token declaration and the dark default. Explicit class blocks override those variables when `next-themes` applies the matching class on `<html>`.
+
+Core surface/text tokens:
 - Background: `--color-background`
 - Sidebar/surface: `--color-sidebar`
 - Surface foreground: `--color-sidebarfg`
 - Module surface: `--color-data-module-bg`
 - Input surface: `--color-data-textbox-bg`
+- Text: `--color-text-primary`, `--color-text-secondary`, `--color-text-muted`, `--color-text-heading`
+- Borders: `--color-border`, `--color-border-strong`, `--color-border-subtle`
+- Focus: `--color-focus`
+
+Visualization tokens (plots, traces, React Flow, canvas):
+- `--color-chart-grid`
+- `--color-chart-series-primary` / `-secondary` / `-success` / `-warning` / `-danger`
+- `--color-chart-checkpoint` / `--color-chart-checkpoint-bg`
+- `--color-chart-state` / `--color-chart-state-bg`
+- `--color-flow-node-bg` / `--color-flow-node-text` / `--color-flow-edge` / `--color-flow-grid`
+
+Charts, canvas, Plotly, Recharts, and React Flow **must** consume `useThemeColors` rather than hardcoded hex. That hook reads the visualization tokens so a theme change repaints immediately without reload or new telemetry.
+
+Pumpkin Spice direction:
+- Espresso surfaces (`#160f0b`, `#21150f`, `#2c1c13`)
+- Cream text (`#fff4df`, `#efd4ad`, `#fff8ea`)
+- Caramel structure (`#c39a72`, `#4a2a18`)
+- Pumpkin/cinnamon accents (`#f59e0b`, `#fb923c`, `#c2410c`)
+- Derived border, hover, pill, range, trace, flow, and overlay values stay in that family
+- Success/danger remain recognizable status colors with readable contrast
 
 Guidelines:
-- Use token-backed utility classes (`bg-data-module-bg`, `bg-sidebar`, etc.) for app surfaces.
+- Use token-backed utility classes (`bg-data-module-bg`, `bg-sidebar`, `text-text-primary`, `border-border`, `focus:border-focus`) for app surfaces and form controls.
+- Do not add new `!important` utility overrides. The existing `.theme-light` compatibility shim stays as a temporary bridge for leftover Tailwind palette utilities; do not broaden it to PSL or other themes.
 - Reserve bright accents for status and interaction states.
 - Maintain minimum contrast for small text and telemetry values.
 

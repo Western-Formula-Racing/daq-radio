@@ -14,35 +14,35 @@ export function BatteryStatus() {
     const current = signal?.sensorReading ?? null;
 
     // Determine state
-    let icon = <Battery className="w-6 h-6 text-gray-400" />;
+    let icon = <Battery className="w-6 h-6 text-text-muted" />;
     let label = "Static";
-    let colorClass = "text-gray-400";
+    let colorClass = "text-text-muted";
 
     if (current !== null) {
         if (current < CHARGING_THRESHOLD) {
             icon = <BatteryCharging className="w-6 h-6 animate-pulse" />;
             label = "Charging";
-            colorClass = "text-green-500";
+            colorClass = "text-chart-series-success";
         } else if (current > DISCHARGING_THRESHOLD) {
             icon = <Zap className="w-6 h-6" />;
             label = "Discharging";
-            colorClass = "text-orange-500";
+            colorClass = "text-chart-series-warning";
         } else {
             // Static
             icon = <Battery className="w-6 h-6" />;
             label = "Standby";
-            colorClass = "text-blue-400";
+            colorClass = "text-chart-series-secondary";
         }
     }
 
     return (
-        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gray-800/50 border border-gray-700/50 ${colorClass}`} title={`Current: ${current?.toFixed(1) ?? '--'} A`}>
+        <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg bg-option border border-border ${colorClass}`} title={`Current: ${current?.toFixed(1) ?? '--'} A`}>
             {icon}
             <span className="text-sm font-semibold uppercase tracking-wider">
                 {label}
             </span>
             {current !== null && (
-                <span className="text-xs text-gray-500 ml-1 font-mono">
+                <span className="text-xs text-text-muted ml-1 font-mono">
                     ({current.toFixed(1)} A)
                 </span>
             )}

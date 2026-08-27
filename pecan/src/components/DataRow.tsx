@@ -108,7 +108,7 @@ export default function DataRow({ msgID, name, category, data, rawData, index, i
                 aria-expanded={open}
                 onClick={toggle}
                 id={isTourRow ? "tour-row-header" : undefined}
-                className={`grid grid-cols-10 md:grid-cols-12 text-white text-sm h-[50px] ${rowBg} cursor-pointer transition hover:bg-data-textbox-bg/50 ${isHighlighted ? "animate-flash-highlight" : ""}`}
+                className={`grid grid-cols-10 md:grid-cols-12 text-text-primary text-sm h-[50px] ${rowBg} cursor-pointer transition hover:bg-data-textbox-bg/50 ${isHighlighted ? "animate-flash-highlight" : ""}`}
             >
 
                 {/* Msg ID column */}
@@ -121,7 +121,7 @@ export default function DataRow({ msgID, name, category, data, rawData, index, i
                     <span className="truncate flex-1">
                         {isUnknown ? (
                             <div className="flex items-center gap-2">
-                                <span className="px-2 py-0.5 text-[11px] font-bold text-white bg-rose-600 rounded" title="Not defined in DBC">
+                                <span className="px-2 py-0.5 text-[11px] font-bold text-[#fff] bg-rose-600 rounded" title="Not defined in DBC">
                                     UNKNOWN
                                 </span>
                                 <span className="text-sidebarfg opacity-80 text-sm font-mono">{formatMsgId(msgID)}</span>
@@ -172,12 +172,12 @@ export default function DataRow({ msgID, name, category, data, rawData, index, i
                     {/* Two-column grid of label/value rows */}
                     <div className="grid grid-cols-5 border-3 border-data-textbox-bg">
                         <div className="col-span-2">
-                            <div className="w-full text-white text-sm font-semibold py-2 px-3 text-left border-b-3 border-data-textbox-bg bg-data-textbox-bg/50">
+                            <div className="w-full text-text-primary text-sm font-semibold py-2 px-3 text-left border-b-3 border-data-textbox-bg bg-data-textbox-bg/50">
                                 Sensor
                             </div>
                         </div>
                         <div className="col-span-3">
-                            <div className="w-full text-white text-sm font-semibold py-2 px-3 text-left border-b-3 border-l-3 border-data-textbox-bg bg-data-textbox-bg/50">
+                            <div className="w-full text-text-primary text-sm font-semibold py-2 px-3 text-left border-b-3 border-l-3 border-data-textbox-bg bg-data-textbox-bg/50">
                                 Value
                             </div>
                         </div>
@@ -198,13 +198,13 @@ export default function DataRow({ msgID, name, category, data, rawData, index, i
                                     >
                                         <div
                                             id={isTourRow && (tourSignal ? label === tourSignal : idx === 0) ? "tour-signal-label" : undefined}
-                                            className="w-full text-white text-sm font-semibold py-2 px-3 text-left break-words"
+                                            className="w-full text-text-primary text-sm font-semibold py-2 px-3 text-left break-words"
                                         >
                                             {label}
                                         </div>
                                     </div>
                                     <div className="col-span-3 border-l-3 border-data-textbox-bg overflow-hidden">
-                                        <div className="w-full text-white text-sm font-semibold py-2 px-3 text-left truncate">
+                                        <div className="w-full text-text-primary text-sm font-semibold py-2 px-3 text-left truncate">
                                             {value}
                                         </div>
                                     </div>

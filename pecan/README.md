@@ -21,6 +21,30 @@ Drag-and-drop signal monitoring canvas.
 - **Multiple view modes** - Cards, list, and flow diagram visualizations
 - **Interactive charts** - Plotly.js-powered data visualization
 - **Customizable categories** - Organize messages by system (VCU, BMS, INV, etc.)
+- **User-selectable themes** - Dark, Light, and Pumpkin Spice, persisted in the browser
+
+## Themes
+
+PECAN ships three user-selectable appearances, chosen in **Settings → Theme**:
+
+| Settings label | Stored value | Class | Appearance |
+|---|---|---|---|
+| Dark | `dark` | `.theme-dark` | Neutral dark (default for public builds) |
+| Light | `light` | `.theme-light` | Cool gray surfaces with dark slate text |
+| Pumpkin Spice | `psl` | `.theme-psl` | Dark espresso surfaces, cream text, pumpkin/cinnamon accents |
+
+`next-themes` stores the selection under **`pecan:theme`** in `localStorage` and applies the matching class on `<html>`. Internal builds still default to the operational `internal` value (same palette as Dark) via `VITE_INTERNAL`.
+
+**Local CAN** is not a Settings option. Connecting a USB serial adapter temporarily applies the blue `local-can` operational theme. PECAN records the exact `pecan:theme` value first, then restores that same user theme after disconnect or a failed serial setup.
+
+### Where to maintain tokens and hooks
+
+- Palette / CSS variables: `src/index.css` (`@theme` defaults, then `.theme-dark`, `.theme-light`, `.theme-psl`, `.theme-internal`, `.theme-local-can`)
+- Theme names, class map, and `pecan:theme` helpers: `src/theme/theme.ts`
+- Local-CAN request bridge: `src/theme/ThemeRequestBridge.tsx` (listens for `pecan:theme-request`)
+- Charts, canvas, Plotly, Recharts, React Flow: `src/theme/useThemeColors.ts` — read computed tokens after the class change so visualizations repaint without reload
+
+Add new semantic colors to every theme class that should change them visually. Prefer token utilities (`text-text-muted`, `bg-data-module-bg`, `ring-focus`) over component-specific hex.
 
 ## Architecture
 
@@ -249,6 +273,7 @@ pecan/
 │   │   ├── canProcessor.ts      # Main CAN parsing logic
 │   │   ├── canProcessor.test.ts # Unit tests
 │   │   └── parsePhysValue.test.ts # Helper tests
+│   ├── theme/          # Theme registry, CSS token hook, local-CAN bridge
 │   ├── assets/         # DBC files and static assets
 │   └── lib/            # Data store
 ├── public/             # Static files

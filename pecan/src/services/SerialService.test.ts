@@ -28,6 +28,38 @@ vi.mock("../utils/canProcessor", () => ({
 }));
 
 import { SerialService } from "./SerialService";
+import { THEME_REQUEST_EVENT } from "../theme/theme";
+
+function collectThemeRequests() {
+  const themes: string[] = [];
+  const handler = (event: Event) => {
+    themes.push((event as CustomEvent<{ theme: string }>).detail.theme);
+  };
+  window.addEventListener(THEME_REQUEST_EVENT, handler);
+  return {
+    themes,
+    stop: () => window.removeEventListener(THEME_REQUEST_EVENT, handler),
+  };
+}
+
+async function connectWithMockPort(overrides?: { failSetup?: boolean }) {
+  const port = buildMockPort();
+  if (overrides?.failSetup) {
+    port.writable.getWriter = () => {
+      throw new Error("setup failed");
+    };
+  }
+  Object.defineProperty(globalThis.navigator, "serial", {
+    value: {
+      requestPort: vi.fn(async () => port),
+      getPorts: vi.fn(async () => []),
+    },
+    configurable: true,
+  });
+  const service = new SerialService();
+  const ok = await service.connect();
+  return { service, port, ok };
+}
 
 function buildMockPort() {
   const write = vi.fn(async () => {});
@@ -50,6 +82,7 @@ describe("SerialService", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal("alert", vi.fn());
+    localStorage.clear();
   });
 
   it("returns false when Web Serial API is unavailable", async () => {
@@ -114,5 +147,49 @@ describe("SerialService", () => {
         rawData: "AA BB",
       })
     );
+  });
+
+  it("requests local-can after a successful connection", async () => {
+    const requests = collectThemeRequests();
+    const { ok } = await connectWithMockPort();
+    requests.stop();
+
+    expect(ok).toBe(true);
+    expect(requests.themes).toEqual(["local-can"]);
+  });
+
+  it("requests psl on disconnect when that was the stored theme", async () => {
+    localStorage.setItem("pecan:theme", "psl");
+    const requests = collectThemeRequests();
+    const { service, ok } = await connectWithMockPort();
+    expect(ok).toBe(true);
+
+    await service.disconnect();
+    requests.stop();
+
+    expect(requests.themes).toEqual(["local-can", "psl"]);
+  });
+
+  it("restores dark on disconnect when no theme is stored", async () => {
+    const requests = collectThemeRequests();
+    const { service, ok } = await connectWithMockPort();
+    expect(ok).toBe(true);
+
+    await service.disconnect();
+    requests.stop();
+
+    expect(requests.themes).toEqual(["local-can", "dark"]);
+  });
+
+  it("restores the previous theme and re-enables ingestion when setup fails after opening", async () => {
+    localStorage.setItem("pecan:theme", "light");
+    const requests = collectThemeRequests();
+    const { ok, port } = await connectWithMockPort({ failSetup: true });
+    requests.stop();
+
+    expect(ok).toBe(false);
+    expect(port.open).toHaveBeenCalledWith({ baudRate: 115200 });
+    expect(requests.themes).toEqual(["local-can", "light"]);
+    expect(mocks.setSuppressIngestion).toHaveBeenCalledWith(false);
   });
 });

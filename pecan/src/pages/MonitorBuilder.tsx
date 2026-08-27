@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import ReactFlow, {
   ReactFlowProvider,
   addEdge,
@@ -23,6 +23,14 @@ import type { MonitorPreset } from '../lib/firebase';
 import { DataFlowProvider, useDataFlow } from '../context/DataFlowContext';
 import { Plus, Minus, X, Divide, Sigma, Activity, Sliders, Cpu } from 'lucide-react';
 import NotNotGame from '../components/NotNotGame';
+import { useThemeColors, type ThemeColors } from '../theme/useThemeColors';
+
+function flowNodeStyle(colors: ThemeColors, keepStatusBackground: boolean) {
+  return {
+    color: colors.flowNodeText,
+    ...(keepStatusBackground ? {} : { backgroundColor: colors.flowNodeBackground }),
+  };
+}
 
 // Custom Node Component
 const SensorNode = ({ id, data }: { id: string; data: { msgID: string; signalName: string } }) => {
@@ -30,6 +38,7 @@ const SensorNode = ({ id, data }: { id: string; data: { msgID: string; signalNam
   const { updateNodeValue } = useDataFlow();
   const signalData = useSignal(data.msgID, data.signalName);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const colors = useThemeColors();
 
   useEffect(() => {
     if (signalData) {
@@ -56,6 +65,7 @@ const SensorNode = ({ id, data }: { id: string; data: { msgID: string; signalNam
   return (
     <div
       className={`relative p-4 rounded-md shadow-lg border text-white min-w-[180px] max-w-[250px] transition-all duration-300 cursor-pointer ${showDeleteConfirm ? 'bg-red-900/80 border-red-500 scale-105' : 'bg-data-module-bg border-gray-600'}`}
+      style={flowNodeStyle(colors, showDeleteConfirm)}
       onClick={handleNodeClick}
     >
       <Handle type="source" position={Position.Top} id="top" className="!bg-blue-500 w-4 h-4 border-2 border-white" />
@@ -82,6 +92,7 @@ const RangeNode = ({ id, data }: { id: string, data: { msgID: string; signalName
   const { setNodes } = useReactFlow();
   const signalData = useSignal(data.msgID, data.signalName);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const colors = useThemeColors();
 
   useEffect(() => {
     if (showDeleteConfirm) {
@@ -120,6 +131,7 @@ const RangeNode = ({ id, data }: { id: string, data: { msgID: string; signalName
   return (
     <div
       className={`relative p-4 rounded-md shadow-lg border transition-all duration-300 min-w-[200px] cursor-pointer ${showDeleteConfirm ? 'bg-red-900/80 border-red-500 scale-105' : isAlert ? 'bg-red-900/90 border-red-500 animate-pulse' : 'bg-data-module-bg border-gray-600'}`}
+      style={flowNodeStyle(colors, showDeleteConfirm || isAlert)}
       onClick={handleNodeClick}
     >
       {/* Handles */}
@@ -172,6 +184,7 @@ const MathNode = ({ id, data }: { id: string; data: { operation: string } }) => 
   const edges = useEdges();
   const { getNodeValue, updateNodeValue } = useDataFlow();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const colors = useThemeColors();
 
   // Find source nodes connected to this node
   const inputA_Edge = edges.find((e) => e.target === id && e.targetHandle === 'a');
@@ -229,6 +242,7 @@ const MathNode = ({ id, data }: { id: string; data: { operation: string } }) => 
   return (
     <div
       className={`relative p-4 rounded-md shadow-lg border text-white min-w-[180px] transition-all duration-300 cursor-pointer ${showDeleteConfirm ? 'bg-red-900/80 border-red-500 scale-105' : 'bg-gray-800 border-gray-600'}`}
+      style={flowNodeStyle(colors, showDeleteConfirm)}
       onClick={handleNodeClick}
     >
       {showDeleteConfirm && (
@@ -269,6 +283,7 @@ const AverageNode = ({ id, data }: { id: string; data: { windowSize?: string } }
   const { getNodeValue, updateNodeValue } = useDataFlow();
   const [history, setHistory] = useState<number[]>([]);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const colors = useThemeColors();
 
   const windowSize = data.windowSize ? parseInt(data.windowSize) : 10;
   const inputEdge = edges.find((e) => e.target === id);
@@ -322,6 +337,7 @@ const AverageNode = ({ id, data }: { id: string; data: { windowSize?: string } }
   return (
     <div
       className={`relative p-4 rounded-md shadow-lg border text-white min-w-[180px] transition-all duration-300 cursor-pointer ${showDeleteConfirm ? 'bg-red-900/80 border-red-500 scale-105' : 'bg-gray-800 border-gray-600'}`}
+      style={flowNodeStyle(colors, showDeleteConfirm)}
       onClick={handleNodeClick}
     >
       {showDeleteConfirm && (
@@ -362,6 +378,7 @@ const AdvancedMathNode = ({ id, data }: { id: string; data: { expression?: strin
   const edges = useEdges();
   const { getNodeValue, updateNodeValue } = useDataFlow();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const colors = useThemeColors();
 
   const expression = data.expression || 'A + B';
   const inputs = ['a', 'b', 'c', 'd'].map(h => {
@@ -425,6 +442,7 @@ const AdvancedMathNode = ({ id, data }: { id: string; data: { expression?: strin
   return (
     <div
       className={`relative p-4 rounded-md shadow-lg border text-white min-w-[220px] transition-all duration-300 cursor-pointer ${showDeleteConfirm ? 'bg-red-900/80 border-red-500 scale-105' : 'bg-gray-800 border-indigo-600 shadow-indigo-500/20'}`}
+      style={flowNodeStyle(colors, showDeleteConfirm)}
       onClick={handleNodeClick}
     >
       {showDeleteConfirm && (
@@ -486,6 +504,7 @@ const MonitorBuilder = () => {
   const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
   const [dragMode, setDragMode] = useState<'sensor' | 'range' | 'math' | 'average' | 'advanced'>('sensor');
   const [isGameOpen, setIsGameOpen] = useState(false);
+  const colors = useThemeColors();
 
   // Preset Management
   const { session, saveConfig, loadConfig } = useRemoteConfig();
@@ -631,8 +650,8 @@ const MonitorBuilder = () => {
   });
 
   const onConnect = useCallback(
-    (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, type: 'smoothstep', pathOptions: { borderRadius: 10 }, animated: true, style: { stroke: '#fff', strokeDasharray: '5 5' } }, eds)),
-    [setEdges]
+    (params: Connection | Edge) => setEdges((eds) => addEdge({ ...params, type: 'smoothstep', pathOptions: { borderRadius: 10 }, animated: true, style: { stroke: colors.flowEdge, strokeDasharray: '5 5' } }, eds)),
+    [setEdges, colors]
   );
 
   const onEdgeDoubleClick = useCallback(
@@ -724,6 +743,14 @@ const MonitorBuilder = () => {
       setSelectedSignal(null); // Clear selection after placement
     },
     [reactFlowInstance, selectedSignal, dragMode, setNodes]
+  );
+
+  const themedEdges = useMemo(
+    () => edges.map((edge) => ({
+      ...edge,
+      style: { ...edge.style, stroke: colors.flowEdge },
+    })),
+    [edges, colors]
   );
 
   return (
@@ -896,9 +923,19 @@ const MonitorBuilder = () => {
 
           {/* ReactFlow Canvas */}
           <div className="flex-1">
+            <style>{`
+              .react-flow__controls.pecan-flow-controls .react-flow__controls-button {
+                background: ${colors.flowNodeBackground};
+                border-bottom-color: ${colors.border};
+                fill: ${colors.flowNodeText};
+              }
+              .react-flow__controls.pecan-flow-controls .react-flow__controls-button svg {
+                fill: ${colors.flowNodeText};
+              }
+            `}</style>
             <ReactFlow
               nodes={nodes}
-              edges={edges}
+              edges={themedEdges}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onConnect={onConnect}
@@ -909,11 +946,12 @@ const MonitorBuilder = () => {
               onPaneClick={onPaneClick}
               nodeTypes={nodeTypes}
               connectionMode={ConnectionMode.Loose}
+              defaultEdgeOptions={{ style: { stroke: colors.flowEdge } }}
               fitView
               className="bg-sidebar"
             >
-              <Controls />
-              <Background color="#444" gap={16} />
+              <Controls className="pecan-flow-controls" />
+              <Background color={colors.flowGrid} gap={16} />
             </ReactFlow>
           </div>
         </div>

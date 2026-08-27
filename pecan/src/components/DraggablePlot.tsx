@@ -47,20 +47,20 @@ export default function DraggablePlot({ isOpen, onClose, signalInfo }: Draggable
     return (
         <div
             ref={windowRef}
-            className="fixed bottom-4 right-4 z-50 flex flex-col bg-data-module-bg rounded-lg shadow-2xl border border-gray-700 w-[600px] overflow-hidden"
+            className="fixed bottom-4 right-4 z-50 flex flex-col bg-data-module-bg rounded-lg shadow-2xl border border-border w-[600px] overflow-hidden"
             style={{
                 transform: `translate(${position.x}px, ${position.y}px)`,
             }}
         >
             {/* Drag Handle */}
             <div
-                className="bg-gray-800 p-1 cursor-grab active:cursor-grabbing flex justify-center items-center hover:bg-gray-700 transition-colors touch-none"
+                className="bg-option p-1 cursor-grab active:cursor-grabbing flex justify-center items-center hover:bg-option-select transition-colors touch-none"
                 onPointerDown={handlePointerDown}
                 onPointerMove={handlePointerMove}
                 onPointerUp={handlePointerUp}
                 onPointerCancel={handlePointerUp}
             >
-                <GripHorizontal size={16} className="text-gray-400" />
+                <GripHorizontal size={16} className="text-text-muted" />
             </div>
 
             <div className="p-1">

@@ -4,21 +4,16 @@ import { dataStore } from "../lib/DataStore";
 import { createGrafanaDashboard } from "../services/GrafanaService";
 import { useTimeline } from "../context/TimelineContext";
 import { getSignalAxisDef, getValueDefs } from "../utils/canProcessor";
+import { useThemeColors, type ThemeColors } from "../theme/useThemeColors";
 
 const PLOT_AXIS_RANGE_KEY = "pecan:plot-axis-range-source";
 const STATE_OVERLAY_MSG_ID = "0x7D2";
 const STATE_OVERLAY_SIGNAL = "State";
 
-// Standard Nivo colors (or similar palette) to ensure consistency between plot and list
-const PLOT_COLORS = [
-  "#e8c1a0",
-  "#f47560",
-  "#f1e15b",
-  "#e8a838",
-  "#61cdbb",
-  "#97e3d5",
-  "#00bbcc",
-];
+function plotSeriesColor(colors: ThemeColors, index: number): string {
+  const palette = [colors.primary, colors.secondary, colors.success, colors.warning, colors.danger];
+  return palette[index % palette.length];
+}
 
 // Returns downsample resolution in ms, or null for no downsampling (raw points).
 function calculateDownsampleResolution(windowMs: number): number | null {
@@ -55,6 +50,7 @@ function PlotManager({
   const plotRef = useRef<HTMLDivElement>(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const { checkpoints } = useTimeline();
+  const colors = useThemeColors();
 
   // Initialize the plot
   useEffect(() => {
@@ -66,15 +62,17 @@ function PlotManager({
       xaxis: {
         title: "Time (s)",
         autorange: true,
+        gridcolor: colors.grid,
       },
       yaxis: {
         title: "Value",
         autorange: true,
+        gridcolor: colors.grid,
       },
       margin: { t: 40, r: 20, b: 40, l: 60 },
-      paper_bgcolor: "#0d0c11",
-      plot_bgcolor: "#20202f",
-      font: { color: "#ffffff" },
+      paper_bgcolor: colors.background,
+      plot_bgcolor: colors.surface,
+      font: { color: colors.text },
       showlegend: false,
     };
 
@@ -88,7 +86,7 @@ function PlotManager({
 
     Plotly.newPlot(plotRef.current, [], layout, config);
     setIsInitialized(true);
-  }, [plotId, isInitialized]);
+  }, [plotId, isInitialized, colors]);
 
   // Update plot data
   useEffect(() => {
@@ -108,12 +106,6 @@ function PlotManager({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const traces: any[] = [];
 
-      // Read theme-aware colors from CSS variables
-      const styles = getComputedStyle(document.body);
-      const paperBg = styles.getPropertyValue("--color-background").trim() || "#0d0c11";
-      const plotBg = styles.getPropertyValue("--color-data-module-bg").trim() || "#20202f";
-      const fontColor = styles.getPropertyValue("--color-text-primary").trim() || "#ffffff";
-
       const visibleCheckpointLines = checkpoints
         .filter(
           (checkpoint) =>
@@ -130,7 +122,7 @@ function PlotManager({
             y0: 0,
             y1: 1,
             line: {
-              color: "rgba(251, 191, 36, 0.65)",
+              color: colors.checkpoint,
               width: 1,
               dash: "dot",
             },
@@ -153,12 +145,12 @@ function PlotManager({
             showarrow: false,
             xanchor: "left",
             yanchor: "bottom",
-            bgcolor: "rgba(251, 191, 36, 0.22)",
-            bordercolor: "rgba(251, 191, 36, 0.55)",
+            bgcolor: colors.checkpointBackground,
+            bordercolor: colors.checkpoint,
             borderpad: 2,
             font: {
               size: 10,
-              color: "#fde68a",
+              color: colors.checkpoint,
             },
             align: "left",
           };
@@ -209,7 +201,7 @@ function PlotManager({
             x1: t.x,
             y0: 0,
             y1: 1,
-            line: { color: "rgba(96, 165, 250, 0.55)", width: 1, dash: "dash" },
+            line: { color: colors.state, width: 1, dash: "dash" },
           });
           const widthSec = (t.label.length * CHAR_PX + PAD_PX) / pxPerSec;
           // First lane whose previous label has cleared; else the one that frees soonest.
@@ -233,10 +225,10 @@ function PlotManager({
             showarrow: false,
             xanchor: "left",
             yanchor: "bottom",
-            bgcolor: "rgba(96, 165, 250, 0.18)",
-            bordercolor: "rgba(96, 165, 250, 0.5)",
+            bgcolor: colors.stateBackground,
+            bordercolor: colors.state,
             borderpad: 2,
-            font: { size: 9, color: "#bfdbfe" },
+            font: { size: 9, color: colors.state },
           });
         }
       }
@@ -305,7 +297,7 @@ function PlotManager({
             name: `${signal.messageName} - ${signal.signalName}`,
             line: {
                 width: 2,
-                color: PLOT_COLORS[index % PLOT_COLORS.length],
+                color: plotSeriesColor(colors, index),
             },
             ...traceExtras,
           });
@@ -342,7 +334,7 @@ function PlotManager({
         // Multi-signal plot: shade y-axis with each signal's enum labels in legend color.
         // Stack labels vertically (yshift) on the same column when multiple signals share a y-value.
         const enumSignals = signals
-          .map((s, idx) => ({ signal: s, color: PLOT_COLORS[idx % PLOT_COLORS.length], defs: getValueDefs(s.signalName) }))
+          .map((s, idx) => ({ signal: s, color: plotSeriesColor(colors, idx), defs: getValueDefs(s.signalName) }))
           .filter((e) => e.defs);
 
         if (enumSignals.length > 0) {
@@ -370,23 +362,25 @@ function PlotManager({
         }
       }
 
-      if (traces.length > 0 && plotRef.current) {
+      if (plotRef.current) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const updatedLayout: any = {
           title: `Plot ${plotId}`,
           xaxis: {
             title: "Time (s)",
             range: [-(timeWindowMs / 1000), 0],
+            gridcolor: colors.grid,
           },
           yaxis: {
             title: signals.length === 1 ? (useDbcRange ? getSignalAxisDef(signals[0].signalName)?.unit : undefined) || signals[0].unit || "Value" : "Value",
             autorange: !Object.keys(yaxisEnumConfig).length,
             ...yaxisEnumConfig,
+            gridcolor: colors.grid,
           },
           margin: { t: 40, r: 20, b: 40, l: leftMargin },
-          paper_bgcolor: paperBg,
-          plot_bgcolor: plotBg,
-          font: { color: fontColor },
+          paper_bgcolor: colors.background,
+          plot_bgcolor: colors.surface,
+          font: { color: colors.text },
           showlegend: false,
           shapes: [...visibleCheckpointLines, ...stateLines],
           annotations: [...checkpointAnnotations, ...stateAnnotations, ...enumAnnotations],
@@ -404,7 +398,7 @@ function PlotManager({
 
     const updateInterval = setInterval(updatePlot, 100);
     return () => clearInterval(updateInterval);
-  }, [signals, timeWindowMs, isInitialized, plotId, cursorTimeMs, isLive, checkpoints]);
+  }, [signals, timeWindowMs, isInitialized, plotId, cursorTimeMs, isLive, checkpoints, colors]);
 
   const [grafanaStatus, setGrafanaStatus] = useState<
     "idle" | "loading" | "success" | "error"
@@ -451,7 +445,7 @@ function PlotManager({
               <div
                 className="w-3 h-3 rounded-full mr-2 shrink-0"
                 style={{
-                  backgroundColor: PLOT_COLORS[index % PLOT_COLORS.length],
+                  backgroundColor: plotSeriesColor(colors, index),
                 }}
               />
               <span>

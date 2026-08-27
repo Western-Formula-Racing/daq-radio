@@ -88,7 +88,7 @@ function PlotControls({
       }}
     >
       <div className="p-2 border-b border-white/10">
-        <div className="text-xs text-gray-400">
+        <div className="text-xs text-[#fff]">
           {signalInfo.messageName}
         </div>
         <div className="text-sm font-semibold text-white">

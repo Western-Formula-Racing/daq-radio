@@ -17,6 +17,21 @@ import NotNotGame from "./NotNotGame";
 import { useDataStoreControls } from "../lib/useDataStore";
 import { DbcSelector } from "./DbcSelector";
 import { useTheme } from "next-themes";
+import { USER_THEMES, isAppTheme, type UserTheme } from "../theme/theme";
+
+const USER_THEME_LABELS = {
+    dark: "Dark",
+    light: "Light",
+    psl: "Pumpkin Spice",
+} as const satisfies Record<UserTheme, string>;
+
+const USER_THEME_OPTIONS = USER_THEMES.map((id) => ({
+    id,
+    label: USER_THEME_LABELS[id],
+}));
+
+const FIELD_CLASS =
+    "bg-data-textbox-bg text-text-primary px-2 py-1 text-sm rounded border border-border focus:border-focus outline-none";
 
 const RETENTION_STORAGE_KEY = "pecan:retention-window-ms";
 const PLOT_AXIS_RANGE_STORAGE_KEY = "pecan:plot-axis-range-source";
@@ -157,7 +172,6 @@ function SettingsModal({ isOpen, onClose, bannerApi }: Readonly<SettingsModalPro
     });
 
     const { theme: nextTheme, setTheme } = useTheme();
-    const theme: "dark" | "light" = nextTheme === "light" ? "light" : "dark";
 
     const { session, loadConfig, saveConfig } = useRemoteConfig();
     const [categoryText, setCategoryText] = useState("");
@@ -254,7 +268,7 @@ function SettingsModal({ isOpen, onClose, bannerApi }: Readonly<SettingsModalPro
                 {/* Close button */}
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors cursor-pointer"
+                    className="absolute top-4 right-4 text-text-muted hover:text-text-primary transition-colors cursor-pointer"
                     aria-label="Close settings"
                 >
                     <svg
@@ -324,7 +338,7 @@ function SettingsModal({ isOpen, onClose, bannerApi }: Readonly<SettingsModalPro
                                         <input
                                             type="text"
                                             placeholder="ws://localhost:9080"
-                                            className="bg-zinc-800 text-white px-2 py-1 text-sm rounded border border-gray-600 focus:border-blue-500 outline-none flex-1 min-w-0 md:w-48 h-9"
+                                            className={`${FIELD_CLASS} flex-1 min-w-0 md:w-48 h-9`}
                                             value={customWsUrl}
                                             onChange={(e) => setCustomWsUrl(e.target.value)}
                                         />
@@ -383,7 +397,7 @@ function SettingsModal({ isOpen, onClose, bannerApi }: Readonly<SettingsModalPro
                                     <textarea
                                         rows={4}
                                         placeholder={DEFAULT_WS_FAILOVER_URLS.join("\n")}
-                                        className="bg-zinc-800 text-white px-2 py-1.5 text-sm rounded border border-gray-600 focus:border-blue-500 outline-none font-mono w-full resize-y min-h-[5.5rem]"
+                                        className={`${FIELD_CLASS} py-1.5 font-mono w-full resize-y min-h-[5.5rem]`}
                                         value={wsCandidatesText}
                                         onChange={(e) => setWsCandidatesText(e.target.value)}
                                         autoComplete="off"
@@ -427,29 +441,35 @@ function SettingsModal({ isOpen, onClose, bannerApi }: Readonly<SettingsModalPro
                                             window.dispatchEvent(new CustomEvent("perf-overlay-changed"));
                                         }}
                                     />
-                                    <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    <div className="w-11 h-6 bg-data-textbox-bg peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-border after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-banner-button"></div>
                                 </label>
                             </div>
 
                             {/* Theme Toggle */}
-                            <div className="flex flex-col md:flex-row w-full rounded-lg text-white bg-option gap-2 md:justify-between md:items-center px-4 py-3">
+                            <div className="flex flex-col md:flex-row w-full rounded-lg text-text-primary bg-option gap-2 md:justify-between md:items-center px-4 py-3">
                                 <div className="flex flex-col">
                                     <span className="text-sm font-medium">Theme</span>
-                                    <span className="text-xs text-gray-400">Switch between dark and light appearance</span>
+                                    <span className="text-xs text-text-muted">Switch between dark, light, and pumpkin spice appearance</span>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => setTheme("dark")}
-                                        className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${theme === "dark" ? "bg-blue-600 border-blue-500 text-white" : "border-gray-500 text-gray-400 hover:border-gray-300 hover:text-gray-200"}`}
-                                    >
-                                        Dark
-                                    </button>
-                                    <button
-                                        onClick={() => setTheme("light")}
-                                        className={`px-3 py-1.5 text-sm rounded-md border transition-colors ${theme === "light" ? "bg-blue-600 border-blue-500 text-white" : "border-gray-500 text-gray-400 hover:border-gray-300 hover:text-gray-200"}`}
-                                    >
-                                        Light
-                                    </button>
+                                <div role="group" aria-label="Theme" className="flex items-center gap-2">
+                                    {USER_THEME_OPTIONS.map((option) => {
+                                        const pressed = isAppTheme(nextTheme) && nextTheme === option.id;
+                                        return (
+                                            <button
+                                                key={option.id}
+                                                type="button"
+                                                aria-pressed={pressed}
+                                                onClick={() => setTheme(option.id)}
+                                                className={`px-3 py-1.5 text-sm rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 ${
+                                                    pressed
+                                                        ? "bg-option-select border-border-strong text-text-primary"
+                                                        : "border-border text-text-muted hover:border-border-strong hover:text-text-secondary"
+                                                }`}
+                                            >
+                                                {option.label}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
 
@@ -461,7 +481,7 @@ function SettingsModal({ isOpen, onClose, bannerApi }: Readonly<SettingsModalPro
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <select
-                                        className="bg-zinc-800 text-white px-2 py-1 text-sm rounded border border-gray-600 focus:border-blue-500 outline-none h-9"
+                                        className={`${FIELD_CLASS} h-9`}
                                         value={retentionWindowMs}
                                         onChange={(e) => {
                                             const next = Number(e.target.value);
@@ -487,7 +507,7 @@ function SettingsModal({ isOpen, onClose, bannerApi }: Readonly<SettingsModalPro
                                 </div>
                                 <div className="flex gap-2 items-center">
                                     <select
-                                        className="bg-zinc-800 text-white px-2 py-1 text-sm rounded border border-gray-600 focus:border-blue-500 outline-none h-9"
+                                        className={`${FIELD_CLASS} h-9`}
                                         value={plotAxisRangeSource}
                                         onChange={(e) => {
                                             const next = e.target.value as "dbc" | "dynamic";
@@ -535,16 +555,16 @@ function SettingsModal({ isOpen, onClose, bannerApi }: Readonly<SettingsModalPro
                                         <Info className="w-5 h-5 text-blue-400" />
                                         <span className="text-sm font-medium">Kvaser Bridge Setup</span>
                                     </div>
-                                    <div className="flex bg-zinc-800 rounded-lg p-0.5 border border-gray-700">
+                                    <div className="flex bg-data-textbox-bg rounded-lg p-0.5 border border-border">
                                         <button
                                             onClick={() => setBridgeOs("linux")}
-                                            className={`px-3 py-1 text-[10px] font-medium rounded-md transition-all ${bridgeOs === "linux" ? "bg-blue-600 text-white shadow-lg" : "text-gray-400 hover:text-gray-200"}`}
+                                            className={`px-3 py-1 text-[10px] font-medium rounded-md transition-all ${bridgeOs === "linux" ? "bg-option-select text-text-primary shadow-lg" : "text-text-muted hover:text-text-secondary"}`}
                                         >
                                             LINUX
                                         </button>
                                         <button
                                             onClick={() => setBridgeOs("windows")}
-                                            className={`px-3 py-1 text-[10px] font-medium rounded-md transition-all ${bridgeOs === "windows" ? "bg-blue-600 text-white shadow-lg" : "text-gray-400 hover:text-gray-200"}`}
+                                            className={`px-3 py-1 text-[10px] font-medium rounded-md transition-all ${bridgeOs === "windows" ? "bg-option-select text-text-primary shadow-lg" : "text-text-muted hover:text-text-secondary"}`}
                                         >
                                             WINDOWS
                                         </button>
@@ -564,7 +584,7 @@ function SettingsModal({ isOpen, onClose, bannerApi }: Readonly<SettingsModalPro
                                     </div>
                                     <div className="space-y-2">
                                         <p className="text-gray-300 font-medium">Quick Start ({bridgeOs === "linux" ? "Linux" : "Windows"}):</p>
-                                        <div className="bg-zinc-800 p-3 rounded font-mono text-[11px] space-y-1 border border-gray-700">
+                                        <div className="bg-data-textbox-bg p-3 rounded font-mono text-[11px] space-y-1 border border-border">
                                             <div className="text-emerald-500"># Navigate to bridge directory</div>
                                             <div>cd kvaser-bridge</div>
                                             <div className="text-emerald-500 mt-2"># Create and activate virtual environment</div>
@@ -616,7 +636,7 @@ function SettingsModal({ isOpen, onClose, bannerApi }: Readonly<SettingsModalPro
                                     Format: <code>CategoryName,TailwindColorClass,MessageIDs</code> (e.g., <code>BMS,bg-orange-400,256-300</code>). Automatically synced via Firebase.
                                 </p>
                                 <textarea
-                                    className="w-full h-32 bg-zinc-800 text-slate-300 text-xs font-mono p-3 rounded border border-gray-600 focus:border-blue-500 outline-none resize-y"
+                                    className="w-full h-32 bg-data-textbox-bg text-text-primary text-xs font-mono p-3 rounded border border-border focus:border-focus outline-none resize-y"
                                     value={categoryText}
                                     onChange={(e) => setCategoryText(e.target.value)}
                                     spellCheck={false}

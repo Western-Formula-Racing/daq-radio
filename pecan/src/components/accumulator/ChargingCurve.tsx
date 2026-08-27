@@ -17,6 +17,7 @@ import {
 } from 'recharts';
 import { readHistory } from '../../lib/cursorRead';
 import { useTimelineCursor } from '../../context/TimelineContext';
+import { useThemeColors } from '../../theme/useThemeColors';
 import {
     MODULE_IDS,
     CELLS_PER_MODULE,
@@ -41,15 +42,7 @@ export default function ChargingCurve({
 }: ChargingCurveProps) {
     const { mode, selectedTimeMs } = useTimelineCursor();
     const [data, setData] = useState<ChartDataPoint[]>([]);
-
-    const chartColors = useMemo(() => {
-        const styles = getComputedStyle(document.body);
-        return {
-            tickColor: styles.getPropertyValue("--color-text-muted").trim() || "#9ca3af",
-            axisColor: styles.getPropertyValue("--color-border-strong").trim() || "#374151",
-            tooltipBg: styles.getPropertyValue("--color-data-module-bg").trim() || "#1f2937",
-        };
-    }, [data]);
+    const colors = useThemeColors();
 
     // Update chart data every second
     useEffect(() => {
@@ -161,38 +154,38 @@ export default function ChargingCurve({
                         dataKey="time"
                         type="number"
                         domain={[-(timeWindowMs / 1000), 0]}
-                        tick={{ fill: chartColors.tickColor, fontSize: 10 }}
+                        tick={{ fill: colors.mutedText, fontSize: 10 }}
                         tickFormatter={(v) => `${v}s`}
-                        axisLine={{ stroke: chartColors.axisColor }}
-                        tickLine={{ stroke: chartColors.axisColor }}
+                        axisLine={{ stroke: colors.border }}
+                        tickLine={{ stroke: colors.border }}
                     />
                     <YAxis
                         yAxisId="voltage"
                         domain={voltageRange}
-                        tick={{ fill: '#22c55e', fontSize: 10 }}
+                        tick={{ fill: colors.success, fontSize: 10 }}
                         tickFormatter={(v) => `${v.toFixed(1)}V`}
-                        axisLine={{ stroke: chartColors.axisColor }}
-                        tickLine={{ stroke: chartColors.axisColor }}
+                        axisLine={{ stroke: colors.border }}
+                        tickLine={{ stroke: colors.border }}
                         width={45}
                     />
                     <YAxis
                         yAxisId="temp"
                         orientation="right"
                         domain={tempRange}
-                        tick={{ fill: '#f97316', fontSize: 10 }}
+                        tick={{ fill: colors.warning, fontSize: 10 }}
                         tickFormatter={(v) => `${v}°`}
-                        axisLine={{ stroke: chartColors.axisColor }}
-                        tickLine={{ stroke: chartColors.axisColor }}
+                        axisLine={{ stroke: colors.border }}
+                        tickLine={{ stroke: colors.border }}
                         width={35}
                     />
                     <Tooltip
                         contentStyle={{
-                            backgroundColor: chartColors.tooltipBg,
-                            border: `1px solid ${chartColors.axisColor}`,
+                            backgroundColor: colors.surface,
+                            border: `1px solid ${colors.border}`,
                             borderRadius: '4px',
                             fontSize: '11px',
                         }}
-                        labelStyle={{ color: chartColors.tickColor }}
+                        labelStyle={{ color: colors.mutedText }}
                         formatter={(value, name) => {
                             if (value === undefined) return ['--', name];
                             const v = value as number;
@@ -206,7 +199,7 @@ export default function ChargingCurve({
                     <Legend
                         wrapperStyle={{ fontSize: '10px', paddingTop: '4px' }}
                         formatter={(value) => (
-                            <span style={{ color: value === 'voltage' ? '#22c55e' : '#f97316' }}>
+                            <span style={{ color: value === 'voltage' ? colors.success : colors.warning }}>
                                 {value === 'voltage' ? 'Voltage' : 'Temp'}
                             </span>
                         )}
@@ -215,7 +208,7 @@ export default function ChargingCurve({
                         yAxisId="voltage"
                         type="monotone"
                         dataKey="voltage"
-                        stroke="#22c55e"
+                        stroke={colors.success}
                         strokeWidth={2}
                         dot={false}
                         connectNulls
@@ -225,7 +218,7 @@ export default function ChargingCurve({
                         yAxisId="temp"
                         type="monotone"
                         dataKey="temp"
-                        stroke="#f97316"
+                        stroke={colors.warning}
                         strokeWidth={2}
                         dot={false}
                         connectNulls

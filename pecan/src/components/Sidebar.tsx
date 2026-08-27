@@ -14,7 +14,8 @@ function useThemeLogo() {
   useEffect(() => setMounted(true), []);
   if (!mounted) return logo;
   const active = resolvedTheme ?? theme;
-  return active === "light" ? logoLight : logo;
+  if (active === "light") return logoLight;
+  return logo;
 }
 
 interface InputProps {

@@ -532,7 +532,7 @@ function TimelineBar({ plotLayouts = [] }: TimelineBarProps) {
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div>
         <h3 className="app-submenu-title">TIMELINE</h3>
-        <p className="text-xs text-slate-300 font-mono tracking-normal">
+        <p className="text-xs text-text-secondary font-mono tracking-normal">
           {hasData
             ? `Span: ${formatDuration(durationMs)} (${formatClock(sliderMin)} to ${formatClock(
                 sliderMax
@@ -588,7 +588,7 @@ function TimelineBar({ plotLayouts = [] }: TimelineBarProps) {
   }
 
   return (
-    <div className="timeline-box bg-data-module-bg/92 rounded-md p-2.5 mb-2 border border-white/10 sticky top-0 z-20 backdrop-blur-[1px]">
+    <div className="timeline-box bg-data-module-bg/92 rounded-md p-2.5 mb-2 border border-border sticky top-0 z-20 backdrop-blur-[1px]">
       {pendingClipImport && (
         <ReplayImportClipModal
           frames={pendingClipImport.frames}
@@ -752,7 +752,7 @@ function TimelineBar({ plotLayouts = [] }: TimelineBarProps) {
       </div>
 
       <div className="relative pt-3 pb-0.5">
-        <div className="absolute inset-x-0 top-[13px] h-[1px] bg-white/12 rounded-full pointer-events-none" />
+        <div className="absolute inset-x-0 top-[13px] h-[1px] bg-border rounded-full pointer-events-none" />
         {hasData && clipModeEnabled && exportStartPct !== null && exportEndPct !== null && (
           <div
             className="absolute top-[9px] h-[8px] rounded bg-orange-400/30 border border-orange-300/55 pointer-events-none"
@@ -838,14 +838,14 @@ function TimelineBar({ plotLayouts = [] }: TimelineBarProps) {
       </div>
 
       {tickMarks.length > 0 && (
-        <div className="mt-0.5 flex items-center justify-between text-[10px] text-slate-400 font-mono tracking-normal">
+        <div className="mt-0.5 flex items-center justify-between text-[10px] text-text-muted font-mono tracking-normal">
           {tickMarks.map((tick) => (
             <span key={tick.key}>{tick.label}</span>
           ))}
         </div>
       )}
 
-      <div className="mt-1.5 text-[10px] text-slate-300 font-mono tracking-normal">
+      <div className="mt-1.5 text-[10px] text-text-secondary font-mono tracking-normal">
         Cursor: {hasData ? formatClock(sliderValue) : "--:--:--"}
       </div>
 
@@ -863,7 +863,7 @@ function TimelineBar({ plotLayouts = [] }: TimelineBarProps) {
               className={`text-[10px] rounded px-1.5 py-1 flex items-center gap-1 border ${
                 activeCheckpointId === checkpoint.id
                   ? "timeline-checkpoint-chip-active"
-                  : "bg-white/5 text-slate-300 border-white/10"
+                  : "bg-option text-text-secondary border-border"
               }`}
               onMouseEnter={() => setHoveredCheckpointId(checkpoint.id)}
               onMouseLeave={() => setHoveredCheckpointId(null)}
@@ -871,7 +871,7 @@ function TimelineBar({ plotLayouts = [] }: TimelineBarProps) {
               <button
                 type="button"
                 onClick={() => jumpToCheckpoint(checkpoint.id)}
-                className={`font-medium ${activeCheckpointId === checkpoint.id ? "text-white" : "hover:text-white"}`}
+                className={`font-medium ${activeCheckpointId === checkpoint.id ? "" : "hover:text-text-primary"}`}
               >
                 {checkpoint.label} @ {formatClock(checkpoint.timeMs)}
               </button>

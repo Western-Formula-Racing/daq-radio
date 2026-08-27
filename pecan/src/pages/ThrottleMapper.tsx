@@ -5,6 +5,7 @@ import { dataStore } from "../lib/DataStore";
 import { usePageLock } from "../lib/usePageLock";
 import { useSerialStatus } from "../lib/useSerialStatus";
 import { PageLockBanner } from "../components/PageLockBanner";
+import { useThemeColors, type ThemeColors } from "../theme/useThemeColors";
 
 import {
     Settings, Activity, Zap, AlertTriangle, Save,
@@ -40,6 +41,18 @@ type CanHex = {
 const MIN_DEADZONE = 0.03; // 3%
 const CANVAS_SIZE = 325;
 const PADDING = 40;
+
+export function throttleMapperCanvasStyles(colors: ThemeColors) {
+    return {
+        grid: colors.grid,
+        axis: colors.border,
+        label: colors.mutedText,
+        deadzone: colors.danger,
+        curve: colors.secondary,
+        simPoint: colors.success,
+        simPointStroke: colors.text,
+    };
+}
 
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 
@@ -85,6 +98,7 @@ const parseCanId = (canId: string): number => {
 const Throttle_Mapper: React.FC = () => {
     const lock = usePageLock('throttle-mapper');
     const isLocal = useSerialStatus();
+    const colors = useThemeColors();
 
     // Canvas ref
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -189,9 +203,11 @@ const Throttle_Mapper: React.FC = () => {
         const scaleY = (val: number) =>
             CANVAS_SIZE - PADDING - val * (CANVAS_SIZE - 2 * PADDING);
 
+        const { grid, axis, label, deadzone, curve, simPoint, simPointStroke } =
+            throttleMapperCanvasStyles(colors);
+
         // Grid
-        const styles = getComputedStyle(document.body);
-        ctx.strokeStyle = styles.getPropertyValue("--color-text-secondary").trim() || "#e5e7eb";
+        ctx.strokeStyle = grid;
         ctx.lineWidth = 1;
         ctx.beginPath();
         for (let i = 0; i <= 10; i++) {
@@ -204,7 +220,7 @@ const Throttle_Mapper: React.FC = () => {
         ctx.stroke();
 
         // Axes
-        ctx.strokeStyle = styles.getPropertyValue("--color-text-muted").trim() || "#9ca3af";
+        ctx.strokeStyle = axis;
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(scaleX(0), scaleY(0));
@@ -214,7 +230,7 @@ const Throttle_Mapper: React.FC = () => {
         ctx.stroke();
 
         // Labels
-        ctx.fillStyle = styles.getPropertyValue("--color-text-muted").trim() || "#6b7280";
+        ctx.fillStyle = label;
         ctx.font = "10px sans-serif";
         ctx.fillText("0%", scaleX(0) - 10, scaleY(0) + 15);
         ctx.fillText("100% Input", scaleX(1) - 60, scaleY(0) + 15);
@@ -225,7 +241,8 @@ const Throttle_Mapper: React.FC = () => {
         ctx.restore();
 
         // Deadzones shading
-        ctx.fillStyle = "rgba(239, 68, 68, 0.1)";
+        ctx.fillStyle = deadzone;
+        ctx.globalAlpha = 0.1;
         ctx.fillRect(
             scaleX(0),
             scaleY(1),
@@ -238,12 +255,13 @@ const Throttle_Mapper: React.FC = () => {
             scaleX(1) - scaleX(1.0 - dzHigh),
             scaleY(0) - scaleY(1)
         );
+        ctx.globalAlpha = 1;
 
         // Min limit lines (3%)
         const limitX = scaleX(MIN_DEADZONE);
         const limitXHigh = scaleX(1.0 - MIN_DEADZONE);
 
-        ctx.strokeStyle = "#ef4444";
+        ctx.strokeStyle = deadzone;
         ctx.lineWidth = 1;
         ctx.setLineDash([2, 2]);
         ctx.beginPath();
@@ -255,7 +273,7 @@ const Throttle_Mapper: React.FC = () => {
         ctx.setLineDash([]);
 
         // Curve
-        ctx.strokeStyle = "#00a6f4";
+        ctx.strokeStyle = curve;
         ctx.lineWidth = 3;
         ctx.beginPath();
         for (let i = 0; i <= 200; i++) {
@@ -267,14 +285,14 @@ const Throttle_Mapper: React.FC = () => {
         ctx.stroke();
 
         // Simulation point
-        ctx.fillStyle = "#16a34a";
+        ctx.fillStyle = simPoint;
         ctx.beginPath();
         ctx.arc(scaleX(inputVal), scaleY(outputVal), 6, 0, 2 * Math.PI);
         ctx.fill();
-        ctx.strokeStyle = "#ffffff";
+        ctx.strokeStyle = simPointStroke;
         ctx.lineWidth = 2;
         ctx.stroke();
-    }, [dzLow, dzHigh, gamma, inputVal, outputVal]);
+    }, [dzLow, dzHigh, gamma, inputVal, outputVal, colors, colors.grid, colors.border, colors.mutedText, colors.danger, colors.secondary, colors.success, colors.text]);
 
     // Math code generation
     const generateMathCode = (): string => {
@@ -345,18 +363,18 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
     }, [dzLow, dzHigh, gamma]);
 
     return (
-        <div className="min-h-screen p-4 md:p-8 font-sans text-slate-800">
+        <div className="min-h-screen p-4 md:p-8 font-sans text-text-primary">
             <div className="max-w-6xl mx-auto space-y-6">
                 {/* Header */}
                 <div className="flex items-center space-x-3">
                     <div className="bg-data-module-bg p-2 rounded-lg border border-sidebarfg/20">
-                        <Activity className="w-6 h-6 text-white" />
+                        <Activity className="w-6 h-6 text-text-primary" />
                     </div>
                     <div>
                         <h1 className="app-menu-title uppercase">
                             Throttle Mapper
                         </h1>
-                        <p className="text-sm text-white">
+                        <p className="text-sm text-text-muted">
                             Interactive APPS Curve Tuner & CAN Simulator
                         </p>
                     </div>
@@ -370,10 +388,10 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                     {/* LEFT COLUMN */}
                     <div className="lg:col-span-4 space-y-6">
                         {/* Simulation Card */}
-                        <div className="bg-slate-900/50 rounded-2xl border border-blue-500/20 shadow-sm p-6">
+                        <div className="bg-data-module-bg rounded-2xl border border-border shadow-sm p-6">
                             <div className="flex items-center space-x-2 mb-4">
                                 <Zap className="w-5 h-5 text-amber-500" />
-                                <h3 className="font-semibold text-white text-lg">Pedal Simulation</h3>
+                                <h3 className="font-semibold text-text-primary text-lg">Pedal Simulation</h3>
                             </div>
 
                             {/* Decoded CAN Message */}
@@ -390,10 +408,10 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                                 {/* Pedal Slider */}
                                 <div>
                                     <div className="flex justify-between mb-2">
-                                        <label className="text-sm font-medium text-white ">
+                                        <label className="text-sm font-medium text-text-primary ">
                                             Physical Pedal Input
                                         </label>
-                                        <span className="text-sm font-mono bg-slate-100 px-2 rounded">
+                                        <span className="text-sm font-mono bg-data-textbox-bg px-2 rounded">
                                             {(inputVal * 100).toFixed(1)}%
                                         </span>
                                     </div>
@@ -404,14 +422,14 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                                         step={0.001}
                                         value={inputVal}
                                         onChange={(e) => setInputVal(parseFloat(e.target.value))}
-                                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                                        className="w-full h-2 bg-data-textbox-bg rounded-lg appearance-none cursor-pointer accent-amber-500"
                                     />
                                 </div>
 
                                 {/* CAN Display */}
                                 <div className="p-4 bg-data-textbox-bg/75 rounded-lg text-green-400 font-mono text-sm space-y-2">
-                                    <div className="flex justify-between border-b border-slate-600 pb-2">
-                                        <span className="text-white">Target Torque</span>
+                                    <div className="flex justify-between border-b border-border pb-2">
+                                        <span className="text-text-primary">Target Torque</span>
                                         <span className="font-bold">
                                             {(outputVal * 100).toFixed(1)}%
                                         </span>
@@ -419,38 +437,38 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
 
                                     <div className="space-y-1">
                                         <div className="flex items-center justify-between">
-                                            <p className="text-xs text-slate-400">
+                                            <p className="text-xs text-text-muted">
                                                 CAN BUS MESSAGE (ID:{" "}
-                                                <span className="text-slate-400">{canId}</span>)
+                                                <span className="text-text-muted">{canId}</span>)
                                             </p>
 
                                             {/* Optional: edit CAN ID */}
                                             <input
                                                 value={canId}
                                                 onChange={(e) => setCanId(e.target.value)}
-                                                className="ml-2 w-24 bg-slate-800 text-slate-200 text-xs rounded border border-slate-700 px-2 py-1"
+                                                className="ml-2 w-24 bg-data-textbox-bg text-text-primary text-xs rounded border border-border px-2 py-1"
                                                 placeholder="0x200"
                                             />
                                         </div>
 
                                         <div className="flex items-center space-x-3">
                                             <div className="flex flex-col items-center">
-                                                <span className="text-xl bg-slate-800 px-2 py-1 rounded border border-slate-700">
+                                                <span className="text-xl bg-data-textbox-bg px-2 py-1 rounded border border-border">
                                                     {canData.high}
                                                 </span>
-                                                <span className="text-[10px] text-slate-400 mt-1">
+                                                <span className="text-[10px] text-text-muted mt-1">
                                                     BYTE 0
                                                 </span>
                                             </div>
                                             <div className="flex flex-col items-center">
-                                                <span className="text-xl bg-slate-800 px-2 py-1 rounded border border-slate-700">
+                                                <span className="text-xl bg-data-textbox-bg px-2 py-1 rounded border border-border">
                                                     {canData.low}
                                                 </span>
-                                                <span className="text-[10px] text-slate-400 mt-1">
+                                                <span className="text-[10px] text-text-muted mt-1">
                                                     BYTE 1
                                                 </span>
                                             </div>
-                                            <div className="ml-auto text-xs text-slate-400 text-right">
+                                            <div className="ml-auto text-xs text-text-muted text-right">
                                                 <div>INT: {canData.int}</div>
                                                 <div>
                                                     HEX: 0x{canData.high}
@@ -464,10 +482,10 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                         </div>
 
                         {/* Tuning Card */}
-                        <div className="bg-slate-900/50 rounded-2xl border border-blue-500/20 shadow-sm p-6">
+                        <div className="bg-data-module-bg rounded-2xl border border-border shadow-sm p-6">
                             <div className="flex items-center space-x-2 mb-6">
                                 <Settings className="w-5 h-5 text-sky-500" />
-                                <h3 className="font-semibold text-md text-white">Curve Configuration</h3>
+                                <h3 className="font-semibold text-md text-text-primary">Curve Configuration</h3>
                             </div>
 
                             <div className="space-y-6">
@@ -475,7 +493,7 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                                 <div>
                                     <div className="flex justify-between mb-2">
                                         <div className="flex items-center space-x-2">
-                                            <label className="text-sm font-medium text-white">
+                                            <label className="text-sm font-medium text-text-primary">
                                                 Bottom Deadzone
                                             </label>
                                             {dzLow === MIN_DEADZONE && (
@@ -498,10 +516,10 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                                         step={0.005}
                                         value={dzLow}
                                         onChange={(e) => setDzLow(parseFloat(e.target.value))}
-                                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                                        className="w-full h-2 bg-data-textbox-bg rounded-lg appearance-none cursor-pointer accent-sky-500"
                                     />
                                     <div className="flex justify-between mt-1">
-                                        <p className="text-xs text-slate-400">Sensor Noise Filter</p>
+                                        <p className="text-xs text-text-muted">Sensor Noise Filter</p>
                                         <p className="text-[10px] text-red-500 font-medium">
                                             Min 3% Required
                                         </p>
@@ -512,7 +530,7 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                                 <div>
                                     <div className="flex justify-between mb-2">
                                         <div className="flex items-center space-x-2">
-                                            <label className="text-sm font-medium text-white">
+                                            <label className="text-sm font-medium text-text-primary">
                                                 Top Deadzone
                                             </label>
                                             {dzHigh === MIN_DEADZONE && (
@@ -535,10 +553,10 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                                         step={0.005}
                                         value={dzHigh}
                                         onChange={(e) => setDzHigh(parseFloat(e.target.value))}
-                                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-sky-500"
+                                        className="w-full h-2 bg-data-textbox-bg rounded-lg appearance-none cursor-pointer accent-sky-500"
                                     />
                                     <div className="flex justify-between mt-1">
-                                        <p className="text-xs text-slate-400">
+                                        <p className="text-xs text-text-muted">
                                             Mechanical Stop Margin
                                         </p>
                                         <p className="text-[10px] text-red-500 font-medium">
@@ -550,7 +568,7 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                                 {/* Gamma */}
                                 <div>
                                     <div className="flex justify-between mb-2">
-                                        <label className="text-sm font-medium text-white">
+                                        <label className="text-sm font-medium text-text-primary">
                                             Curve Power (Gamma)
                                         </label>
                                         <span className="text-sm font-mono text-purple-500">
@@ -564,16 +582,16 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                                         step={0.1}
                                         value={gamma}
                                         onChange={(e) => setGamma(parseFloat(e.target.value))}
-                                        className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                                        className="w-full h-2 bg-data-textbox-bg rounded-lg appearance-none cursor-pointer accent-purple-500"
                                     />
                                     <div className="flex justify-between text-xs font-medium mt-1">
-                                        <span className={gamma < 1 ? "text-purple-500" : "text-slate-400"}>
+                                        <span className={gamma < 1 ? "text-purple-500" : "text-text-muted"}>
                                             Aggressive
                                         </span>
-                                        <span className={gamma === 1 ? "text-purple-500" : "text-slate-400"}>
+                                        <span className={gamma === 1 ? "text-purple-500" : "text-text-muted"}>
                                             Linear
                                         </span>
-                                        <span className={gamma > 1 ? "text-purple-500" : "text-slate-400"}>
+                                        <span className={gamma > 1 ? "text-purple-500" : "text-text-muted"}>
                                             Progressive
                                         </span>
                                     </div>
@@ -585,7 +603,7 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                     {/* RIGHT COLUMN */}
                     <div className="lg:col-span-8 space-y-6">
                         {/* Graph */}
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col items-center justify-center">
+                        <div className="bg-data-module-bg rounded-xl shadow-sm border border-border p-6 flex flex-col items-center justify-center">
                             <canvas
                                 ref={canvasRef}
                                 width={CANVAS_SIZE}
@@ -595,26 +613,26 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                             <div className="mt-4 flex space-x-6 text-sm">
                                 <div className="flex items-center space-x-2">
                                     <div className="w-3 h-3 bg-red-400 opacity-30" />
-                                    <span className="text-slate-600">Deadzones</span>
+                                    <span className="text-text-muted">Deadzones</span>
                                 </div>
                                 <div className="flex items-center space-x-2">
                                     <div className="w-8 h-1 bg-sky-500" />
-                                    <span className="text-slate-600">Throttle Map</span>
+                                    <span className="text-text-muted">Throttle Map</span>
                                 </div>
                             </div>
                         </div>
 
                         {/* MESSAGE DISPATCHER INTERFACE - Placed below the chart */}
-                        <div className="mt-8 bg-slate-900/50 rounded-2xl border border-blue-500/20 p-6 backdrop-blur-md">
+                        <div className="mt-8 bg-data-module-bg rounded-2xl border border-border p-6 backdrop-blur-md">
                             <div className="flex items-center justify-between mb-3">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-blue-500/10 rounded-lg">
                                         <Zap className="w-5 h-5 text-blue-400" />
                                     </div>
-                                    <h3 className="app-section-title text-white">CAN Dispatcher</h3>
+                                    <h3 className="app-section-title text-text-primary">CAN Dispatcher</h3>
                                 </div>
                                 <div className="flex gap-2">
-                                    <span className="px-3 py-1 rounded-full bg-slate-950 border border-slate-800 text-[10px] font-mono text-slate-400">
+                                    <span className="px-3 py-1 rounded-full bg-data-textbox-bg border border-border text-[10px] font-mono text-text-muted">
                                         TARGET: 0x101
                                     </span>
                                     <span className="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-[10px] font-mono text-emerald-400">
@@ -626,10 +644,10 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                             <div className="flex flex-col gap-2 mb-6">
                                 {/* 1. Raw Payload Preview */}
                                 <div className="space-y-3">
-                                    <label className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold">Raw Payload (Hex)</label>
+                                    <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Raw Payload (Hex)</label>
                                     <div className="flex gap-1.5 max-w-sm">
                                         {rawPayload.map((byte, i) => (
-                                            <div key={i} className="flex-1 aspect-square max-h-12 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center font-mono text-blue-400 text-xs shadow-inner">
+                                            <div key={i} className="flex-1 aspect-square max-h-12 bg-data-textbox-bg border border-border rounded-lg flex items-center justify-center font-mono text-blue-400 text-xs shadow-inner">
                                                 {byte}
                                             </div>
                                         ))}
@@ -640,16 +658,16 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                             <div className="flex justify-end items-center gap-4">
                                 {/* 2. Timing Control */}
                                 <div className="space-y-3 w-3xs">
-                                    <label className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold">Transmission Delay</label>
-                                    <div className="flex items-center bg-slate-950 !rounded-xl border border-slate-800 p-1.5 h-12">
+                                    <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold">Transmission Delay</label>
+                                    <div className="flex items-center bg-data-textbox-bg !rounded-xl border border-border p-1.5 h-12">
                                         <button
                                             onClick={() => setDelay("")}
-                                            className={`flex-1 h-full !rounded-lg text-xs font-bold transition-all ${delay === "" ? 'bg-blue-600 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                                            className={`flex-1 h-full !rounded-lg text-xs font-bold transition-all ${delay === "" ? 'bg-blue-600 text-[#fff]' : 'text-text-muted hover:text-text-secondary'}`}
                                         >
                                             <Clock className="w-3 h-3 inline mr-2" />
                                             Now
                                         </button>
-                                        <div className="w-px h-4 bg-slate-800 mx-2" />
+                                        <div className="w-px h-4 bg-border mx-2" />
                                         <input
                                             type="number"
                                             value={delay}
@@ -657,22 +675,22 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                                             placeholder="ms..."
                                             className="w-24 bg-transparent text-right pr-2 text-sm font-mono text-blue-400 focus:outline-none"
                                         />
-                                        <span className="text-[10px] text-slate-600 pr-2 font-bold uppercase">ms</span>
+                                        <span className="text-[10px] text-text-muted pr-2 font-bold uppercase">ms</span>
                                     </div>
                                 </div>
 
                                 {/* 3. Execute */}
                                 <div className="space-y-3 w-3xs">
                                     <div className="flex flex-col items-start gap-3 w-full">
-                                        <label className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-bold ml-1">
+                                        <label className="text-[10px] uppercase tracking-[0.2em] text-text-muted font-bold ml-1">
                                             Send Message
                                         </label>
                                         <button
                                             onClick={() => setShowConfirm(true)}
                                             disabled={lock.isLockedByOther && !isLocal}
                                             className={`w-full h-12 font-bold !rounded-xl transition-all flex items-center justify-center gap-3 group ${(lock.isLockedByOther && !isLocal)
-                                                    ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                                                    : 'bg-blue-600 hover:bg-blue-500 text-white shadow-[0_8px_20px_-4px_rgba(37,99,235,0.4)]'
+                                                    ? 'bg-data-textbox-bg text-text-muted cursor-not-allowed'
+                                                    : 'bg-blue-600 hover:bg-blue-500 text-[#fff] shadow-[0_8px_20px_-4px_rgba(37,99,235,0.4)]'
                                                 }`}
                                         >
                                             <Send className="w-4 h-4 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
@@ -685,14 +703,14 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
 
 
                         {/* Code Export */}
-                        <div className="bg-slate-900 rounded-xl shadow-sm border border-slate-800 overflow-hidden">
-                            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 bg-slate-950">
+                        <div className="bg-data-module-bg rounded-xl shadow-sm border border-border overflow-hidden">
+                            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-data-textbox-bg">
                                 <div className="flex items-center space-x-4">
                                     <button
                                         onClick={() => setCodeMode("math")}
                                         className={`flex items-center space-x-2 px-3 py-1.5 rounded text-sm transition-colors ${codeMode === "math"
-                                            ? "bg-blue-600 text-white"
-                                            : "text-slate-400 hover:text-white hover:bg-slate-800"
+                                            ? "bg-blue-600 text-[#fff]"
+                                            : "text-text-muted hover:text-text-primary hover:bg-option-select"
                                             }`}
                                     >
                                         <FileCode className="w-4 h-4" />
@@ -702,8 +720,8 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                                     <button
                                         onClick={() => setCodeMode("table")}
                                         className={`flex items-center space-x-2 px-3 py-1.5 rounded text-sm transition-colors ${codeMode === "table"
-                                            ? "bg-blue-600 text-white"
-                                            : "text-slate-400 hover:text-white hover:bg-slate-800"
+                                            ? "bg-blue-600 text-[#fff]"
+                                            : "text-text-muted hover:text-text-primary hover:bg-option-select"
                                             }`}
                                     >
                                         <TableIcon className="w-4 h-4" />
@@ -716,7 +734,7 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                                         <select
                                             value={tableSize}
                                             onChange={(e) => setTableSize(parseInt(e.target.value, 10))}
-                                            className="bg-slate-800 text-slate-200 text-xs rounded border border-slate-700 px-2 py-1"
+                                            className="bg-data-textbox-bg text-text-primary text-xs rounded border border-border px-2 py-1"
                                         >
                                             <option value={11}>11 Points (10%)</option>
                                             <option value={21}>21 Points (5%)</option>
@@ -726,7 +744,7 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
 
                                     <button
                                         onClick={() => navigator.clipboard.writeText(currentCode)}
-                                        className="text-xs flex items-center space-x-1 bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded transition-colors"
+                                        className="text-xs flex items-center space-x-1 bg-data-textbox-bg hover:bg-option-select text-text-secondary px-3 py-1.5 rounded transition-colors"
                                     >
                                         <Save className="w-3 h-3" />
                                         <span>Copy</span>
@@ -735,7 +753,7 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                             </div>
 
                             <div className="p-6 overflow-x-auto">
-                                <pre className="text-sm font-mono text-blue-200 leading-relaxed">
+                                <pre className="text-sm font-mono text-text-secondary leading-relaxed">
                                     {currentCode}
                                 </pre>
                             </div>
@@ -764,49 +782,49 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
             {/* Confirmation Overlay */}
             {showConfirm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-                    <div className="bg-slate-900 border border-blue-500/50 rounded-2xl max-w-md w-full p-8 shadow-2xl">
+                    <div className="bg-data-module-bg border border-border rounded-2xl max-w-md w-full p-8 shadow-2xl">
                         <div className="flex items-center gap-4 text-amber-500 mb-6">
                             <div className="p-3 bg-amber-500/10 rounded-full">
                                 <AlertTriangle className="w-8 h-8" />
                             </div>
-                            <h2 className="text-xl font-bold text-white">Confirm Transmission</h2>
+                            <h2 className="text-xl font-bold text-text-primary">Confirm Transmission</h2>
                         </div>
 
                         <div className="space-y-4 mb-8">
-                            <p className="text-slate-300 text-sm leading-relaxed mb-4">
+                            <p className="text-text-secondary text-sm leading-relaxed mb-4">
                                 You are about to send a torque mapping update to the <span className="text-blue-400 font-bold">Engine Control Unit</span>.
                             </p>
 
-                            <div className="bg-slate-950 rounded-lg p-4 border border-slate-800 space-y-2 font-mono text-xs">
+                            <div className="bg-data-textbox-bg rounded-lg p-4 border border-border space-y-2 font-mono text-xs">
 
-                                <div className="pb-2 mb-2 border-b border-slate-800">
-                                    <span className="text-[10px] uppercase tracking-wider text-slate-500 block mb-2">Parameters:</span>
+                                <div className="pb-2 mb-2 border-b border-border">
+                                    <span className="text-[10px] uppercase tracking-wider text-text-muted block mb-2">Parameters:</span>
                                     <div className="space-y-1">
                                         <div className="flex justify-between">
-                                            <span className="text-slate-400 text-[12px]">Deadzone Low:</span>
+                                            <span className="text-text-muted text-[12px]">Deadzone Low:</span>
                                             <span className="text-blue-300">{(dzLow * 100).toFixed(1)}%</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-slate-400 text-[12px]">Deadzone High:</span>
+                                            <span className="text-text-muted text-[12px]">Deadzone High:</span>
                                             <span className="text-blue-300">{(dzHigh * 100).toFixed(1)}%</span>
                                         </div>
                                         <div className="flex justify-between">
-                                            <span className="text-slate-400 text-[12px]">Curve Gain:</span>
+                                            <span className="text-text-muted text-[12px]">Curve Gain:</span>
                                             <span className="text-blue-300">{gamma.toFixed(2)}x</span>
                                         </div>
                                     </div>
                                 </div>
                                 <div className="flex justify-between">
-                                    <span className="text-slate-500">Target ID:</span>
+                                    <span className="text-text-muted">Target ID:</span>
                                     <span className="text-blue-400">0x101 (Engine_Status_1)</span>
                                 </div>
                                 <div className="flex justify-between">
-                                    <span className="text-slate-500">Bus:</span>
+                                    <span className="text-text-muted">Bus:</span>
                                     <span className="text-emerald-400">CAN_Primary</span>
                                 </div>
-                                <div className="flex justify-between border-t border-slate-800 pt-2 mt-2">
-                                    <span className="text-slate-500">Schedule:</span>
-                                    <span className="text-slate-200">{parseInt(String(delay)) > 0 ? ` Transmitting in ${delay}ms` : "Immediate"}</span>
+                                <div className="flex justify-between border-t border-border pt-2 mt-2">
+                                    <span className="text-text-muted">Schedule:</span>
+                                    <span className="text-text-primary">{parseInt(String(delay)) > 0 ? ` Transmitting in ${delay}ms` : "Immediate"}</span>
                                 </div>
                             </div>
                         </div>
@@ -814,7 +832,7 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                         <div className="flex gap-3">
                             <button
                                 onClick={() => setShowConfirm(false)}
-                                className="flex-1 px-4 py-3 !rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold transition-colors"
+                                className="flex-1 px-4 py-3 !rounded-xl bg-data-textbox-bg hover:bg-option-select text-text-secondary font-semibold transition-colors"
                             >
                                 Cancel
                             </button>
@@ -823,7 +841,7 @@ uint16_t map_throttle(float input_volts, float min_v, float max_v) {
                                     /* Logic to send CAN frame */
                                     setShowConfirm(false);
                                 }}
-                                className="flex-1 px-4 py-3 !rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition-all shadow-lg shadow-blue-900/20"
+                                className="flex-1 px-4 py-3 !rounded-xl bg-blue-600 hover:bg-blue-500 text-[#fff] font-bold transition-all shadow-lg shadow-blue-900/20"
                             >
                                 Confirm & Send
                             </button>

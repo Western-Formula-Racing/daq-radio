@@ -10,6 +10,20 @@ import {
   Mic,
   MicOff
 } from 'lucide-react';
+import { useThemeColors, type ThemeColors } from '../theme/useThemeColors';
+
+// eslint-disable-next-line react-refresh/only-export-components -- testable canvas style helper
+export function systemLinkWaveformStyles(colors: ThemeColors) {
+  return {
+    background: colors.surface,
+    stroke: colors.primary,
+  };
+}
+
+// eslint-disable-next-line react-refresh/only-export-components -- testable canvas style helper
+export function systemLinkSparklineColor(colors: ThemeColors, isStale: boolean) {
+  return isStale ? colors.warning : colors.mutedText;
+}
 
 // --- SUB-COMPONENTS ---
 
@@ -24,7 +38,7 @@ const StatusBadge = ({ label, value, status = 'neutral' }: { label: string, valu
   return (
     <div className={`flex flex-col px-4 py-3 rounded-md bg-data-module-bg border ${statusColors[status]} transition-colors duration-300`}>
       <span className="text-xs uppercase tracking-wider opacity-80 mb-1 font-semibold text-sidebarfg">{label}</span>
-      <span className="text-xl font-footer font-bold tracking-tight text-white">{value}</span>
+      <span className="text-xl font-footer font-bold tracking-tight text-text-primary">{value}</span>
     </div>
   );
 };
@@ -56,17 +70,19 @@ const SimpleSparkline = ({ data, color = "#10b981", min, max }: { data: number[]
   );
 };
 
-const TelemetryCard = ({ label, value, unit, history, min, max, isStale }: any) => (
+const TelemetryCard = ({ label, value, unit, history, min, max, isStale }: any) => {
+  const colors = useThemeColors();
+  return (
   <div className={`bg-data-module-bg rounded-md p-4 flex flex-col justify-between relative overflow-hidden border ${isStale ? 'border-amber-500/50' : 'border-transparent'}`}>
     <div className="flex justify-between items-start mb-2 z-10">
       <div className="text-sidebarfg text-sm font-medium uppercase tracking-wide">{label}</div>
-      <div className={`text-2xl font-footer font-bold ${isStale ? 'text-amber-500' : 'text-white'}`}>
+      <div className={`text-2xl font-footer font-bold ${isStale ? 'text-amber-500' : 'text-text-primary'}`}>
         {typeof value === 'number' ? value.toFixed(1) : value} <span className="text-sm text-sidebarfg font-normal">{unit}</span>
       </div>
     </div>
     
     <div className="mt-2 h-10 w-full z-10">
-      <SimpleSparkline data={history} min={min} max={max} color={isStale ? '#f59e0b' : '#8e8eab'} />
+      <SimpleSparkline data={history} min={min} max={max} color={systemLinkSparklineColor(colors, isStale)} />
     </div>
 
     {isStale && (
@@ -75,7 +91,8 @@ const TelemetryCard = ({ label, value, unit, history, min, max, isStale }: any) 
       </div>
     )}
   </div>
-);
+  );
+};
 
 // --- MAIN APPLICATION ---
 
@@ -109,6 +126,20 @@ export default function TelemetryDebug() {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const inputRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const nextStartTimeRef = useRef<number>(0);
+  const colors = useThemeColors();
+  const waveformColorsRef = useRef(systemLinkWaveformStyles(colors));
+  waveformColorsRef.current = systemLinkWaveformStyles(colors);
+
+  useEffect(() => {
+    waveformColorsRef.current = systemLinkWaveformStyles(colors);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const canvasCtx = canvas.getContext('2d');
+    if (!canvasCtx) return;
+    const { background } = waveformColorsRef.current;
+    canvasCtx.fillStyle = background;
+    canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+  }, [colors, colors.surface, colors.primary]);
 
   // --- SOCKET CONNECTION ---
   useEffect(() => {
@@ -194,15 +225,13 @@ export default function TelemetryDebug() {
       animationRef.current = requestAnimationFrame(draw);
       analyser.getByteTimeDomainData(dataArray);
 
-      const styles = getComputedStyle(document.body);
-      const bgColor = styles.getPropertyValue("--color-data-module-bg").trim() || "#20202f";
-      const fgColor = styles.getPropertyValue("--color-sidebarfg").trim() || "#8e8eab";
+      const { background, stroke } = waveformColorsRef.current;
 
-      canvasCtx.fillStyle = bgColor;
+      canvasCtx.fillStyle = background;
       canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
       canvasCtx.lineWidth = 2;
-      canvasCtx.strokeStyle = fgColor;
+      canvasCtx.strokeStyle = stroke;
       canvasCtx.beginPath();
 
       const sliceWidth = canvas.width * 1.0 / bufferLength;
@@ -313,7 +342,7 @@ export default function TelemetryDebug() {
       <header className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="bg-data-module-bg p-2 rounded-lg border border-sidebarfg/20">
-            <Activity className="w-6 h-6 text-white" />
+            <Activity className="w-6 h-6 text-text-primary" />
           </div>
           <div>
             <h1 className="app-menu-title uppercase">System Link</h1>
@@ -343,7 +372,7 @@ export default function TelemetryDebug() {
                     }`} />
                     <div>
                         <div className="text-xs text-sidebarfg font-bold uppercase tracking-wider">Link State</div>
-                        <div className="text-lg font-footer font-bold text-white">{connStatus.label}</div>
+                        <div className="text-lg font-footer font-bold text-text-primary">{connStatus.label}</div>
                     </div>
                 </div>
                 
@@ -359,10 +388,10 @@ export default function TelemetryDebug() {
                 ) : (
                     <div className="flex flex-col items-center gap-2 text-sidebarfg">
                         <Video className="w-12 h-12" />
-                        <span className="font-bold uppercase text-white/50">Waiting for Connection...</span>
+                        <span className="font-bold uppercase text-text-muted">Waiting for Connection...</span>
                     </div>
                 )}
-                <div className="absolute top-4 left-4 bg-black/70 px-2 py-1 rounded text-xs font-mono text-white flex items-center gap-2">
+                <div className="absolute top-4 left-4 bg-black/70 px-2 py-1 rounded text-xs font-mono text-[#fff] flex items-center gap-2">
                     <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div> LIVE FEED
                 </div>
             </div>
@@ -378,9 +407,9 @@ export default function TelemetryDebug() {
         {/* --- RIGHT COLUMN: AUDIO CONTROLS --- */}
         <div className="lg:col-span-4 space-y-6">
             <section className="bg-data-module-bg rounded-md p-5 shadow-sm h-full flex flex-col border border-sidebarfg/10">
-                <div className="flex items-center gap-2 mb-4 text-white">
+                <div className="flex items-center gap-2 mb-4 text-text-primary">
                     <Volume2 className="w-5 h-5 text-sidebarfg" />
-                    <h3 className="font-bold uppercase text-white/50">Audio Comms</h3>
+                    <h3 className="font-bold uppercase text-text-muted">Audio Comms</h3>
                 </div>
 
                 <div className="w-full h-24 bg-black/20 rounded-md border border-sidebarfg/10 mb-6 overflow-hidden">
@@ -400,8 +429,8 @@ export default function TelemetryDebug() {
                             : 'bg-data-textbox-bg border-sidebarfg/20 hover:bg-sidebarfg/20 shadow-black/50'
                         }`}
                     >
-                        {isTalking ? <Mic className="w-16 h-16 text-white animate-pulse" /> : <MicOff className="w-16 h-16 text-sidebarfg" />}
-                        <span className={`mt-3 font-bold uppercase tracking-wider ${isTalking ? 'text-white' : 'text-sidebarfg'}`}>
+                        {isTalking ? <Mic className="w-16 h-16 text-[#fff] animate-pulse" /> : <MicOff className="w-16 h-16 text-sidebarfg" />}
+                        <span className={`mt-3 font-bold uppercase tracking-wider ${isTalking ? 'text-[#fff]' : 'text-sidebarfg'}`}>
                             {isTalking ? 'ON AIR' : 'PTT'}
                         </span>
                     </button>

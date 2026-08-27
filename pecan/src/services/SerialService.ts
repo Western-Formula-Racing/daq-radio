@@ -2,6 +2,7 @@ import { dataStore } from '../lib/DataStore';
 import { webSocketService } from './WebSocketService';
 import { createCanProcessor, decodeAndIngestCanFrame, formatCanId } from '../utils/canProcessor';
 import { Can } from 'candied';
+import { getStoredTheme, requestTheme, type AppTheme } from '../theme/theme';
 
 // Polyfill types for Web Serial API if not installed
 interface SerialOptions {
@@ -39,7 +40,7 @@ export class SerialService {
     // Hold decoder instance to parse messages
     private canInstance: Can | null = null;
     // Track previous theme to restore on disconnect
-    private previousTheme: string | null = null;
+    private previousTheme: AppTheme | null = null;
 
     // Callbacks for UI updates (legacy, use event listener for new code)
     public onConnectionChange: ((connected: boolean) => void) | null = null;
@@ -48,6 +49,14 @@ export class SerialService {
         this.isConnected = connected;
         if (this.onConnectionChange) this.onConnectionChange(connected);
         window.dispatchEvent(new CustomEvent('serial-connection-changed', { detail: { connected } }));
+    }
+
+    private restoreAfterLocalCan() {
+        if (this.previousTheme !== null) {
+            requestTheme(this.previousTheme);
+            this.previousTheme = null;
+        }
+        webSocketService.setSuppressIngestion(false);
     }
 
     constructor() {
@@ -76,9 +85,8 @@ export class SerialService {
 
             this.notifyConnectionChange(true);
 
-            // Save current theme and apply local CAN mode theme
-            this.previousTheme = localStorage.getItem("pecan:theme");
-            document.documentElement.classList.add("theme-local-can");
+            this.previousTheme = getStoredTheme("dark");
+            requestTheme("local-can");
 
             console.log('Serial port opened');
 
@@ -96,6 +104,7 @@ export class SerialService {
         } catch (error) {
             console.error('Error connecting to serial port:', error);
             this.notifyConnectionChange(false);
+            this.restoreAfterLocalCan();
             return false;
         }
     }
@@ -165,18 +174,11 @@ export class SerialService {
                 this.port = null;
             }
 
-            // Revert local CAN mode theme and restore previous light/dark theme
-            document.documentElement.classList.remove("theme-local-can");
-            if (this.previousTheme === "light") {
-                document.documentElement.classList.add("theme-light");
-            }
-
-            // Resume WebSocket ingestion
-            webSocketService.setSuppressIngestion(false);
-
             console.log('Serial port disconnected');
         } catch (error) {
             console.error('Error disconnecting serial port:', error);
+        } finally {
+            this.restoreAfterLocalCan();
         }
     }
 

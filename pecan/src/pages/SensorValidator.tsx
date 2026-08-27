@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createCanProcessor, formatCanId } from "../utils/canProcessor";
 import { useSignal, useMessageHistory } from "../lib/useDataStore";
+import { useThemeColors, type ThemeColors } from "../theme/useThemeColors";
 import {
     Activity,
     Database,
@@ -49,6 +50,17 @@ interface MessageInfo {
 const CANVAS_SIZE = 400;
 const PADDING = 40;
 
+// eslint-disable-next-line react-refresh/only-export-components -- testable canvas style helper
+export function sensorValidatorCanvasStyles(colors: ThemeColors) {
+    return {
+        grid: colors.grid,
+        label: colors.mutedText,
+        series: colors.primary,
+        sparkline: colors.primary,
+        livePoint: colors.danger,
+    };
+}
+
 const SensorValidator: React.FC = () => {
     // --- State ---
     const [messages, setMessages] = useState<MessageInfo[]>([]);
@@ -66,6 +78,7 @@ const SensorValidator: React.FC = () => {
     const [plotScaleMode, setPlotScaleMode] = useState<"auto" | "dbc" | "manual">("auto");
     const [manualMinX, setManualMinX] = useState<number>(0);
     const [manualMaxX, setManualMaxX] = useState<number>(5);
+    const colors = useThemeColors();
     
     // Canvas ref for plot
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -84,37 +97,38 @@ const SensorValidator: React.FC = () => {
     // Get history for averaging
     const signalHistory = useMessageHistory(msgID, averageWindowMs);
 
-    // Update history for sparkline
+    // Update history for sparkline without coupling theme redraws to sample appends
     useEffect(() => {
         if (liveSample) {
             historyRef.current = [...historyRef.current.slice(-100), liveValue];
-            
-            // Draw sparkline
-            const canvas = sparklineRef.current;
-            if (canvas) {
-                const ctx = canvas.getContext("2d");
-                if (ctx) {
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    if (historyRef.current.length > 1) {
-                        ctx.beginPath();
-                        ctx.strokeStyle = "#3b82f6";
-                        ctx.lineWidth = 2;
-                        const min = Math.min(...historyRef.current);
-                        const max = Math.max(...historyRef.current);
-                        const range = max - min || 1;
-                        
-                        historyRef.current.forEach((val, i) => {
-                            const x = (i / 100) * canvas.width;
-                            const y = canvas.height - ((val - min) / range) * canvas.height;
-                            if (i === 0) ctx.moveTo(x, y);
-                            else ctx.lineTo(x, y);
-                        });
-                        ctx.stroke();
-                    }
-                }
-            }
         }
     }, [liveValue, liveSample]);
+
+    useEffect(() => {
+        const canvas = sparklineRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+
+        const { sparkline } = sensorValidatorCanvasStyles(colors);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (historyRef.current.length > 1) {
+            ctx.beginPath();
+            ctx.strokeStyle = sparkline;
+            ctx.lineWidth = 2;
+            const min = Math.min(...historyRef.current);
+            const max = Math.max(...historyRef.current);
+            const range = max - min || 1;
+
+            historyRef.current.forEach((val, i) => {
+                const x = (i / 100) * canvas.width;
+                const y = canvas.height - ((val - min) / range) * canvas.height;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+        }
+    }, [liveValue, liveSample, colors, colors.primary]);
 
     // --- Initialization ---
     useEffect(() => {
@@ -274,9 +288,7 @@ const SensorValidator: React.FC = () => {
 
         ctx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
-        const styles = getComputedStyle(document.body);
-        const gridColor = styles.getPropertyValue("--color-text-muted").trim() || "#666";
-        const labelColor = styles.getPropertyValue("--color-text-muted").trim() || "#666";
+        const { grid: gridColor, label: labelColor, series, livePoint } = sensorValidatorCanvasStyles(colors);
 
         if (capturedPoints.length === 0 && !selectedSignal) {
             ctx.fillStyle = gridColor;
@@ -356,7 +368,8 @@ const SensorValidator: React.FC = () => {
         ctx.fillText(maxRef.toFixed(1), PADDING - 5, scaleY(maxRef) + 4);
 
         // Lines connecting points
-        ctx.strokeStyle = "rgba(59, 130, 246, 0.5)";
+        ctx.strokeStyle = series;
+        ctx.globalAlpha = 0.5;
         ctx.lineWidth = 1;
         ctx.beginPath();
         capturedPoints.forEach((p, i) => {
@@ -364,10 +377,11 @@ const SensorValidator: React.FC = () => {
             else ctx.lineTo(scaleX(p.canValue), scaleY(p.refValue));
         });
         ctx.stroke();
+        ctx.globalAlpha = 1;
 
         // Points
         capturedPoints.forEach(p => {
-            ctx.fillStyle = "#3b82f6";
+            ctx.fillStyle = series;
             ctx.beginPath();
             ctx.arc(scaleX(p.canValue), scaleY(p.refValue), 4, 0, Math.PI * 2);
             ctx.fill();
@@ -375,16 +389,16 @@ const SensorValidator: React.FC = () => {
 
         // Current live point
         if (selectedSignal) {
-            ctx.fillStyle = "#ef4444";
+            ctx.fillStyle = livePoint;
             ctx.beginPath();
             ctx.arc(scaleX(liveValue), CANVAS_SIZE - PADDING, 4, 0, Math.PI * 2);
             ctx.fill();
         }
 
-    }, [capturedPoints, selectedSignal, liveValue]);
+    }, [capturedPoints, selectedSignal, liveValue, colors, colors.grid, colors.mutedText, colors.primary, colors.danger]);
 
     return (
-        <div className="flex flex-col gap-4 lg:gap-6 p-4 lg:p-6 min-h-screen bg-transparent text-white font-sans overflow-y-auto">
+        <div className="flex flex-col gap-4 lg:gap-6 p-4 lg:p-6 min-h-screen bg-transparent text-text-primary font-sans overflow-y-auto">
             {/* Header */}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
@@ -392,28 +406,28 @@ const SensorValidator: React.FC = () => {
                         <Activity className="text-blue-500 flex-shrink-0" size={28} />
                         Sensor Validation
                     </h1>
-                    <p className="text-gray-400 mt-1 font-mono text-xs sm:text-sm">
+                    <p className="text-text-muted mt-1 font-mono text-xs sm:text-sm">
                         Map CAN signals to physical reference values
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                     <button 
                         onClick={exportCCode}
-                        className="flex-grow sm:flex-grow-0 bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded flex items-center justify-center gap-2 border border-gray-700 transition-colors text-xs sm:text-sm"
+                        className="flex-grow sm:flex-grow-0 bg-data-textbox-bg hover:bg-option-select text-text-primary px-3 py-2 rounded flex items-center justify-center gap-2 border border-border transition-colors text-xs sm:text-sm"
                     >
                         <FileCode size={16} />
                         C Code
                     </button>
                     <button 
                         onClick={exportCSV}
-                        className="flex-grow sm:flex-grow-0 bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded flex items-center justify-center gap-2 border border-gray-700 transition-colors text-xs sm:text-sm"
+                        className="flex-grow sm:flex-grow-0 bg-data-textbox-bg hover:bg-option-select text-text-primary px-3 py-2 rounded flex items-center justify-center gap-2 border border-border transition-colors text-xs sm:text-sm"
                     >
                         <Download size={16} />
                         CSV
                     </button>
                     <button 
                         onClick={exportJSON}
-                        className="bg-gray-800 hover:bg-gray-700 text-white px-3 py-2 rounded flex items-center justify-center gap-2 border border-gray-700 transition-colors text-xs sm:text-sm"
+                        className="bg-data-textbox-bg hover:bg-option-select text-text-primary px-3 py-2 rounded flex items-center justify-center gap-2 border border-border transition-colors text-xs sm:text-sm"
                     >
                         <FileJson size={16} />
                         JSON
@@ -425,16 +439,16 @@ const SensorValidator: React.FC = () => {
                 {/* Left Column: Config & Monitor */}
                 <div className="flex flex-col gap-6">
                     {/* Signal Selection */}
-                    <div className="bg-black/40 border border-white/10 p-5 rounded-lg">
+                    <div className="bg-data-module-bg border border-border p-5 rounded-lg">
                         <h2 className="app-section-title mb-4 flex items-center gap-2 text-blue-400">
                             <Database size={20} />
                             Signal Selection
                         </h2>
                         <div className="flex flex-col gap-4">
                             <div>
-                                <label className="text-xs uppercase text-gray-500 font-bold mb-1 block">Message</label>
+                                <label className="text-xs uppercase text-text-muted font-bold mb-1 block">Message</label>
                                 <select 
-                                    className="w-full bg-gray-900 border border-gray-700 p-2 rounded text-sm focus:outline-none focus:border-blue-500"
+                                    className="w-full bg-data-textbox-bg text-text-primary border border-border p-2 rounded text-sm focus:outline-none focus:border-focus"
                                     onChange={(e) => {
                                         const msg = messages.find(m => m.messageName === e.target.value);
                                         // Auto-select first signal
@@ -456,9 +470,9 @@ const SensorValidator: React.FC = () => {
                                 </select>
                             </div>
                             <div>
-                                <label className="text-xs uppercase text-gray-500 font-bold mb-1 block">Signal</label>
+                                <label className="text-xs uppercase text-text-muted font-bold mb-1 block">Signal</label>
                                 <select 
-                                    className="w-full bg-gray-900 border border-gray-700 p-2 rounded text-sm focus:outline-none focus:border-blue-500"
+                                    className="w-full bg-data-textbox-bg text-text-primary border border-border p-2 rounded text-sm focus:outline-none focus:border-focus"
                                     onChange={(e) => {
                                     const msg = messages.find(m => m.messageName === selectedSignal?.messageName);
                                     const sig = msg?.signals.find((s) => s.signalName === e.target.value);
@@ -482,10 +496,10 @@ const SensorValidator: React.FC = () => {
                     </div>
 
                     {/* Live Monitor */}
-                    <div className="bg-black/40 border border-white/10 p-5 rounded-lg flex-grow flex flex-col justify-center items-center relative overflow-hidden">
+                    <div className="bg-data-module-bg border border-border p-5 rounded-lg flex-grow flex flex-col justify-center items-center relative overflow-hidden">
                         <div className="absolute top-3 left-3 flex items-center gap-2">
-                            <div className={`w-2 h-2 rounded-full ${liveSample ? 'bg-green-500 animate-pulse' : 'bg-gray-600'}`}></div>
-                            <span className="text-[10px] uppercase text-gray-500 font-mono tracking-widest">Live Data</span>
+                            <div className={`w-2 h-2 rounded-full ${liveSample ? 'bg-green-500 animate-pulse' : 'bg-border'}`}></div>
+                            <span className="text-[10px] uppercase text-text-muted font-mono tracking-widest">Live Data</span>
                         </div>
                         
                         <div className="text-center">
@@ -501,7 +515,7 @@ const SensorValidator: React.FC = () => {
                             <canvas ref={sparklineRef} width={300} height={50} className="w-full h-full opacity-50" />
                         </div>
                         
-                        <div className="w-full mt-6 bg-gray-900 h-2 rounded-full overflow-hidden border border-gray-800">
+                        <div className="w-full mt-6 bg-data-textbox-bg h-2 rounded-full overflow-hidden border border-border">
                             <div 
                                 className="h-full bg-blue-600 transition-all duration-75"
                                 style={{ 
@@ -509,7 +523,7 @@ const SensorValidator: React.FC = () => {
                                 }}
                             ></div>
                         </div>
-                        <div className="flex justify-between w-full mt-2 text-[10px] font-mono text-gray-600">
+                        <div className="flex justify-between w-full mt-2 text-[10px] font-mono text-text-muted">
                             <span>{selectedSignal?.min || 0}</span>
                             <span>{selectedSignal?.max || 100}</span>
                         </div>
@@ -519,17 +533,17 @@ const SensorValidator: React.FC = () => {
                     <div className="bg-blue-900/20 border border-blue-500/30 p-5 rounded-lg">
                         <div className="flex flex-col gap-4">
                             {/* Mode Toggle */}
-                            <div className="flex bg-black/40 p-1 rounded-lg border border-blue-500/20">
+                            <div className="flex bg-data-textbox-bg p-1 rounded-lg border border-blue-500/20">
                                 <button 
                                     onClick={() => setCaptureMode("instant")}
-                                    className={`flex-1 py-1.5 rounded-md text-[10px] uppercase font-bold transition-all flex items-center justify-center gap-2 ${captureMode === "instant" ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:text-gray-300'}`}
+                                    className={`flex-1 py-1.5 rounded-md text-[10px] uppercase font-bold transition-all flex items-center justify-center gap-2 ${captureMode === "instant" ? 'bg-blue-600 text-[#fff] shadow-lg' : 'text-text-muted hover:text-text-secondary'}`}
                                 >
                                     <Zap size={14} />
                                     Instant
                                 </button>
                                 <button 
                                     onClick={() => setCaptureMode("average")}
-                                    className={`flex-1 py-1.5 rounded-md text-[10px] uppercase font-bold transition-all flex items-center justify-center gap-2 ${captureMode === "average" ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:text-gray-300'}`}
+                                    className={`flex-1 py-1.5 rounded-md text-[10px] uppercase font-bold transition-all flex items-center justify-center gap-2 ${captureMode === "average" ? 'bg-blue-600 text-[#fff] shadow-lg' : 'text-text-muted hover:text-text-secondary'}`}
                                 >
                                     <Sigma size={14} />
                                     Average
@@ -538,7 +552,7 @@ const SensorValidator: React.FC = () => {
 
                             {captureMode === "average" && (
                                 <div className="flex items-center justify-between bg-black/20 p-2 rounded border border-blue-500/10">
-                                    <div className="flex items-center gap-2 text-gray-400">
+                                    <div className="flex items-center gap-2 text-text-muted">
                                         <Clock size={12} />
                                         <span className="text-[10px] uppercase font-bold">Window</span>
                                     </div>
@@ -557,11 +571,11 @@ const SensorValidator: React.FC = () => {
                             )}
 
                             <div>
-                                <label className="text-xs uppercase text-gray-400 font-bold mb-1 block">Reference Value ({selectedSignal?.unit || "Units"})</label>
+                                <label className="text-xs uppercase text-text-muted font-bold mb-1 block">Reference Value ({selectedSignal?.unit || "Units"})</label>
                                 <div className="flex flex-col sm:flex-row gap-2">
                                     <input 
                                         type="number"
-                                        className="flex-grow min-w-0 bg-black/50 border border-blue-500/50 p-3 rounded text-lg font-mono focus:outline-none focus:border-blue-400"
+                                        className="flex-grow min-w-0 bg-data-textbox-bg text-text-primary border border-blue-500/50 p-3 rounded text-lg font-mono focus:outline-none focus:border-focus"
                                         placeholder="Enter true value..."
                                         value={refValueInput}
                                         onChange={(e) => setRefValueInput(e.target.value)}
@@ -569,7 +583,7 @@ const SensorValidator: React.FC = () => {
                                     />
                                     <button 
                                         onClick={() => handleCapture()}
-                                        className="bg-blue-600 hover:bg-blue-500 text-white px-4 rounded font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-blue-900/20 whitespace-nowrap"
+                                        className="bg-blue-600 hover:bg-blue-500 text-[#fff] px-4 rounded font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-blue-900/20 whitespace-nowrap"
                                     >
                                         <Plus size={18} />
                                         Capture
@@ -581,18 +595,18 @@ const SensorValidator: React.FC = () => {
                                 <div className="flex items-center gap-2">
                                     <button 
                                         onClick={() => setIsAutoCapture(!isAutoCapture)}
-                                        className={`w-10 h-5 rounded-full transition-colors relative ${isAutoCapture ? 'bg-blue-500' : 'bg-gray-700'}`}
+                                        className={`w-10 h-5 rounded-full transition-colors relative ${isAutoCapture ? 'bg-blue-500' : 'bg-data-textbox-bg'}`}
                                     >
                                         <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${isAutoCapture ? 'left-6' : 'left-1'}`}></div>
                                     </button>
-                                    <span className="text-xs uppercase font-bold text-gray-400">Auto-Sweep</span>
+                                    <span className="text-xs uppercase font-bold text-text-muted">Auto-Sweep</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <span className="text-[10px] uppercase font-bold text-gray-500">Interval</span>
+                                    <span className="text-[10px] uppercase font-bold text-text-muted">Interval</span>
                                     <select 
                                         value={autoCaptureInterval}
                                         onChange={(e) => setAutoCaptureInterval(parseInt(e.target.value))}
-                                        className="bg-black/40 border border-blue-500/30 text-[10px] p-1 rounded text-gray-300 focus:outline-none"
+                                        className="bg-data-textbox-bg border border-border text-[10px] p-1 rounded text-text-secondary focus:outline-none"
                                     >
                                         <option value={100}>100ms</option>
                                         <option value={500}>500ms</option>
@@ -607,31 +621,31 @@ const SensorValidator: React.FC = () => {
 
                 {/* Middle Column: Plot */}
                 <div className="flex flex-col gap-6 min-w-0">
-                    <div className="bg-black/40 border border-white/10 p-5 rounded-lg h-full flex flex-col overflow-hidden">
+                    <div className="bg-data-module-bg border border-border p-5 rounded-lg h-full flex flex-col overflow-hidden">
                         <div className="flex flex-col gap-3 mb-4">
                             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                                 <h2 className="app-section-title flex items-center gap-2 text-blue-400 whitespace-nowrap overflow-hidden">
                                     <LineChart size={20} className="flex-shrink-0" />
                                     Calibration Curve
                                 </h2>
-                                <div className="flex bg-black/40 p-1 rounded-md border border-white/5 flex-shrink-0 self-end sm:self-auto">
+                                <div className="flex bg-data-textbox-bg p-1 rounded-md border border-border flex-shrink-0 self-end sm:self-auto">
                                     <button 
                                         onClick={() => setPlotScaleMode("auto")}
-                                        className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold transition-all ${plotScaleMode === "auto" ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
+                                        className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold transition-all ${plotScaleMode === "auto" ? 'bg-blue-600 text-[#fff] shadow-sm' : 'text-text-muted hover:text-text-secondary'}`}
                                         title="Fit to Data"
                                     >
                                         Fit
                                     </button>
                                     <button 
                                         onClick={() => setPlotScaleMode("dbc")}
-                                        className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold transition-all ${plotScaleMode === "dbc" ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
+                                        className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold transition-all ${plotScaleMode === "dbc" ? 'bg-blue-600 text-[#fff] shadow-sm' : 'text-text-muted hover:text-text-secondary'}`}
                                         title="Use DBC Bounds"
                                     >
                                         DBC
                                     </button>
                                     <button 
                                         onClick={() => setPlotScaleMode("manual")}
-                                        className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold transition-all ${plotScaleMode === "manual" ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300'}`}
+                                        className={`px-2 py-0.5 rounded text-[9px] uppercase font-bold transition-all ${plotScaleMode === "manual" ? 'bg-blue-600 text-[#fff] shadow-sm' : 'text-text-muted hover:text-text-secondary'}`}
                                         title="Set Manual Range"
                                     >
                                         Manual
@@ -647,7 +661,7 @@ const SensorValidator: React.FC = () => {
                                             type="number"
                                             value={manualMinX}
                                             onChange={(e) => setManualMinX(parseFloat(e.target.value) || 0)}
-                                            className="bg-black/40 border border-blue-500/30 text-[10px] p-1 rounded w-full font-mono text-blue-300 focus:outline-none focus:border-blue-500"
+                                            className="bg-data-textbox-bg border border-border text-[10px] p-1 rounded w-full font-mono text-text-primary focus:outline-none focus:border-focus"
                                         />
                                     </div>
                                     <div className="flex items-center gap-2 flex-grow">
@@ -656,13 +670,13 @@ const SensorValidator: React.FC = () => {
                                             type="number"
                                             value={manualMaxX}
                                             onChange={(e) => setManualMaxX(parseFloat(e.target.value) || 0)}
-                                            className="bg-black/40 border border-blue-500/30 text-[10px] p-1 rounded w-full font-mono text-blue-300 focus:outline-none focus:border-blue-500"
+                                            className="bg-data-textbox-bg border border-border text-[10px] p-1 rounded w-full font-mono text-text-primary focus:outline-none focus:border-focus"
                                         />
                                     </div>
                                 </div>
                             )}
                         </div>
-                        <div className="flex-grow flex items-center justify-center bg-black/20 rounded border border-white/5">
+                        <div className="flex-grow flex items-center justify-center bg-data-textbox-bg/50 rounded border border-border">
                             <canvas 
                                 ref={canvasRef} 
                                 width={CANVAS_SIZE} 
@@ -670,7 +684,7 @@ const SensorValidator: React.FC = () => {
                                 className="max-w-full h-auto"
                             />
                         </div>
-                        <div className="mt-4 p-3 bg-gray-900/50 rounded text-xs text-gray-500 flex justify-between items-center">
+                        <div className="mt-4 p-3 bg-data-textbox-bg/50 rounded text-xs text-text-muted flex justify-between items-center">
                             <div className="flex items-center gap-4">
                                 <div className="flex items-center gap-1">
                                     <div className="w-2 h-2 rounded-full bg-blue-500"></div>
@@ -688,8 +702,8 @@ const SensorValidator: React.FC = () => {
 
                 {/* Right Column: Table */}
                 <div className="flex flex-col gap-6">
-                    <div className="bg-black/40 border border-white/10 p-0 rounded-lg h-full flex flex-col overflow-hidden">
-                        <div className="p-5 border-b border-white/10 flex justify-between items-center">
+                    <div className="bg-data-module-bg border border-border p-0 rounded-lg h-full flex flex-col overflow-hidden">
+                        <div className="p-5 border-b border-border flex justify-between items-center">
                             <h2 className="app-section-title flex items-center gap-2 text-blue-400">
                                 <TableIcon size={20} />
                                 Data Points
@@ -705,21 +719,21 @@ const SensorValidator: React.FC = () => {
                         <div className="flex-grow overflow-auto">
                             <div className="min-w-full inline-block align-middle">
                                 <table className="w-full text-left text-sm border-collapse min-w-[300px]">
-                                <thead className="bg-gray-900 sticky top-0">
+                                <thead className="bg-data-textbox-bg sticky top-0">
                                     <tr>
-                                        <th className="p-3 text-[10px] uppercase text-gray-500 font-bold border-b border-white/5">Ref</th>
-                                        <th className="p-3 text-[10px] uppercase text-gray-500 font-bold border-b border-white/5">Mean</th>
-                                        <th className="p-3 text-[10px] uppercase text-gray-500 font-bold border-b border-white/5">Min / Max</th>
-                                        <th className="p-3 text-[10px] uppercase text-gray-500 font-bold border-b border-white/5">stdev</th>
-                                        <th className="p-3 text-[10px] uppercase text-gray-500 font-bold border-b border-white/5 w-10"></th>
+                                        <th className="p-3 text-[10px] uppercase text-text-muted font-bold border-b border-border">Ref</th>
+                                        <th className="p-3 text-[10px] uppercase text-text-muted font-bold border-b border-border">Mean</th>
+                                        <th className="p-3 text-[10px] uppercase text-text-muted font-bold border-b border-border">Min / Max</th>
+                                        <th className="p-3 text-[10px] uppercase text-text-muted font-bold border-b border-border">stdev</th>
+                                        <th className="p-3 text-[10px] uppercase text-text-muted font-bold border-b border-border w-10"></th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {capturedPoints.map(p => (
-                                        <tr key={p.id} className="border-b border-white/5 hover:bg-white/5 transition-colors group">
+                                        <tr key={p.id} className="border-b border-border hover:bg-option/50 transition-colors group">
                                             <td className="p-3 font-mono text-green-300">{p.refValue.toFixed(2)}</td>
                                             <td className="p-3 font-mono text-blue-300 font-bold">{p.canValue.toFixed(4)}</td>
-                                            <td className="p-3 font-mono text-gray-400 text-[10px]">
+                                            <td className="p-3 font-mono text-text-muted text-[10px]">
                                                 {p.stats ? (
                                                     <div className="flex flex-col">
                                                         <span>L: {p.stats.min.toFixed(3)}</span>
@@ -733,7 +747,7 @@ const SensorValidator: React.FC = () => {
                                             <td className="p-3">
                                                 <button 
                                                     onClick={() => deletePoint(p.id)}
-                                                    className="text-gray-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                                                    className="text-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
                                                 >
                                                     <Trash2 size={14} />
                                                 </button>
@@ -742,7 +756,7 @@ const SensorValidator: React.FC = () => {
                                     ))}
                                     {capturedPoints.length === 0 && (
                                         <tr>
-                                            <td colSpan={5} className="p-10 text-center text-gray-600 italic">
+                                            <td colSpan={5} className="p-10 text-center text-text-muted italic">
                                                 No points captured yet
                                             </td>
                                         </tr>

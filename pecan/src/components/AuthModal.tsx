@@ -55,10 +55,10 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     if (!isFirebaseConfigured) {
         return (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={(e) => e.target === e.currentTarget && onClose()}>
-                <div className="bg-sidebar rounded-xl border border-gray-600 w-[90%] max-w-md p-6 relative animate-in fade-in zoom-in-95 duration-200">
-                    <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-white">✕</button>
-                    <h2 className="text-2xl font-semibold text-white mb-6">Cloud Sync</h2>
-                    <p className="text-gray-400">Cloud sync is not available in this environment.</p>
+                <div className="bg-sidebar rounded-xl border border-border w-[90%] max-w-md p-6 relative animate-in fade-in zoom-in-95 duration-200">
+                    <button onClick={onClose} className="absolute top-4 right-4 text-text-muted hover:text-text-primary">✕</button>
+                    <h2 className="text-2xl font-semibold text-text-primary mb-6">Cloud Sync</h2>
+                    <p className="text-text-muted">Cloud sync is not available in this environment.</p>
                 </div>
             </div>
         );
@@ -66,10 +66,10 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={(e) => e.target === e.currentTarget && onClose()}>
-            <div className="bg-sidebar rounded-xl border border-gray-600 w-[90%] max-w-md p-6 relative animate-in fade-in zoom-in-95 duration-200">
-                <button onClick={onClose} className="absolute top-4 right-4 text-gray-400 hover:text-white">✕</button>
+            <div className="bg-sidebar rounded-xl border border-border w-[90%] max-w-md p-6 relative animate-in fade-in zoom-in-95 duration-200">
+                <button onClick={onClose} className="absolute top-4 right-4 text-text-muted hover:text-text-primary">✕</button>
 
-                <h2 className="text-2xl font-semibold text-white mb-6">Cloud Sync Login</h2>
+                <h2 className="text-2xl font-semibold text-text-primary mb-6">Cloud Sync Login</h2>
 
                 {user ? (
                     <div className="text-center space-y-4">
@@ -79,10 +79,10 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                             )}
                             <div className="text-left">
                                 <p className="text-green-400">{user.displayName || user.email}</p>
-                                {user.displayName && <p className="text-gray-400 text-sm">{user.email}</p>}
+                                {user.displayName && <p className="text-text-muted text-sm">{user.email}</p>}
                             </div>
                         </div>
-                        <p className="text-gray-400 text-sm">Your dashboard config will sync automatically.</p>
+                        <p className="text-text-muted text-sm">Your dashboard config will sync automatically.</p>
                         <Button onClick={handleSignOut} variant="danger" className="w-full">Sign Out</Button>
                     </div>
                 ) : (

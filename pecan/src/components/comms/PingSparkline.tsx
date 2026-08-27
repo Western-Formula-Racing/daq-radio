@@ -9,25 +9,15 @@ import {
   ReferenceLine,
 } from 'recharts';
 import type { TelemetrySample } from '../../lib/DataStore';
+import { useThemeColors } from '../../theme/useThemeColors';
 
 interface Props {
   history: TelemetrySample[];
   windowMs?: number;
 }
 
-function useChartColors() {
-  return useMemo(() => {
-    const styles = getComputedStyle(document.body);
-    return {
-      tickColor: styles.getPropertyValue('--color-text-muted').trim() || '#9ca3af',
-      axisColor: styles.getPropertyValue('--color-border-strong').trim() || '#374151',
-      tooltipBg: styles.getPropertyValue('--color-data-module-bg').trim() || '#1f2937',
-    };
-  }, []);
-}
-
 export default function PingSparkline({ history, windowMs = 60_000 }: Props) {
-  const { tickColor, axisColor, tooltipBg } = useChartColors();
+  const { mutedText, border, surface, secondary, success, warning } = useThemeColors();
 
   const chartData = useMemo(() => {
     const now = Date.now();
@@ -66,15 +56,15 @@ export default function PingSparkline({ history, windowMs = 60_000 }: Props) {
             dataKey="time"
             type="number"
             domain={[-(windowMs / 1000), 0]}
-            tick={{ fill: tickColor, fontSize: 9 }}
+            tick={{ fill: mutedText, fontSize: 9 }}
             tickFormatter={(v) => `${v}s`}
-            axisLine={{ stroke: axisColor }}
+            axisLine={{ stroke: border }}
             tickLine={false}
             ticks={[-60, -45, -30, -15, 0]}
           />
           <YAxis
             domain={[0, maxRtt]}
-            tick={{ fill: tickColor, fontSize: 9 }}
+            tick={{ fill: mutedText, fontSize: 9 }}
             tickFormatter={(v) => `${v}`}
             axisLine={false}
             tickLine={false}
@@ -82,31 +72,31 @@ export default function PingSparkline({ history, windowMs = 60_000 }: Props) {
           />
           <Tooltip
             contentStyle={{
-              backgroundColor: tooltipBg,
-              border: `1px solid ${axisColor}`,
+              backgroundColor: surface,
+              border: `1px solid ${border}`,
               borderRadius: '4px',
               fontSize: '10px',
             }}
-            labelStyle={{ color: tickColor }}
+            labelStyle={{ color: mutedText }}
             formatter={(v: number | undefined) => [`${v != null ? v.toFixed(1) : '--'} ms`, 'RTT']}
             labelFormatter={(v) => `${v}s ago`}
           />
           <ReferenceLine
             y={20}
-            stroke="#22c55e"
+            stroke={success}
             strokeDasharray="2 4"
             strokeOpacity={0.4}
           />
           <ReferenceLine
             y={80}
-            stroke="#f59e0b"
+            stroke={warning}
             strokeDasharray="2 4"
             strokeOpacity={0.4}
           />
           <Line
             type="monotone"
             dataKey="rtt"
-            stroke="#38bdf8"
+            stroke={secondary}
             strokeWidth={1.5}
             dot={false}
             connectNulls={false}

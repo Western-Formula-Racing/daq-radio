@@ -63,7 +63,7 @@ export function PageLockBanner({ lock, wireColor, txConnected = false }: PageLoc
         className="flex items-center justify-between gap-3 rounded-xl px-4 py-3"
         style={{ border: `1px solid ${wire}`, backgroundColor: wire.replace(/[\d.]+\)$/, '0.07)'), transition }}
       >
-        <div className="flex items-center gap-3 text-white/70">
+        <div className="flex items-center gap-3 text-text-secondary">
           <Lock className="w-4 h-4 flex-shrink-0" />
           <span className="text-sm">You have control. Other tabs/users will see this page as locked.</span>
         </div>
@@ -71,7 +71,7 @@ export function PageLockBanner({ lock, wireColor, txConnected = false }: PageLoc
           <TxBadge />
           <button
             onClick={lock.release}
-            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap text-white/60 hover:text-white/80"
+            className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap text-text-muted hover:text-text-primary"
             style={{ border: `1px solid ${wire}`, backgroundColor: wire.replace(/[\d.]+\)$/, '0.12)') }}
           >
             <Unlock className="w-3 h-3" />
@@ -88,7 +88,7 @@ export function PageLockBanner({ lock, wireColor, txConnected = false }: PageLoc
       className="flex items-center justify-between gap-3 rounded-xl px-4 py-3"
       style={{ border: `1px solid ${wire}`, backgroundColor: wire.replace(/[\d.]+\)$/, '0.06)'), transition }}
     >
-      <div className="flex items-center gap-3 text-white/50">
+      <div className="flex items-center gap-3 text-text-muted">
         <Unlock className="w-4 h-4 flex-shrink-0" />
         <span className="text-sm">No one has control. Take control to prevent conflicting inputs from other tabs.</span>
       </div>
@@ -96,7 +96,7 @@ export function PageLockBanner({ lock, wireColor, txConnected = false }: PageLoc
         <TxBadge />
         <button
           onClick={lock.acquire}
-          className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap text-white/70 hover:text-white/90"
+          className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap text-text-secondary hover:text-text-primary"
           style={{ border: `1px solid ${wire}`, backgroundColor: wire.replace(/[\d.]+\)$/, '0.12)') }}
         >
           <Lock className="w-3 h-3" />

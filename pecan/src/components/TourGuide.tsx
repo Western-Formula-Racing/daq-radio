@@ -157,26 +157,26 @@ export default function TourGuide({ steps, isOpen, onClose, currentStepIndex, on
 
       {/* Tooltip Card */}
       <div
-        className="bg-sidebar border border-white/20 rounded-xl shadow-2xl flex flex-col pointer-events-auto transition-all duration-300"
+        className="bg-sidebar border border-border rounded-xl shadow-2xl flex flex-col pointer-events-auto transition-all duration-300"
         style={tooltipStyle}
       >
-        <div className="p-4 bg-data-module-bg border-b border-white/10 rounded-t-xl">
+        <div className="p-4 bg-data-module-bg border-b border-border rounded-t-xl">
           <div className="flex justify-between items-center">
-            <h3 className="font-bold text-white text-lg">{currentStep.title}</h3>
-            <span className="text-xs text-gray-400 font-mono">
+            <h3 className="font-bold text-text-primary text-lg">{currentStep.title}</h3>
+            <span className="text-xs text-text-muted font-mono">
               {currentStepIndex + 1} / {steps.length}
             </span>
           </div>
         </div>
         
-        <div className="p-4 bg-sidebar text-gray-200 text-sm">
+        <div className="p-4 bg-sidebar text-text-secondary text-sm">
           <p>{currentStep.content}</p>
         </div>
 
-        <div className="p-3 bg-data-module-bg/50 border-t border-white/10 rounded-b-xl flex justify-between items-center">
+        <div className="p-3 bg-data-module-bg/50 border-t border-border rounded-b-xl flex justify-between items-center">
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white text-xs underline px-2"
+            className="text-text-muted hover:text-text-primary text-xs underline px-2"
           >
             Skip
           </button>
@@ -186,8 +186,8 @@ export default function TourGuide({ steps, isOpen, onClose, currentStepIndex, on
               disabled={currentStepIndex === 0}
               className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
                 currentStepIndex === 0
-                  ? "text-gray-600 cursor-not-allowed"
-                  : "text-white hover:bg-white/10"
+                  ? "text-text-muted cursor-not-allowed"
+                  : "text-text-primary hover:bg-option-select"
               }`}
             >
               Back
@@ -196,7 +196,7 @@ export default function TourGuide({ steps, isOpen, onClose, currentStepIndex, on
             {!currentStep.waitForInteraction ? (
               <button
                 onClick={handleNext}
-                className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-1.5 rounded text-xs font-bold shadow-md transition-colors"
+                className="bg-blue-600 hover:bg-blue-500 text-[#fff] px-4 py-1.5 rounded text-xs font-bold shadow-md transition-colors"
               >
                 {currentStepIndex === steps.length - 1 ? "Finish" : "Next"}
               </button>
