@@ -66,7 +66,14 @@ function Harness({ initial, echo = "identity" }: { initial: RuleDoc; echo?: Echo
   const [held, setHeld] = useState<RuleDoc>(initial);
   const [ticks, setTicks] = useState(0);
   const handleChange = (next: RuleDoc) => {
-    setHeld(echo === "reordered" ? ({ conditions: next.conditions, name: next.name, ...next } as RuleDoc) : next);
+    if (echo !== "reordered") {
+      setHeld(next);
+      return;
+    }
+    // Put conditions/name first so key order differs from JSON.stringify(next),
+    // without repeating those keys in one object literal (TS2783).
+    const { conditions, name, ...rest } = next;
+    setHeld({ conditions, name, ...rest });
   };
   return (
     <>
