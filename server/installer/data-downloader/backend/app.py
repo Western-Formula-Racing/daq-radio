@@ -77,6 +77,7 @@ class AnalysisConfigCreate(BaseModel):
     start: datetime
     end: datetime
     plots: List[PlotGroupModel]
+    colors: Dict[str, str] | None = None
 
 
 class AnalysisConfigPatch(BaseModel):
@@ -332,17 +333,18 @@ def create_analysis_config(payload: AnalysisConfigCreate) -> dict:
         if not set(group.rightAxis).issubset(set(group.signals)):
             raise HTTPException(status_code=400, detail="rightAxis must be a subset of signals")
         normalized_plots.append({"signals": group.signals, "rightAxis": group.rightAxis})
-    config = service.create_analysis_config(
-        {
-            "name": name,
-            "note": payload.note.strip(),
-            "author": payload.author.strip(),
-            "season": payload.season,
-            "start": series_queries.normalize_utc(payload.start).isoformat(),
-            "end": series_queries.normalize_utc(payload.end).isoformat(),
-            "plots": normalized_plots,
-        }
-    )
+    fields = {
+        "name": name,
+        "note": payload.note.strip(),
+        "author": payload.author.strip(),
+        "season": payload.season,
+        "start": series_queries.normalize_utc(payload.start).isoformat(),
+        "end": series_queries.normalize_utc(payload.end).isoformat(),
+        "plots": normalized_plots,
+    }
+    if payload.colors:
+        fields["colors"] = payload.colors
+    config = service.create_analysis_config(fields)
     return config
 
 

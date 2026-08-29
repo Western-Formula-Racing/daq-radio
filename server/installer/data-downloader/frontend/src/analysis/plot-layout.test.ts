@@ -6,6 +6,7 @@ import {
   NEW_PLOT,
   type PlotLayout,
   assignSignals,
+  clearRightAxisForSignals,
   flattenSignals,
   parseLayout,
   pruneUnknown,
@@ -81,6 +82,24 @@ describe("assignSignals", () => {
       "b",
     );
     expect(next).toEqual([group("b", ["S2", "S1"], ["S1"])]);
+  });
+
+  it("clears rightAxis when a moved signal is assigned to the left axis", () => {
+    const moved = assignSignals(
+      [group("a", ["S1"], ["S1"]), group("b", ["S2"])],
+      ["S1"],
+      "b",
+    );
+    const next = clearRightAxisForSignals(moved, ["S1"]);
+    expect(next).toEqual([group("b", ["S2", "S1"])]);
+  });
+});
+
+describe("clearRightAxisForSignals", () => {
+  it("removes listed signals from rightAxis and is a no-op when none match", () => {
+    const layout = [group("a", ["S1", "S2"], ["S2"])];
+    expect(clearRightAxisForSignals(layout, ["S2"])).toEqual([group("a", ["S1", "S2"])]);
+    expect(clearRightAxisForSignals(layout, ["S9"])).toBe(layout);
   });
 });
 

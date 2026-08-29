@@ -80,6 +80,19 @@ export function assignSignals(
   );
 }
 
+export function clearRightAxisForSignals(
+  layout: PlotLayout,
+  signals: string[],
+): PlotLayout {
+  const remove = new Set(signals);
+  const hasAny = layout.some((g) => g.rightAxis.some((s) => remove.has(s)));
+  if (!hasAny) return layout;
+  return layout.map((g) => ({
+    ...g,
+    rightAxis: g.rightAxis.filter((s) => !remove.has(s)),
+  }));
+}
+
 export function toggleRightAxis(
   layout: PlotLayout,
   groupId: string,

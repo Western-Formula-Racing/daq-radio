@@ -7,6 +7,7 @@ import {
   type PlotLayout,
   type ParsedLayout,
   assignSignals,
+  clearRightAxisForSignals,
   clearSignalColor,
   flattenSignals,
   parseLayout,
@@ -223,6 +224,9 @@ export function AnalysisWorkspace({
             }
             return result;
           }
+        }
+        if (axis === "left") {
+          return clearRightAxisForSignals(next, signals);
         }
         return next;
       });

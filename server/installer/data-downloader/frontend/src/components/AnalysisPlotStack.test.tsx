@@ -186,9 +186,14 @@ describe("AnalysisPlotStack groups", () => {
     fireEvent.dragEnter(card, { dataTransfer: dt });
 
     const leftZone = screen.getByText(/left axis/i);
-    const rightZone = screen.getByText(/right axis/i);
 
-    fireEvent.drop(rightZone, { dataTransfer: dt });
+    fireEvent.drop(leftZone, { dataTransfer: dt });
+    expect(onAssignSignalsToAxis).toHaveBeenCalledWith(["S2"], "g1", "left");
+
+    onAssignSignalsToAxis.mockClear();
+    fireEvent.dragEnter(card, { dataTransfer: dt });
+    const rightZoneAfter = screen.getByText(/right axis/i);
+    fireEvent.drop(rightZoneAfter, { dataTransfer: dt });
     expect(onAssignSignalsToAxis).toHaveBeenCalledWith(["S2"], "g1", "right");
   });
 

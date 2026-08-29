@@ -26,6 +26,15 @@ def test_create_assigns_id_and_timestamps(tmp_path: Path):
     assert config["created_at"] == config["updated_at"]
     assert config["name"] == "Brake event"
     assert config["plots"] == [{"signals": ["Brake_Pressure"], "rightAxis": []}]
+    assert "colors" not in config
+
+
+def test_create_persists_colors_when_provided(tmp_path: Path):
+    repo = AnalysisConfigsRepository(tmp_path)
+    colors = {"Brake_Pressure": "#ff0000"}
+    config = repo.create_config(_fields(colors=colors))
+    assert config["colors"] == colors
+    assert repo.list_configs()["configs"][0]["colors"] == colors
 
 
 def test_list_returns_newest_first(tmp_path: Path):

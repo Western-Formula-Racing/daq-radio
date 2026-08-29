@@ -249,6 +249,8 @@ class AnalysisConfigsRepository:
             "created_at": now,
             "updated_at": now,
         }
+        if fields.get("colors"):
+            config["colors"] = fields["colors"]
         # Newest first so the UI list needs no re-sort.
         payload.setdefault("configs", []).insert(0, config)
         payload["updated_at"] = now
