@@ -6,6 +6,7 @@ import {
   NEW_PLOT,
   type PlotLayout,
   assignSignals,
+  clearRightAxisForSignals,
   flattenSignals,
   parseLayout,
   pruneUnknown,
@@ -82,6 +83,24 @@ describe("assignSignals", () => {
     );
     expect(next).toEqual([group("b", ["S2", "S1"], ["S1"])]);
   });
+
+  it("clears rightAxis when a moved signal is assigned to the left axis", () => {
+    const moved = assignSignals(
+      [group("a", ["S1"], ["S1"]), group("b", ["S2"])],
+      ["S1"],
+      "b",
+    );
+    const next = clearRightAxisForSignals(moved, ["S1"]);
+    expect(next).toEqual([group("b", ["S2", "S1"])]);
+  });
+});
+
+describe("clearRightAxisForSignals", () => {
+  it("removes listed signals from rightAxis and is a no-op when none match", () => {
+    const layout = [group("a", ["S1", "S2"], ["S2"])];
+    expect(clearRightAxisForSignals(layout, ["S2"])).toEqual([group("a", ["S1", "S2"])]);
+    expect(clearRightAxisForSignals(layout, ["S9"])).toBe(layout);
+  });
 });
 
 describe("toggleRightAxis", () => {
@@ -121,12 +140,31 @@ describe("serializeLayout and parseLayout", () => {
     const layout = [group("a", ["S1", "S2"], ["S2"])];
     const parsed = parseLayout(serializeLayout(layout));
     expect(parsed).not.toBeNull();
-    expect(parsed![0].signals).toEqual(["S1", "S2"]);
-    expect(parsed![0].rightAxis).toEqual(["S2"]);
-    expect(parsed![0].id).toBeTruthy();
+    expect(parsed!.layout[0].signals).toEqual(["S1", "S2"]);
+    expect(parsed!.layout[0].rightAxis).toEqual(["S2"]);
+    expect(parsed!.layout[0].id).toBeTruthy();
+    expect(parsed!.colorOverrides).toEqual({});
   });
 
-  it.each([null, "", "not json", '{"v":2,"plots":[]}', '{"v":1,"plots":"x"}', '{"v":1,"plots":[{"signals":"x"}]}'])(
+  it("round-trips v2 with color overrides", () => {
+    const layout = [group("a", ["S1"])];
+    const colors = { S1: "#ff0000" };
+    const serialized = serializeLayout(layout, colors);
+    const parsed = parseLayout(serialized);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.layout[0].signals).toEqual(["S1"]);
+    expect(parsed!.colorOverrides).toEqual({ S1: "#ff0000" });
+  });
+
+  it("parses legacy v1 layout without errors", () => {
+    const raw = '{"v":1,"plots":[{"signals":["S1"],"rightAxis":[]}]}';
+    const parsed = parseLayout(raw);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.layout[0].signals).toEqual(["S1"]);
+    expect(parsed!.colorOverrides).toEqual({});
+  });
+
+  it.each([null, "", "not json", '{"v":3,"plots":[]}', '{"v":1,"plots":"x"}', '{"v":1,"plots":[{"signals":"x"}]}'])(
     "returns null for corrupt or wrong-version input %#",
     (raw) => {
       expect(parseLayout(raw as string | null)).toBeNull();
@@ -135,7 +173,7 @@ describe("serializeLayout and parseLayout", () => {
 
   it("drops non-string entries and keeps rightAxis a subset on parse", () => {
     const parsed = parseLayout('{"v":1,"plots":[{"signals":["S1",5],"rightAxis":["S1","GHOST"]}]}');
-    expect(parsed).toEqual([
+    expect(parsed!.layout).toEqual([
       { id: expect.any(String), signals: ["S1"], rightAxis: ["S1"] },
     ]);
   });

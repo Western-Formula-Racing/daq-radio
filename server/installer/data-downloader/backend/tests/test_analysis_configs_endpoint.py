@@ -92,6 +92,23 @@ def test_create_rejects_rightaxis_not_subset():
     assert "subset" in r.json()["detail"].lower()
 
 
+def test_create_persists_color_overrides():
+    colors = {"Brake_Pressure": "#ff0000"}
+    created = client.post(
+        "/api/analysis-configs",
+        json=create_payload(colors=colors),
+    )
+    assert created.status_code == 201
+    body = created.json()
+    assert body["colors"] == colors
+
+    listed = client.get("/api/analysis-configs")
+    saved = next(c for c in listed.json()["configs"] if c["id"] == body["id"])
+    assert saved["colors"] == colors
+
+    client.delete(f"/api/analysis-configs/{body['id']}")
+
+
 def test_patch_rejects_blank_name():
     created = client.post("/api/analysis-configs", json=create_payload())
     config_id = created.json()["id"]

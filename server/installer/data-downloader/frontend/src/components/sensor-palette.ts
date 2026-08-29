@@ -70,7 +70,15 @@ export function subsystemColor(subsystem: string, theme: "light" | "dark"): Pale
   return PALETTE[paletteIndex(subsystem)][theme];
 }
 
+/** Per-signal color overrides chosen by the user (signal name → hex). */
+export type SignalColorOverrides = Record<string, string>;
+
 /** Stroke color for plot traces, sharing the subsystem hash and palette borders. */
-export function plotStroke(name: string, theme: "light" | "dark"): string {
+export function plotStroke(
+  name: string,
+  theme: "light" | "dark",
+  overrides?: SignalColorOverrides,
+): string {
+  if (overrides?.[name]) return overrides[name];
   return PALETTE[paletteIndex(name)][theme].border;
 }

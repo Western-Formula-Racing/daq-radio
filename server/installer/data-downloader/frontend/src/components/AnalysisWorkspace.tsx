@@ -5,11 +5,15 @@ import { findSeasonWithData } from "../analysis/analysis-range";
 import { downloadSeriesCsv, seriesToCsv } from "../analysis/export-csv";
 import {
   type PlotLayout,
+  type ParsedLayout,
   assignSignals,
+  clearRightAxisForSignals,
+  clearSignalColor,
   flattenSignals,
   parseLayout,
   pruneUnknown,
   serializeLayout,
+  setSignalColor,
   toggleRightAxis,
   toggleSignal,
 } from "../analysis/plot-layout";
@@ -95,9 +99,19 @@ export function AnalysisWorkspace({
   const [plots, setPlots] = useState<PlotLayout>(() => {
     if (seededConfig) return plotsToLayout(seededConfig.plots);
     try {
-      return parseLayout(window.localStorage.getItem(layoutStorageKey(season.name))) ?? [];
+      const parsed = parseLayout(window.localStorage.getItem(layoutStorageKey(season.name)));
+      return parsed?.layout ?? [];
     } catch {
       return [];
+    }
+  });
+  const [colorOverrides, setColorOverrides] = useState<Record<string, string>>(() => {
+    if (seededConfig?.colors) return { ...seededConfig.colors };
+    try {
+      const parsed = parseLayout(window.localStorage.getItem(layoutStorageKey(season.name)));
+      return parsed?.colorOverrides ?? {};
+    } catch {
+      return {};
     }
   });
   const seededRange = useMemo<[number, number] | null>(() => {
@@ -152,11 +166,11 @@ export function AnalysisWorkspace({
   // Persist on every layout change; storage failures must never break the UI.
   useEffect(() => {
     try {
-      window.localStorage.setItem(layoutStorageKey(seasonName), serializeLayout(plots));
+      window.localStorage.setItem(layoutStorageKey(seasonName), serializeLayout(plots, colorOverrides));
     } catch {
       // Ignore persistence failures in restricted environments.
     }
-  }, [plots, seasonName]);
+  }, [plots, colorOverrides, seasonName]);
 
   const knownSignals = useMemo(() => knownSignalsOf(grouped), [grouped]);
 
@@ -194,6 +208,40 @@ export function AnalysisWorkspace({
     setPlots((prev) => toggleRightAxis(prev, groupId, signal));
   }, []);
 
+  const handleAssignSignalsToAxis = useCallback(
+    (signals: string[], target: string, axis: "left" | "right") => {
+      setPlots((prev) => {
+        const next = assignSignals(prev, signals, target);
+        if (axis === "right") {
+          // Find the target group after assignment and set each signal to right axis.
+          const targetGroup = next.find((g) => signals.some((s) => g.signals.includes(s)));
+          if (targetGroup) {
+            let result = next;
+            for (const signal of signals) {
+              if (!targetGroup.rightAxis.includes(signal)) {
+                result = toggleRightAxis(result, targetGroup.id, signal);
+              }
+            }
+            return result;
+          }
+        }
+        if (axis === "left") {
+          return clearRightAxisForSignals(next, signals);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  const handleSetSignalColor = useCallback((signal: string, color: string) => {
+    setColorOverrides((prev) => setSignalColor(prev, signal, color));
+  }, []);
+
+  const handleClearSignalColor = useCallback((signal: string) => {
+    setColorOverrides((prev) => clearSignalColor(prev, signal));
+  }, []);
+
   const handleRunChange = useCallback((runKey: string, startMs: number, endMs: number) => {
     setSelectedRunKey(runKey);
     setFullRange([startMs, endMs]);
@@ -228,6 +276,7 @@ export function AnalysisWorkspace({
     const start = new Date(config.start).getTime();
     const end = new Date(config.end).getTime();
     setPlots(plotsToLayout(config.plots));
+    setColorOverrides(config.colors ?? {});
     setSelectedRunKey("");
     if (Number.isFinite(start) && Number.isFinite(end) && start < end) {
       setFullRange([start, end]);
@@ -274,13 +323,14 @@ export function AnalysisWorkspace({
         start: new Date(viewRange[0]).toISOString(),
         end: new Date(viewRange[1]).toISOString(),
         plots: layoutToPlots(plots),
+        colors: Object.keys(colorOverrides).length > 0 ? colorOverrides : undefined,
       })
         .then(() => refreshConfigs())
         .catch(() => {
           // Surface nothing destructive; the list simply will not gain the entry.
         });
     },
-    [viewRange, plots, seasonTable, refreshConfigs],
+    [viewRange, plots, colorOverrides, seasonTable, refreshConfigs],
   );
 
   const handleDeleteConfig = useCallback(
@@ -574,10 +624,14 @@ export function AnalysisWorkspace({
                 layout={plots}
                 seriesBySignal={seriesBySignal}
                 range={viewRange}
+                colorOverrides={colorOverrides}
                 onRangeChange={handlePlotRangeChange}
                 onAssignSignals={handleAssignSignals}
+                onAssignSignalsToAxis={handleAssignSignalsToAxis}
                 onRemoveSignal={handleToggleSignal}
                 onToggleRightAxis={handleToggleRightAxis}
+                onSetSignalColor={handleSetSignalColor}
+                onClearSignalColor={handleClearSignalColor}
                 theme={theme}
               />
               {refreshInFlight && (
@@ -603,10 +657,14 @@ export function AnalysisWorkspace({
                   layout={[]}
                   seriesBySignal={seriesBySignal}
                   range={viewRange}
+                  colorOverrides={colorOverrides}
                   onRangeChange={handlePlotRangeChange}
                   onAssignSignals={handleAssignSignals}
+                  onAssignSignalsToAxis={handleAssignSignalsToAxis}
                   onRemoveSignal={handleToggleSignal}
                   onToggleRightAxis={handleToggleRightAxis}
+                  onSetSignalColor={handleSetSignalColor}
+                  onClearSignalColor={handleClearSignalColor}
                   theme={theme}
                 />
               </div>

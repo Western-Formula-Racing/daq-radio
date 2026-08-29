@@ -949,6 +949,18 @@ body {
   width: 0.55rem;
   height: 0.55rem;
   border-radius: 2px;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  transition: box-shadow 0.15s ease;
+}
+
+.analysis-legend-swatch:hover {
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
+}
+
+.analysis-legend-swatch.has-override {
+  box-shadow: 0 0 0 1.5px var(--text-muted);
 }
 
 .analysis-legend-axis,
@@ -980,6 +992,165 @@ body {
 .analysis-idle.is-drop-target {
   border-color: var(--accent, #2563eb);
   background: var(--surface-2);
+}
+
+/* ── Axis drag-and-drop overlay zones ── */
+.analysis-plot-body {
+  position: relative;
+}
+
+.analysis-axis-zones {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  z-index: 8;
+  pointer-events: auto;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.analysis-axis-zone {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, backdrop-filter 0.15s ease;
+  cursor: copy;
+}
+
+.analysis-axis-zone--left {
+  background: rgba(37, 99, 235, 0.08);
+  border-right: 1px dashed rgba(37, 99, 235, 0.25);
+}
+
+.analysis-axis-zone--right {
+  background: rgba(139, 92, 246, 0.08);
+  border-left: 1px dashed rgba(139, 92, 246, 0.25);
+}
+
+.analysis-axis-zone--left.is-active {
+  background: rgba(37, 99, 235, 0.18);
+  backdrop-filter: blur(2px);
+}
+
+.analysis-axis-zone--right.is-active {
+  background: rgba(139, 92, 246, 0.18);
+  backdrop-filter: blur(2px);
+}
+
+.analysis-axis-zone-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.analysis-axis-zone--left .analysis-axis-zone-label {
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
+}
+
+.analysis-axis-zone--right .analysis-axis-zone-label {
+  background: rgba(139, 92, 246, 0.12);
+  color: #8b5cf6;
+}
+
+.analysis-axis-zone--left.is-active .analysis-axis-zone-label {
+  background: rgba(37, 99, 235, 0.22);
+}
+
+.analysis-axis-zone--right.is-active .analysis-axis-zone-label {
+  background: rgba(139, 92, 246, 0.22);
+}
+
+[data-theme="dark"] .analysis-axis-zone--left .analysis-axis-zone-label {
+  color: #93c5fd;
+  background: rgba(96, 165, 250, 0.15);
+}
+
+[data-theme="dark"] .analysis-axis-zone--right .analysis-axis-zone-label {
+  color: #c4b5fd;
+  background: rgba(167, 139, 250, 0.15);
+}
+
+[data-theme="dark"] .analysis-axis-zone--left.is-active .analysis-axis-zone-label {
+  background: rgba(96, 165, 250, 0.28);
+}
+
+[data-theme="dark"] .analysis-axis-zone--right.is-active .analysis-axis-zone-label {
+  background: rgba(167, 139, 250, 0.28);
+}
+
+.analysis-plot-card.is-axis-drag {
+  border-color: var(--accent, #2563eb);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+/* ── Legend swatch color picker ── */
+.analysis-legend-chip {
+  position: relative;
+}
+
+.analysis-color-picker {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.55rem;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: var(--shadow-card);
+  white-space: nowrap;
+}
+
+.analysis-color-picker-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.analysis-color-input {
+  width: 1.4rem;
+  height: 1.4rem;
+  border: none;
+  border-radius: 4px;
+  padding: 0;
+  cursor: pointer;
+  background: transparent;
+}
+
+.analysis-color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.analysis-color-input::-webkit-color-swatch {
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+}
+
+.analysis-color-reset {
+  border: none;
+  background: transparent;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.15rem 0.3rem;
+  border-radius: 4px;
+}
+
+.analysis-color-reset:hover {
+  background: var(--surface-2);
+  color: var(--text);
 }
 
 .analysis-signal-item {

@@ -169,6 +169,57 @@ describe("AnalysisPlotStack groups", () => {
     expect(plot).toHaveStyle({ width: "100%", height: "180px" });
     expect(plot.style.height).not.toBe("100%");
   });
+
+  it("dispatches onAssignSignalsToAxis when dropped on left or right axis overlay zones", () => {
+    const onAssignSignalsToAxis = vi.fn();
+    render(
+      <AnalysisPlotStack
+        {...baseProps}
+        onAssignSignalsToAxis={onAssignSignalsToAxis}
+        layout={[{ id: "g1", signals: ["S1"], rightAxis: [] }]}
+      />,
+    );
+    const card = screen.getByTestId("analysis-plot-card");
+    const dt = makeDataTransfer({ signals: ["S2"] });
+
+    // Drag enter to reveal zones
+    fireEvent.dragEnter(card, { dataTransfer: dt });
+
+    const leftZone = screen.getByText(/left axis/i);
+
+    fireEvent.drop(leftZone, { dataTransfer: dt });
+    expect(onAssignSignalsToAxis).toHaveBeenCalledWith(["S2"], "g1", "left");
+
+    onAssignSignalsToAxis.mockClear();
+    fireEvent.dragEnter(card, { dataTransfer: dt });
+    const rightZoneAfter = screen.getByText(/right axis/i);
+    fireEvent.drop(rightZoneAfter, { dataTransfer: dt });
+    expect(onAssignSignalsToAxis).toHaveBeenCalledWith(["S2"], "g1", "right");
+  });
+
+  it("opens color picker on swatch click and dispatches color handlers", () => {
+    const onSetSignalColor = vi.fn();
+    const onClearSignalColor = vi.fn();
+    render(
+      <AnalysisPlotStack
+        {...baseProps}
+        colorOverrides={{ S1: "#ff0000" }}
+        onSetSignalColor={onSetSignalColor}
+        onClearSignalColor={onClearSignalColor}
+        layout={[{ id: "g1", signals: ["S1"], rightAxis: [] }]}
+      />,
+    );
+
+    const swatch = screen.getByRole("button", { name: /change color for S1/i });
+    fireEvent.click(swatch);
+
+    expect(screen.getByText(/custom color/i)).toBeInTheDocument();
+    const resetButton = screen.getByRole("button", { name: /reset/i });
+    expect(resetButton).toBeInTheDocument();
+
+    fireEvent.click(resetButton);
+    expect(onClearSignalColor).toHaveBeenCalledWith("S1");
+  });
 });
 
 describe("readSignalsPayload", () => {
