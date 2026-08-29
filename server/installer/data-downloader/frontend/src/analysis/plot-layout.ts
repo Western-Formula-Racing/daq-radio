@@ -116,18 +116,27 @@ export function pruneUnknown(
   );
 }
 
-export function serializeLayout(layout: PlotLayout): string {
+export function serializeLayout(
+  layout: PlotLayout,
+  colorOverrides?: Record<string, string>,
+): string {
   return JSON.stringify({
-    v: 1,
+    v: 2,
     plots: layout.map((g) => ({ signals: g.signals, rightAxis: g.rightAxis })),
+    colors: colorOverrides && Object.keys(colorOverrides).length > 0 ? colorOverrides : undefined,
   });
 }
 
-export function parseLayout(raw: string | null): PlotLayout | null {
+export interface ParsedLayout {
+  layout: PlotLayout;
+  colorOverrides: Record<string, string>;
+}
+
+export function parseLayout(raw: string | null): ParsedLayout | null {
   if (!raw) return null;
   try {
-    const data = JSON.parse(raw) as { v?: unknown; plots?: unknown };
-    if (data.v !== 1 || !Array.isArray(data.plots)) return null;
+    const data = JSON.parse(raw) as { v?: unknown; plots?: unknown; colors?: unknown };
+    if ((data.v !== 1 && data.v !== 2) || !Array.isArray(data.plots)) return null;
     const layout: PlotLayout = [];
     for (const entry of data.plots) {
       if (typeof entry !== "object" || entry === null) return null;
@@ -144,8 +153,35 @@ export function parseLayout(raw: string | null): PlotLayout | null {
         rightAxis: right.filter((s) => signals.includes(s)),
       });
     }
-    return layout;
+    // v2 added color overrides; v1 layouts have none.
+    const colorOverrides: Record<string, string> =
+      data.v === 2 && data.colors && typeof data.colors === "object" && !Array.isArray(data.colors)
+        ? Object.fromEntries(
+            Object.entries(data.colors as Record<string, unknown>).filter(
+              ([, v]) => typeof v === "string",
+            ),
+          )
+        : {};
+    return { layout, colorOverrides };
   } catch {
     return null;
   }
 }
+
+export function setSignalColor(
+  overrides: Record<string, string>,
+  signal: string,
+  color: string,
+): Record<string, string> {
+  return { ...overrides, [signal]: color };
+}
+
+export function clearSignalColor(
+  overrides: Record<string, string>,
+  signal: string,
+): Record<string, string> {
+  const next = { ...overrides };
+  delete next[signal];
+  return next;
+}
+

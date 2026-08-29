@@ -151,6 +151,7 @@ export interface SavedConfig {
   start: string;
   end: string;
   plots: SavedConfigPlot[];
+  colors?: Record<string, string>;
   created_at: string;
   updated_at: string;
 }
@@ -163,4 +164,5 @@ export interface CreateConfigPayload {
   start: string;
   end: string;
   plots: SavedConfigPlot[];
+  colors?: Record<string, string>;
 }
